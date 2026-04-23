@@ -827,80 +827,141 @@ export function registerIpcHandlers(): void {
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-score-ranking', (_e, limit?: number) => {
+  ipcMain.handle('dashboard:actor-score-ranking', (_e, limit?: number, reverse?: boolean) => {
     const lim = limit ? `LIMIT ${limit}` : ''
+    const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      GROUP BY a.id ORDER BY avg_score DESC, work_count DESC ${lim}
+      GROUP BY a.id ORDER BY avg_score ${d}, work_count ${d} ${lim}
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-workcount-ranking', (_e, limit?: number) => {
+  ipcMain.handle('dashboard:actor-workcount-ranking', (_e, limit?: number, reverse?: boolean) => {
     const lim = limit ? `LIMIT ${limit}` : ''
+    const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      GROUP BY a.id ORDER BY work_count DESC, avg_score DESC ${lim}
+      GROUP BY a.id ORDER BY work_count ${d}, avg_score ${d} ${lim}
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-bust-ranking', (_e, limit?: number) => {
+  ipcMain.handle('dashboard:actor-bust-ranking', (_e, limit?: number, reverse?: boolean) => {
     const lim = limit ? `LIMIT ${limit}` : ''
+    const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
       LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.bust IS NOT NULL
-      GROUP BY a.id ORDER BY a.bust DESC, avg_score DESC, work_count DESC ${lim}
+      GROUP BY a.id ORDER BY a.bust ${d}, avg_score ${d}, work_count ${d} ${lim}
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-hip-ranking', (_e, limit?: number) => {
+  ipcMain.handle('dashboard:actor-hip-ranking', (_e, limit?: number, reverse?: boolean) => {
     const lim = limit ? `LIMIT ${limit}` : ''
+    const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
       LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.hip IS NOT NULL
-      GROUP BY a.id ORDER BY a.hip DESC, avg_score DESC, work_count DESC ${lim}
+      GROUP BY a.id ORDER BY a.hip ${d}, avg_score ${d}, work_count ${d} ${lim}
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-waist-ranking', (_e, limit?: number) => {
+  ipcMain.handle('dashboard:actor-waist-ranking', (_e, limit?: number, reverse?: boolean) => {
     const lim = limit ? `LIMIT ${limit}` : ''
+    const primary = reverse ? 'DESC' : 'ASC'
+    const secondary = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
       LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.waist IS NOT NULL
-      GROUP BY a.id ORDER BY a.waist ASC, avg_score DESC, work_count DESC ${lim}
+      GROUP BY a.id ORDER BY a.waist ${primary}, avg_score ${secondary}, work_count ${secondary} ${lim}
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-favorite-ranking', (_e, limit?: number) => {
+  ipcMain.handle('dashboard:actor-height-ranking', (_e, limit?: number, reverse?: boolean) => {
     const lim = limit ? `LIMIT ${limit}` : ''
+    const d = reverse ? 'ASC' : 'DESC'
+    return db().prepare(`
+      SELECT a.*, COUNT(wa.work_id) AS work_count,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COUNT(*) OVER () AS total_count
+      FROM actors a
+      LEFT JOIN work_actors wa ON wa.actor_id = a.id
+      LEFT JOIN actor_scores s ON s.actor_id = a.id
+      WHERE a.height IS NOT NULL
+      GROUP BY a.id ORDER BY a.height ${d}, avg_score ${d}, work_count ${d} ${lim}
+    `).all()
+  })
+
+  ipcMain.handle('dashboard:actor-ratio-ranking', (_e, limit?: number, reverse?: boolean) => {
+    const lim = limit ? `LIMIT ${limit}` : ''
+    const d = reverse ? 'ASC' : 'DESC'
+    return db().prepare(`
+      WITH stats AS (
+        SELECT
+          MIN(height) AS min_h, MAX(height) AS max_h,
+          MIN(bust)   AS min_b, MAX(bust)   AS max_b,
+          MIN(waist)  AS min_w, MAX(waist)  AS max_w,
+          MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
+        FROM actors
+        WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+      )
+      SELECT a.*, COUNT(wa.work_id) AS work_count,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        ROUND((
+          (
+            CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10 +
+            CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10 +
+            CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10 +
+            CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10
+          ) / 4.0 * 0.5 +
+          (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0)) / 4.0 * 0.5
+        ), 2) AS ratio_score,
+        COUNT(*) OVER () AS total_count
+      FROM actors a, stats
+      LEFT JOIN work_actors wa ON wa.actor_id = a.id
+      LEFT JOIN actor_scores s ON s.actor_id = a.id
+      WHERE a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
+      GROUP BY a.id ORDER BY ratio_score ${d}, avg_score ${d}, work_count ${d} ${lim}
+    `).all()
+  })
+
+  ipcMain.handle('dashboard:actor-favorite-ranking', (_e, limit?: number, reverse?: boolean) => {
+    const lim = limit ? `LIMIT ${limit}` : ''
+    const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS fav_work_count,
         COALESCE((SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id), 0) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COUNT(*) OVER () AS total_count
       FROM actors a
       JOIN work_actors wa ON wa.actor_id = a.id
       JOIN works w ON w.id = wa.work_id AND w.is_favorite = 1
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      GROUP BY a.id ORDER BY fav_work_count DESC, avg_score DESC, work_count DESC ${lim}
+      GROUP BY a.id ORDER BY fav_work_count ${d}, avg_score ${d}, work_count ${d} ${lim}
     `).all()
   })
 

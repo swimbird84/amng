@@ -207,9 +207,14 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [bustRanking, setBustRanking] = useState<Actor[]>([])
   const [hipRanking, setHipRanking] = useState<Actor[]>([])
   const [waistRanking, setWaistRanking] = useState<Actor[]>([])
+  const [heightRanking, setHeightRanking] = useState<Actor[]>([])
+  const [ratioRanking, setRatioRanking] = useState<Actor[]>([])
   const [favoriteRanking, setFavoriteRanking] = useState<Actor[]>([])
 
-  const [rankModal, setRankModal] = useState<{ title: string; actors: Actor[]; subtitle: (a: Actor) => string } | null>(null)
+  const [reversedRankings, setReversedRankings] = useState<Set<string>>(new Set())
+  const [reversedData, setReversedData] = useState<Record<string, Actor[]>>({})
+
+  const [rankModal, setRankModal] = useState<{ title: string; actors: Actor[]; subtitle: (a: Actor) => string; reversed: boolean } | null>(null)
   const [ratingModal, setRatingModal] = useState<{ bucket: number; works: Work[] } | null>(null)
   const [tagModal, setTagModal] = useState<{ tagName: string; works: Work[] } | null>(null)
   const [actorTagModal, setActorTagModal] = useState<{ tagName: string; actors: Actor[] } | null>(null)
@@ -230,6 +235,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.actorBustRanking(10).then((d) => setBustRanking(d as Actor[]))
     dashboardApi.actorHipRanking(10).then((d) => setHipRanking(d as Actor[]))
     dashboardApi.actorWaistRanking(10).then((d) => setWaistRanking(d as Actor[]))
+    dashboardApi.actorHeightRanking(10).then((d) => setHeightRanking(d as Actor[]))
+    dashboardApi.actorRatioRanking(10).then((d) => setRatioRanking(d as Actor[]))
     dashboardApi.actorFavoriteRanking(10).then((d) => setFavoriteRanking(d as Actor[]))
   }, [])
 
@@ -243,13 +250,32 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     setActorTagModal({ tagName, actors })
   }
 
+  const toggleReverse = async (
+    title: string,
+    fetcher: (reverse: boolean, limit?: number) => Promise<unknown>
+  ) => {
+    const next = new Set(reversedRankings)
+    const isNowReversed = !next.has(title)
+    if (isNowReversed) {
+      next.add(title)
+      if (!reversedData[title]) {
+        const data = await fetcher(true, 10) as Actor[]
+        setReversedData((prev) => ({ ...prev, [title]: data }))
+      }
+    } else {
+      next.delete(title)
+    }
+    setReversedRankings(next)
+  }
+
   const handleShowRankAll = async (
     title: string,
-    fetcher: () => Promise<unknown>,
-    subtitle: (a: Actor) => string
+    fetcher: (reverse?: boolean, limit?: number) => Promise<unknown>,
+    subtitle: (a: Actor) => string,
+    reversed: boolean
   ) => {
-    const actors = await fetcher() as Actor[]
-    setRankModal({ title, actors, subtitle })
+    const actors = await fetcher(reversed) as Actor[]
+    setRankModal({ title, actors, subtitle, reversed })
   }
 
   const sortedStudioDist = useMemo(() => [...studioDist].sort((a, b) => {
@@ -735,42 +761,61 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
         {/* 랭킹 */}
         {[
-          { title: '평점 랭킹 TOP 10', data: scoreRanking, subtitle: (a: Actor & { avg_score?: number }) => `${(a.avg_score ?? 0).toFixed(2)}점`, fetcher: () => dashboardApi.actorScoreRanking() },
-          { title: '출연작 랭킹 TOP 10', data: workCountRanking, subtitle: (a: Actor & { work_count?: number }) => `${a.work_count ?? 0}편`, fetcher: () => dashboardApi.actorWorkCountRanking() },
-          { title: '찜 랭킹 TOP 10', data: favoriteRanking, subtitle: (a: Actor & { fav_work_count?: number }) => `♥ ${a.fav_work_count ?? 0}편`, fetcher: () => dashboardApi.actorFavoriteRanking() },
-          { title: '바스트 랭킹 TOP 10', data: bustRanking, subtitle: (a: Actor) => `${a.bust ?? '-'}cm`, fetcher: () => dashboardApi.actorBustRanking() },
-          { title: '힙 랭킹 TOP 10', data: hipRanking, subtitle: (a: Actor) => `${a.hip ?? '-'}cm`, fetcher: () => dashboardApi.actorHipRanking() },
-          { title: '웨이스트 랭킹 TOP 10', data: waistRanking, subtitle: (a: Actor) => `${a.waist ?? '-'}cm`, fetcher: () => dashboardApi.actorWaistRanking() },
-        ].map(({ title, data, subtitle, fetcher }) => (
+          { title: '평점 랭킹 TOP 10', data: scoreRanking, subtitle: (a: Actor & { avg_score?: number }) => `${(a.avg_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorScoreRanking(l, r) },
+          { title: '출연작 랭킹 TOP 10', data: workCountRanking, subtitle: (a: Actor & { work_count?: number }) => `${a.work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWorkCountRanking(l, r) },
+          { title: '찜 랭킹 TOP 10', data: favoriteRanking, subtitle: (a: Actor & { fav_work_count?: number }) => `♥ ${a.fav_work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorFavoriteRanking(l, r) },
+          { title: '바스트 랭킹 TOP 10', data: bustRanking, subtitle: (a: Actor) => `${a.bust ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorBustRanking(l, r) },
+          { title: '힙 랭킹 TOP 10', data: hipRanking, subtitle: (a: Actor) => `${a.hip ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorHipRanking(l, r) },
+          { title: '웨이스트 랭킹 TOP 10', data: waistRanking, subtitle: (a: Actor) => `${a.waist ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWaistRanking(l, r) },
+          { title: '키 랭킹 TOP 10', data: heightRanking, subtitle: (a: Actor) => `${a.height ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorHeightRanking(l, r) },
+          { title: '피지컬 랭킹 TOP 10', data: ratioRanking, subtitle: (a: Actor & { ratio_score?: number }) => `${(a.ratio_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorRatioRanking(l, r) },
+        ].map(({ title, data, subtitle, fetcher }) => {
+          const isReversed = reversedRankings.has(title)
+          const displayData = isReversed ? (reversedData[title] ?? []) : data
+          return (
           <div key={title}>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-white font-bold text-base">{title}</h2>
               {data.length > 0 && (
-                <button
-                  onClick={() => handleShowRankAll(title, fetcher, subtitle as (a: Actor) => string)}
-                  className="text-xs text-gray-400 hover:text-gray-200 bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded"
-                >
-                  전체보기
-                </button>
+                <>
+                  <button
+                    onClick={() => toggleReverse(title, fetcher)}
+                    className={`text-xs px-2 py-0.5 rounded ${isReversed ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >
+                    {isReversed ? '역순 ↑' : '정순 ↓'}
+                  </button>
+                  <button
+                    onClick={() => handleShowRankAll(title, fetcher, subtitle as (a: Actor) => string, isReversed)}
+                    className="text-xs text-gray-400 hover:text-gray-200 bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded"
+                  >
+                    전체보기
+                  </button>
+                </>
               )}
             </div>
-            {data.length > 0 ? (
+            {displayData.length > 0 ? (
               <div className="grid grid-cols-10 gap-2">
-                {data.map((a, i) => (
-                  <ActorRankCard
-                    key={a.id}
-                    actor={a}
-                    rank={i + 1}
-                    subtitle={subtitle(a as any)}
-                    onClick={() => onNavigateToActor(a.id)}
-                  />
-                ))}
+                {displayData.map((a, i) => {
+                  const rank = isReversed
+                    ? ((a as any).total_count ?? displayData.length) - i
+                    : i + 1
+                  return (
+                    <ActorRankCard
+                      key={a.id}
+                      actor={a}
+                      rank={rank}
+                      subtitle={subtitle(a as any)}
+                      onClick={() => onNavigateToActor(a.id)}
+                    />
+                  )
+                })}
               </div>
             ) : (
               <p className="text-gray-500 text-sm">데이터가 없습니다</p>
             )}
           </div>
-        ))}
+          )
+        })}
 
       </div>
     </div>
@@ -786,15 +831,20 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           </div>
           <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4">
             <div className="grid grid-cols-10 gap-2">
-              {rankModal.actors.map((a, i) => (
-                <ActorRankCard
-                  key={a.id}
-                  actor={a}
-                  rank={i + 1}
-                  subtitle={rankModal.subtitle(a)}
-                  onClick={() => { setRankModal(null); onNavigateToActor(a.id) }}
-                />
-              ))}
+              {rankModal.actors.map((a, i) => {
+                const rank = rankModal.reversed
+                  ? ((a as any).total_count ?? rankModal.actors.length) - i
+                  : i + 1
+                return (
+                  <ActorRankCard
+                    key={a.id}
+                    actor={a}
+                    rank={rank}
+                    subtitle={rankModal.subtitle(a)}
+                    onClick={() => { setRankModal(null); onNavigateToActor(a.id) }}
+                  />
+                )
+              })}
             </div>
           </div>
         </div>
