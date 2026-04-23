@@ -350,23 +350,23 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                       if (e.key === 'Enter') handleCreateLabel()
                       if (e.key === 'Escape') { setLabelAddMode(false); setNewLabelName('') }
                     }}
-                    placeholder="새 레이블 이름"
+                    placeholder="레이블 이름"
                     autoFocus
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
                   />
                   <button
                     type="button"
                     onClick={handleCreateLabel}
-                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1.5 rounded"
+                    className="bg-green-600 hover:bg-green-500 text-white text-xs px-2 py-1.5 rounded"
                   >
-                    저장
+                    S
                   </button>
                   <button
                     type="button"
                     onClick={() => { setLabelAddMode(false); setNewLabelName('') }}
-                    className="text-gray-400 hover:text-gray-200 text-xs px-1.5"
+                    className="bg-red-600 hover:bg-red-500 text-white text-xs px-2 py-1.5 rounded"
                   >
-                    취소
+                    X
                   </button>
                 </div>
               ) : (
