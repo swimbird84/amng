@@ -322,7 +322,12 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
                 </button>
               </div>
               {selected.studio_name && (
-                <p className="text-sm font-medium" style={{ color: studioColor(selected.studio_name, selected.studio_color) }}>{selected.studio_name}</p>
+                <span
+                  className="inline-block text-white text-sm px-2 py-0.5 rounded"
+                  style={{ backgroundColor: studioColor(selected.studio_name, selected.studio_color) }}
+                >
+                  {selected.studio_name}
+                </span>
               )}
               <p className="text-sm text-gray-400">{selected.release_date || '-'}</p>
               <Rating value={selected.rating} onChange={(v) => handleRating(selected.id, v)} />
