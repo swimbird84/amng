@@ -590,6 +590,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                 <button
                   key={s.id}
                   onClick={() => handleSelectStudio(s.id)}
+                  title={s.name}
                   className={`py-1.5 px-2 rounded text-center transition-colors ${selectedStudioId === s.id ? 'text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                   style={selectedStudioId === s.id ? { backgroundColor: studioColor(s.name, s.color) } : undefined}
                 >
@@ -606,8 +607,10 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                 byYear.get(year)!.push(w)
               }
               const sortedYears = Array.from(byYear.keys()).sort((a, b) => a.localeCompare(b))
+              const selected = studioDist.find((s) => s.id === selectedStudioId)!
               return (
                 <div className="border border-gray-700 rounded-lg p-4 space-y-4">
+                  <p className="text-base font-bold" style={{ color: studioColor(selected.name, selected.color) }}>{selected.name}</p>
                   {sortedYears.map((year) => (
                     <div key={year} className="space-y-2">
                       <div className="flex items-center gap-2">
