@@ -19,8 +19,12 @@ export default function TagManager({ defaultTab = 'works', onClose }: Props) {
   const [editingName, setEditingName] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [newName, setNewName] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'count'>('count')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [sortBy, setSortBy] = useState<'name' | 'count'>(
+    (localStorage.getItem('tagmanager:sortBy') as 'name' | 'count') || 'count'
+  )
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
+    (localStorage.getItem('tagmanager:sortDir') as 'asc' | 'desc') || 'desc'
+  )
 
   const api = tab === 'works' ? workTagsApi : actorTagsApi
 
@@ -109,12 +113,21 @@ export default function TagManager({ defaultTab = 'works', onClose }: Props) {
             <button
               key={s}
               onClick={() => {
-                if (sortBy === s) setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
-                else { setSortBy(s); setSortDir(s === 'name' ? 'asc' : 'desc') }
+                if (sortBy === s) {
+                  const next = sortDir === 'asc' ? 'desc' : 'asc'
+                  setSortDir(next)
+                  localStorage.setItem('tagmanager:sortDir', next)
+                } else {
+                  const nextDir = s === 'name' ? 'asc' : 'desc'
+                  setSortBy(s)
+                  setSortDir(nextDir)
+                  localStorage.setItem('tagmanager:sortBy', s)
+                  localStorage.setItem('tagmanager:sortDir', nextDir)
+                }
               }}
               className={`px-2.5 py-1 rounded text-xs ${sortBy === s ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
             >
-              {s === 'name' ? '이름순' : '참조순'}{sortBy === s ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+              {s === 'name' ? '이름' : '참조'}{sortBy === s ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
             </button>
           ))}
         </div>

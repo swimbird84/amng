@@ -318,7 +318,7 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
 
               {selected.comment && (
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">한줄평</p>
+                  <p className="text-xs text-gray-500 mb-1">코멘트</p>
                   <p className="text-sm text-gray-300 whitespace-pre-wrap">{selected.comment}</p>
                 </div>
               )}

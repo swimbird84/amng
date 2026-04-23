@@ -36,6 +36,8 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [newActor, setNewActor] = useState('')
   const [urlInputOpen, setUrlInputOpen] = useState(false)
   const [urlInput, setUrlInput] = useState('')
+  const [labelAddMode, setLabelAddMode] = useState(false)
+  const [newLabelName, setNewLabelName] = useState('')
 
   useEffect(() => {
     workTagsApi.list().then((t) => setAllTags(t as Tag[]))
@@ -153,6 +155,17 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
     }
 
     onSave()
+  }
+
+  const handleCreateLabel = async () => {
+    const name = newLabelName.trim()
+    if (!name) return
+    const id = await studiosApi.create(name) as number
+    const updated = await studiosApi.list() as Studio[]
+    setAllStudios(updated)
+    setStudioId(id)
+    setNewLabelName('')
+    setLabelAddMode(false)
   }
 
   const handleCreateTag = async (name: string): Promise<number> => {
@@ -317,17 +330,57 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
               />
             </div>
             <div>
-              <label className="text-sm text-gray-400 block mb-1">레이블</label>
-              <select
-                value={studioId ?? ''}
-                onChange={(e) => setStudioId(e.target.value ? Number(e.target.value) : null)}
-                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
-              >
-                <option value="">없음</option>
-                {allStudios.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-sm text-gray-400">레이블</span>
+                <button
+                  type="button"
+                  onClick={() => { setLabelAddMode(true); setNewLabelName('') }}
+                  className="text-white font-black text-base leading-none hover:text-gray-300"
+                >
+                  +
+                </button>
+              </div>
+              {labelAddMode ? (
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={newLabelName}
+                    onChange={(e) => setNewLabelName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreateLabel()
+                      if (e.key === 'Escape') { setLabelAddMode(false); setNewLabelName('') }
+                    }}
+                    placeholder="새 레이블 이름"
+                    autoFocus
+                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateLabel}
+                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1.5 rounded"
+                  >
+                    저장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setLabelAddMode(false); setNewLabelName('') }}
+                    className="text-gray-400 hover:text-gray-200 text-xs px-1.5"
+                  >
+                    취소
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={studioId ?? ''}
+                  onChange={(e) => setStudioId(e.target.value ? Number(e.target.value) : null)}
+                  className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
+                >
+                  <option value="">없음</option>
+                  {allStudios.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -337,7 +390,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
           </div>
 
           <div>
-            <label className="text-sm text-gray-400 block mb-1">한줄평</label>
+            <label className="text-sm text-gray-400 block mb-1">코멘트</label>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}

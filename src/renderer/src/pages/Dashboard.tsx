@@ -186,6 +186,12 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [cupDist, setCupDist] = useState<(Actor & { avg_score: number; work_count: number })[]>([])
   const [selectedCup, setSelectedCup] = useState<string | null>(null)
   const [studioDist, setStudioDist] = useState<{ id: number; name: string; color: string | null; work_count: number }[]>([])
+  const [studioSortBy, setStudioSortBy] = useState<'name' | 'count'>(
+    (localStorage.getItem('dashboard:studioSortBy') as 'name' | 'count') || 'count'
+  )
+  const [studioSortDir, setStudioSortDir] = useState<'asc' | 'desc'>(
+    (localStorage.getItem('dashboard:studioSortDir') as 'asc' | 'desc') || 'desc'
+  )
   const [selectedStudioId, setSelectedStudioId] = useState<number | null>(null)
   const [studioWorks, setStudioWorks] = useState<Work[]>([])
   const [selectedScoreBucket, setSelectedScoreBucket] = useState<{ base: number; half: 'early' | 'late' } | null>(null)
@@ -245,6 +251,12 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     const actors = await fetcher() as Actor[]
     setRankModal({ title, actors, subtitle })
   }
+
+  const sortedStudioDist = useMemo(() => [...studioDist].sort((a, b) => {
+    const dir = studioSortDir === 'asc' ? 1 : -1
+    if (studioSortBy === 'name') return a.name.localeCompare(b.name, 'ko') * dir
+    return (a.work_count - b.work_count) * dir
+  }), [studioDist, studioSortBy, studioSortDir])
 
   const handleSelectStudio = async (id: number) => {
     if (selectedStudioId === id) {
@@ -584,9 +596,33 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 제작사별 작품 분포 */}
         {studioDist.length > 0 && (
           <div>
-            <SectionTitle>레이블별 작품 분포</SectionTitle>
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-white font-bold text-base">레이블별 작품 분포</h2>
+              {(['name', 'count'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    if (studioSortBy === s) {
+                      const next = studioSortDir === 'asc' ? 'desc' : 'asc'
+                      setStudioSortDir(next)
+                      localStorage.setItem('dashboard:studioSortDir', next)
+                    } else {
+                      const nextDir = s === 'name' ? 'asc' : 'desc'
+                      setStudioSortBy(s)
+                      setStudioSortDir(nextDir)
+                      localStorage.setItem('dashboard:studioSortBy', s)
+                      localStorage.setItem('dashboard:studioSortDir', nextDir)
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded text-xs ${studioSortBy === s ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  {s === 'name' ? '이름' : '작품수'}{studioSortBy === s ? (studioSortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-10 gap-1.5 mb-4">
-              {studioDist.map((s) => (
+
+              {sortedStudioDist.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => handleSelectStudio(s.id)}

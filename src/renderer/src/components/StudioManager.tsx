@@ -31,8 +31,12 @@ export default function StudioManager({ onClose }: Props) {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [colorPickerId, setColorPickerId] = useState<number | null>(null)
   const [newName, setNewName] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'count'>('count')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [sortBy, setSortBy] = useState<'name' | 'count'>(
+    (localStorage.getItem('studiomanager:sortBy') as 'name' | 'count') || 'count'
+  )
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
+    (localStorage.getItem('studiomanager:sortDir') as 'asc' | 'desc') || 'desc'
+  )
 
   const sortedStudios = useMemo(() => [...studios].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -110,12 +114,21 @@ export default function StudioManager({ onClose }: Props) {
             <button
               key={s}
               onClick={() => {
-                if (sortBy === s) setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
-                else { setSortBy(s); setSortDir(s === 'name' ? 'asc' : 'desc') }
+                if (sortBy === s) {
+                  const next = sortDir === 'asc' ? 'desc' : 'asc'
+                  setSortDir(next)
+                  localStorage.setItem('studiomanager:sortDir', next)
+                } else {
+                  const nextDir = s === 'name' ? 'asc' : 'desc'
+                  setSortBy(s)
+                  setSortDir(nextDir)
+                  localStorage.setItem('studiomanager:sortBy', s)
+                  localStorage.setItem('studiomanager:sortDir', nextDir)
+                }
               }}
               className={`px-2.5 py-1 rounded text-xs ${sortBy === s ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
             >
-              {s === 'name' ? '이름순' : '참조순'}{sortBy === s ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+              {s === 'name' ? '이름' : '참조'}{sortBy === s ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
             </button>
           ))}
         </div>

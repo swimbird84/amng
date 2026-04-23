@@ -231,7 +231,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
           </div>
 
           <div>
-            <label className="text-sm text-gray-400 block mb-1">한줄평</label>
+            <label className="text-sm text-gray-400 block mb-1">코멘트</label>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
