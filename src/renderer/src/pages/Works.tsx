@@ -160,7 +160,28 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="p-4">
           <div className="flex items-center">
-            <div className="w-93 shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
+            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
+              <select
+                value={sortBy}
+                onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('works:sortBy', v) }}
+                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
+              >
+                <option value="created_at">등록일</option>
+                <option value="product_number">품번</option>
+                <option value="rating">별점</option>
+                <option value="release_date">발매일</option>
+              </select>
+              <button
+                onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('works:sortDir', next); return next })}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-2 py-1.5 rounded"
+              >
+                {sortDir === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+            <div className="w-[29rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} />
+            </div>
+            <div className="w-93 shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <button
                 onClick={() => { setEditWork(undefined); setShowForm(true) }}
                 className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
@@ -175,37 +196,16 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
               </button>
               <button
                 onClick={() => setShowStudioManager(true)}
-                className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm"
+                className="bg-fuchsia-700 hover:bg-fuchsia-600 text-white px-3 py-1.5 rounded text-sm"
               >
                 레이블 관리
               </button>
               <button
                 onClick={() => setFavoriteOnly((v) => !v)}
-                className={`px-3 py-1.5 rounded text-sm ${favoriteOnly ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-600 hover:bg-gray-500 text-white'}`}
+                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
               >
                 {favoriteOnly ? '♥' : '♡'}
               </button>
-            </div>
-            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
-              <select
-                value={sortBy}
-                onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('works:sortBy', v) }}
-                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
-              >
-                <option value="created_at">등록일</option>
-                <option value="product_number">품번</option>
-                <option value="rating">별점</option>
-                <option value="release_date">발매일</option>
-              </select>
-              <button
-                onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('works:sortDir', next); return next })}
-                className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-2 py-1.5 rounded"
-              >
-                {sortDir === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
-            <div className="w-[29rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
-              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} />
             </div>
           </div>
         </div>

@@ -144,21 +144,7 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="p-4">
           <div className="flex items-center">
-            <div className="w-93 shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
-              <button
-                onClick={() => { setEditActor(undefined); setShowForm(true) }}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
-              >
-                + 배우 등록
-              </button>
-              <button
-                onClick={() => setFavoriteOnly((v) => !v)}
-                className={`px-3 py-1.5 rounded text-sm ${favoriteOnly ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-600 hover:bg-gray-500 text-white'}`}
-              >
-                {favoriteOnly ? '♥' : '♡'}
-              </button>
-            </div>
-            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
               <select
                 value={sortBy}
                 onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('actors:sortBy', v) }}
@@ -173,13 +159,27 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
               </select>
               <button
                 onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('actors:sortDir', next); return next })}
-                className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-2 py-1.5 rounded"
+                className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-2 py-1.5 rounded"
               >
                 {sortDir === 'asc' ? '↑' : '↓'}
               </button>
             </div>
             <div className="w-[29rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <SearchBar type="actors" params={search} onChange={setSearch} tags={tags} />
+            </div>
+            <div className="w-93 shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+              <button
+                onClick={() => { setEditActor(undefined); setShowForm(true) }}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
+              >
+                + 배우 등록
+              </button>
+              <button
+                onClick={() => setFavoriteOnly((v) => !v)}
+                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
+              >
+                {favoriteOnly ? '♥' : '♡'}
+              </button>
             </div>
           </div>
         </div>
