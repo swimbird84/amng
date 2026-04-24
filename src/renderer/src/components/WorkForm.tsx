@@ -142,7 +142,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
       await worksApi.update(work.id, {
         file_entries: fileEntries,
         cover_path: coverPath || undefined,
-        product_number: productNumber || undefined,
+        product_number: productNumber.trim() || undefined,
         release_date: releaseDate || undefined,
         rating,
         comment: comment.trim() || null,
@@ -159,7 +159,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
       const id = await worksApi.create({
         file_entries: fileEntries,
         cover_path: coverPath || undefined,
-        product_number: productNumber || undefined,
+        product_number: productNumber.trim() || undefined,
         release_date: releaseDate || undefined,
         rating,
         comment: comment.trim() || null,

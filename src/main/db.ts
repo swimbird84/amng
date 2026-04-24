@@ -181,4 +181,16 @@ export function initDatabase(): void {
   if (!actorTagCols.includes('is_rep')) {
     db.prepare('ALTER TABLE actor_tags ADD COLUMN is_rep INTEGER DEFAULT 0').run()
   }
+
+  // work_tags_master / actor_tags_master created_at 마이그레이션
+  const workTagMasterCols = (db.prepare("PRAGMA table_info(work_tags_master)").all() as { name: string }[]).map(c => c.name)
+  if (!workTagMasterCols.includes('created_at')) {
+    db.prepare("ALTER TABLE work_tags_master ADD COLUMN created_at TEXT").run()
+    db.prepare("UPDATE work_tags_master SET created_at = datetime('now') WHERE created_at IS NULL").run()
+  }
+  const actorTagMasterCols = (db.prepare("PRAGMA table_info(actor_tags_master)").all() as { name: string }[]).map(c => c.name)
+  if (!actorTagMasterCols.includes('created_at')) {
+    db.prepare("ALTER TABLE actor_tags_master ADD COLUMN created_at TEXT").run()
+    db.prepare("UPDATE actor_tags_master SET created_at = datetime('now') WHERE created_at IS NULL").run()
+  }
 }

@@ -1,0 +1,342 @@
+import { useState, useEffect, useMemo } from 'react'
+import type { Work, Actor } from '../types'
+import { workTagsApi, actorTagsApi, worksApi, actorsApi } from '../api'
+import ImagePreview from '../components/ImagePreview'
+import Rating from '../components/Rating'
+
+interface Props {
+  onNavigateToWork: (id: number) => void
+  onNavigateToActor: (id: number) => void
+}
+
+interface TagItem {
+  id: number
+  name: string
+  total_count: number
+  rep_count: number
+  created_at: string
+}
+
+type SortBy = 'name' | 'total_count' | 'created_at'
+
+function WorkCard({ work, onClick }: { work: Work & { rep_tags?: { id: number; name: string }[] }; onClick: () => void }) {
+  return (
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
+      <div className="p-2 bg-gray-800">
+        <div className="flex items-center justify-between gap-1">
+          <p className="text-sm font-bold text-white truncate flex-1">{work.product_number || '-'}</p>
+          <div className="shrink-0"><Rating value={work.rating} readonly small /></div>
+        </div>
+        <p className="text-xs text-gray-500">{work.release_date || '-'}</p>
+      </div>
+    </div>
+  )
+}
+
+function ActorListCard({ actor, onClick }: { actor: Actor & { avg_score?: number; work_count?: number }; onClick: () => void }) {
+  const age = actor.birthday
+    ? `${Math.floor((Date.now() - new Date(actor.birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000))}세`
+    : '-'
+  return (
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-40" />
+      <div className="p-2 bg-gray-800">
+        <div className="flex items-center justify-between gap-1">
+          <p className="text-sm font-bold text-white truncate flex-1">{actor.name}</p>
+          <p className="text-sm font-bold text-yellow-400 shrink-0">{(actor.avg_score ?? 0).toFixed(2)}점</p>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-gray-400">{actor.birthday || '-'} ({age})</p>
+          <p className="text-xs text-gray-400">총{actor.work_count ?? 0}편</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TagPanel({
+  title,
+  tags,
+  onRefresh,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onTagClick,
+}: {
+  title: string
+  tags: TagItem[]
+  onRefresh: () => void
+  onCreate: (name: string) => Promise<void>
+  onUpdate: (id: number, name: string) => Promise<void>
+  onDelete: (id: number) => Promise<void>
+  onTagClick: (id: number, name: string) => void
+}) {
+  const [search, setSearch] = useState(() => localStorage.getItem(`tags:${title}:search`) ?? '')
+  const [sortBy, setSortBy] = useState<SortBy>(() => (localStorage.getItem(`tags:${title}:sortBy`) as SortBy) ?? 'name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem(`tags:${title}:sortDir`) as 'asc' | 'desc') ?? 'asc')
+  const [newName, setNewName] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const handleSearchChange = (v: string) => {
+    setSearch(v)
+    localStorage.setItem(`tags:${title}:search`, v)
+  }
+
+  const handleSortClick = (s: SortBy) => {
+    if (sortBy === s) {
+      const next = sortDir === 'asc' ? 'desc' : 'asc'
+      setSortDir(next)
+      localStorage.setItem(`tags:${title}:sortDir`, next)
+    } else {
+      const nextDir = s === 'name' ? 'asc' : 'desc'
+      setSortBy(s)
+      setSortDir(nextDir)
+      localStorage.setItem(`tags:${title}:sortBy`, s)
+      localStorage.setItem(`tags:${title}:sortDir`, nextDir)
+    }
+  }
+
+  const filtered = useMemo(() => {
+    let result = tags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()))
+    const dir = sortDir === 'asc' ? 1 : -1
+    if (sortBy === 'name') result = [...result].sort((a, b) => a.name.localeCompare(b.name, 'ko') * dir)
+    if (sortBy === 'total_count') result = [...result].sort((a, b) => (a.total_count - b.total_count) * dir)
+    if (sortBy === 'created_at') result = [...result].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? '') * dir)
+    return result
+  }, [tags, search, sortBy, sortDir])
+
+  const handleCreate = async () => {
+    const name = newName.trim()
+    if (!name) return
+    await onCreate(name)
+    setNewName('')
+    onRefresh()
+  }
+
+  const handleUpdate = async (id: number) => {
+    const name = editValue.trim()
+    if (!name) return
+    await onUpdate(id, name)
+    setEditingId(null)
+    onRefresh()
+  }
+
+  const handleDelete = async (id: number) => {
+    await onDelete(id)
+    setDeletingId(null)
+    onRefresh()
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* 헤더 */}
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className="text-white font-bold text-base">{title}</h2>
+        <span className="text-xs text-gray-500">{tags.length}개</span>
+      </div>
+
+      {/* 검색바(정렬 포함) + 등록바 (한 줄 반반) */}
+      <div className="flex gap-2 mb-3">
+        <div className="flex gap-1 min-w-0" style={{ flex: '3 1 0' }}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="태그 검색..."
+            className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          />
+          {(['name', 'total_count', 'created_at'] as SortBy[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => handleSortClick(s)}
+              className={`px-2 py-1.5 rounded text-xs shrink-0 ${sortBy === s ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              {s === 'name' ? '이름' : s === 'total_count' ? '참조' : '최신'}
+              {sortBy === s ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 min-w-0" style={{ flex: '2 1 0' }}>
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
+            placeholder="새 태그명 입력..."
+            className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          />
+          <button onClick={handleCreate} className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-500 shrink-0">저장</button>
+        </div>
+      </div>
+
+      {/* 태그 칩 목록 */}
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] flex flex-wrap gap-2 content-start">
+        {filtered.map((tag) => {
+          if (editingId === tag.id) {
+            return (
+              <div key={tag.id} className="flex gap-1 items-center">
+                <input
+                  type="text"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleUpdate(tag.id); if (e.key === 'Escape') setEditingId(null) }}
+                  autoFocus
+                  className="bg-gray-800 border border-blue-500 rounded px-2 py-1 text-sm text-white focus:outline-none w-28"
+                />
+                <button onClick={() => handleUpdate(tag.id)} className="px-2 py-1 rounded text-xs bg-blue-600 text-white hover:bg-blue-500">저장</button>
+                <button onClick={() => setEditingId(null)} className="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300 hover:bg-gray-600">취소</button>
+              </div>
+            )
+          }
+
+          if (deletingId === tag.id) {
+            return (
+              <div key={tag.id} className="flex items-center gap-1.5 bg-red-900/30 border border-red-700 rounded px-2 py-0.5">
+                <span className="text-xs text-red-300">삭제?</span>
+                <button onClick={() => handleDelete(tag.id)} className="text-xs text-red-400 hover:text-red-200 font-bold">확인</button>
+                <button onClick={() => setDeletingId(null)} className="text-xs text-gray-400 hover:text-gray-200">취소</button>
+              </div>
+            )
+          }
+
+          return (
+            <div
+              key={tag.id}
+              className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 hover:border-gray-500 rounded px-2 py-0.5 transition-colors"
+            >
+              <span
+                className="text-sm text-blue-300 cursor-pointer hover:text-blue-100"
+                onClick={() => onTagClick(tag.id, tag.name)}
+              >
+                {tag.name}
+              </span>
+              <span className="text-xs">
+                {tag.rep_count > 0 && <span className="text-yellow-500">{tag.rep_count}·</span>}
+                <span className="text-gray-500">{tag.total_count}</span>
+              </span>
+              <button
+                onClick={() => { setEditingId(tag.id); setEditValue(tag.name); setDeletingId(null) }}
+                className="text-xs text-gray-400 hover:text-white leading-none"
+                title="수정"
+              >m</button>
+              <button
+                onClick={() => { setDeletingId(tag.id); setEditingId(null) }}
+                className="text-xs text-gray-400 hover:text-red-400 leading-none"
+                title="삭제"
+              >✕</button>
+            </div>
+          )
+        })}
+        {filtered.length === 0 && (
+          <p className="text-gray-500 text-sm">{search ? '검색 결과가 없습니다' : '태그가 없습니다'}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function Tags({ onNavigateToWork, onNavigateToActor }: Props) {
+  const [workTags, setWorkTags] = useState<TagItem[]>([])
+  const [actorTags, setActorTags] = useState<TagItem[]>([])
+  const [workTagModal, setWorkTagModal] = useState<{ tagName: string; works: Work[] } | null>(null)
+  const [actorTagModal, setActorTagModal] = useState<{ tagName: string; actors: Actor[] } | null>(null)
+
+  const loadWorkTags = () =>
+    workTagsApi.list(true).then((d) => setWorkTags(d as TagItem[]))
+
+  const loadActorTags = () =>
+    actorTagsApi.list(true).then((d) => setActorTags(d as TagItem[]))
+
+  useEffect(() => {
+    loadWorkTags()
+    loadActorTags()
+  }, [])
+
+  const handleWorkTagClick = async (tagId: number, tagName: string) => {
+    const works = await worksApi.list({ tagIds: [tagId] }) as Work[]
+    setWorkTagModal({ tagName, works })
+  }
+
+  const handleActorTagClick = async (tagId: number, tagName: string) => {
+    const actors = await actorsApi.list({ tagIds: [tagId] }) as Actor[]
+    setActorTagModal({ tagName, actors })
+  }
+
+  return (
+    <>
+    <div className="h-full flex flex-col p-6 min-h-0">
+        <div className="grid grid-cols-2 gap-8 flex-1 min-h-0">
+          <TagPanel
+            title="작품 태그"
+            tags={workTags}
+            onRefresh={loadWorkTags}
+            onCreate={(name) => workTagsApi.create(name).then(() => {})}
+            onUpdate={(id, name) => workTagsApi.update(id, name).then(() => {})}
+            onDelete={(id) => workTagsApi.delete(id).then(() => {})}
+            onTagClick={handleWorkTagClick}
+          />
+          <TagPanel
+            title="배우 태그"
+            tags={actorTags}
+            onRefresh={loadActorTags}
+            onCreate={(name) => actorTagsApi.create(name).then(() => {})}
+            onUpdate={(id, name) => actorTagsApi.update(id, name).then(() => {})}
+            onDelete={(id) => actorTagsApi.delete(id).then(() => {})}
+            onTagClick={handleActorTagClick}
+          />
+        </div>
+    </div>
+
+    {/* 작품 태그 모달 */}
+    {workTagModal && (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setWorkTagModal(null)}>
+        <div className="bg-gray-800 rounded-lg w-[95vw] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => setWorkTagModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
+          <div className="shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
+            <h2 className="text-lg font-bold text-white">#{workTagModal.tagName}</h2>
+            <p className="text-sm text-gray-400 mt-0.5">{workTagModal.works.length}편</p>
+          </div>
+          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4">
+            {workTagModal.works.length > 0 ? (
+              <div className="grid grid-cols-5 gap-3">
+                {workTagModal.works.map((w) => (
+                  <WorkCard key={w.id} work={w} onClick={() => { setWorkTagModal(null); onNavigateToWork(w.id) }} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">작품이 없습니다</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* 배우 태그 모달 */}
+    {actorTagModal && (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setActorTagModal(null)}>
+        <div className="bg-gray-800 rounded-lg w-[95vw] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => setActorTagModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
+          <div className="shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
+            <h2 className="text-lg font-bold text-white">#{actorTagModal.tagName}</h2>
+            <p className="text-sm text-gray-400 mt-0.5">{actorTagModal.actors.length}명</p>
+          </div>
+          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4">
+            {actorTagModal.actors.length > 0 ? (
+              <div className="grid grid-cols-5 gap-3">
+                {actorTagModal.actors.map((a) => (
+                  <ActorListCard key={a.id} actor={a} onClick={() => { setActorTagModal(null); onNavigateToActor(a.id) }} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">배우가 없습니다</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
+  )
+}

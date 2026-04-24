@@ -5,7 +5,6 @@ import SearchBar, { type WorkSearchParams } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
-import TagManager from '../components/TagManager'
 import StudioManager from '../components/StudioManager'
 
 function hashColor(name: string): string {
@@ -31,16 +30,15 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
   const [selected, setSelected] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [showForm, setShowForm] = useState(false)
-  const [showTagManager, setShowTagManager] = useState(false)
   const [showStudioManager, setShowStudioManager] = useState(false)
   const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [editWork, setEditWork] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | undefined>(undefined)
   const [search, setSearch] = useState<WorkSearchParams>(() => {
     try {
       const saved = localStorage.getItem('works:search')
-      return saved ? JSON.parse(saved) : { keyword: '', tagIds: [], tagMode: 'and', releaseDateFrom: '', releaseDateTo: '', ratingFrom: '', ratingTo: '', actorId: '' }
+      return saved ? JSON.parse(saved) : { keyword: '', tagIds: [], tagMode: 'and', actorId: '' }
     } catch {
-      return { keyword: '', tagIds: [], tagMode: 'and', releaseDateFrom: '', releaseDateTo: '', ratingFrom: '', ratingTo: '', actorId: '' }
+      return { keyword: '', tagIds: [], tagMode: 'and', actorId: '' }
     }
   })
   const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at'>(
@@ -54,10 +52,6 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
     const params: Record<string, unknown> = {}
     if (search.keyword) params.keyword = search.keyword
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
-    if (search.releaseDateFrom) params.releaseDateFrom = search.releaseDateFrom
-    if (search.releaseDateTo) params.releaseDateTo = search.releaseDateTo
-    if (search.ratingFrom) params.ratingFrom = Number(search.ratingFrom)
-    if (search.ratingTo) params.ratingTo = Number(search.ratingTo)
     if (search.actorId) params.actorId = Number(search.actorId)
     params.sortBy = sortBy
     params.sortDir = sortDir
@@ -164,57 +158,55 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
     <div className="h-full flex flex-col">
       {/* 목록 영역 */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="p-4 space-y-3">
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setEditWork(undefined); setShowForm(true) }}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
-            >
-              + 작품 등록
-            </button>
-            <button
-              onClick={handleScan}
-              className="bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded text-sm"
-            >
-              폴더 스캔
-            </button>
-            <button
-              onClick={() => setShowTagManager(true)}
-              className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm"
-            >
-              태그 관리
-            </button>
-            <button
-              onClick={() => setShowStudioManager(true)}
-              className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm"
-            >
-              레이블 관리
-            </button>
-            <button
-              onClick={() => setFavoriteOnly((v) => !v)}
-              className={`px-3 py-1.5 rounded text-sm ${favoriteOnly ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-600 hover:bg-gray-500 text-white'}`}
-            >
-              {favoriteOnly ? '♥' : '♡'}
-            </button>
-          </div>
-          <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} />
-          <div className="flex items-center gap-2">
-            <select
-              value={sortBy}
-              onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('works:sortBy', v) }}
-              className="bg-gray-700 text-white text-sm px-2 py-1 rounded"
-            >
-              <option value="created_at">등록일</option>
-              <option value="product_number">품번</option>
-              <option value="rating">별점</option>
-              <option value="release_date">발매일</option>
-            </select>
-            <button
-              onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('works:sortDir', next); return next })}
-              className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-2 py-1 rounded"
-            >
-              {sortDir === 'asc' ? '↑ 오름차순' : '↓ 내림차순'}
-            </button>
+        <div className="p-4">
+          <div className="flex items-center">
+            <div className="w-93 shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
+              <button
+                onClick={() => { setEditWork(undefined); setShowForm(true) }}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
+              >
+                + 작품 등록
+              </button>
+              <button
+                onClick={handleScan}
+                className="bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded text-sm"
+              >
+                폴더 스캔
+              </button>
+              <button
+                onClick={() => setShowStudioManager(true)}
+                className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm"
+              >
+                레이블 관리
+              </button>
+              <button
+                onClick={() => setFavoriteOnly((v) => !v)}
+                className={`px-3 py-1.5 rounded text-sm ${favoriteOnly ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-600 hover:bg-gray-500 text-white'}`}
+              >
+                {favoriteOnly ? '♥' : '♡'}
+              </button>
+            </div>
+            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+              <select
+                value={sortBy}
+                onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('works:sortBy', v) }}
+                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
+              >
+                <option value="created_at">등록일</option>
+                <option value="product_number">품번</option>
+                <option value="rating">별점</option>
+                <option value="release_date">발매일</option>
+              </select>
+              <button
+                onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('works:sortDir', next); return next })}
+                className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-2 py-1.5 rounded"
+              >
+                {sortDir === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+            <div className="w-[29rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} />
+            </div>
           </div>
         </div>
 
@@ -441,16 +433,15 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
               </div>
               <button
                 onClick={async () => {
-                  if (!confirm('영상 파일과 이미지 파일을 디스크에서 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return
-                  const filePaths = (selected.files ?? []).map((f) => f.file_path)
-                  const paths = [...filePaths, selected.cover_path].filter(Boolean) as string[]
-                  const deleted = await shellApi.deleteFiles(paths)
-                  alert(`${deleted}개 파일 삭제 완료`)
+                  if (!confirm('파일이 있는 폴더를 휴지통으로 보내시겠습니까?')) return
+                  const filePaths = (selected.files ?? []).filter((f) => f.type === 'local').map((f) => f.file_path)
+                  const deleted = await shellApi.trashFolders(filePaths)
+                  alert(`${deleted}개 폴더를 휴지통으로 이동했습니다`)
                   handleSelect(selected.id)
                 }}
                 className="w-full bg-orange-700 hover:bg-orange-600 text-white text-sm px-3 py-1.5 rounded"
               >
-                파일 삭제
+                폴더 삭제
               </button>
             </div>
           </div>
@@ -463,9 +454,6 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
           onSave={() => { setShowForm(false); loadWorks(); if (selected) handleSelect(selected.id) }}
           onCancel={() => setShowForm(false)}
         />
-      )}
-      {showTagManager && (
-        <TagManager onClose={() => { setShowTagManager(false); loadTags(); loadWorks() }} />
       )}
       {showStudioManager && (
         <StudioManager onClose={() => { setShowStudioManager(false); loadWorks() }} />

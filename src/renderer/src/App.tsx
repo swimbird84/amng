@@ -3,8 +3,10 @@ import Works from './pages/Works'
 import Actors from './pages/Actors'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
+import Ranking from './pages/Ranking'
+import Tags from './pages/Tags'
 
-type Tab = 'home' | 'dashboard' | 'works' | 'actors'
+type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'tags'
 
 function App() {
   const [tab, setTab] = useState<Tab>('home')
@@ -42,6 +44,16 @@ function App() {
             대시보드
           </button>
           <button
+            onClick={() => setTab('ranking')}
+            className={`px-4 py-3 text-sm border-b-2 transition ${
+              tab === 'ranking'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            랭킹
+          </button>
+          <button
             onClick={() => setTab('works')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'works'
@@ -61,6 +73,16 @@ function App() {
           >
             배우
           </button>
+          <button
+            onClick={() => setTab('tags')}
+            className={`px-4 py-3 text-sm border-b-2 transition ${
+              tab === 'tags'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            태그
+          </button>
         </nav>
       </header>
       <main className="flex-1 overflow-hidden">
@@ -72,6 +94,9 @@ function App() {
             onNavigateToWork={handleNavigateToWork}
             onNavigateToActor={handleNavigateToActor}
           />
+        )}
+        {tab === 'ranking' && (
+          <Ranking onNavigateToActor={handleNavigateToActor} />
         )}
         {tab === 'works' && (
           <Works
@@ -85,6 +110,12 @@ function App() {
             navigateToId={navigateToActorId}
             onNavigateConsumed={() => setNavigateToActorId(null)}
             onNavigateToWork={handleNavigateToWork}
+          />
+        )}
+        {tab === 'tags' && (
+          <Tags
+            onNavigateToWork={handleNavigateToWork}
+            onNavigateToActor={handleNavigateToActor}
           />
         )}
       </main>

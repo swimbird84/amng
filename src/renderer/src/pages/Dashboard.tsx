@@ -10,7 +10,7 @@ function studioColor(name: string, color?: string | null): string {
   return color || hashColor(name)
 }
 import type { Work, Actor } from '../types'
-import { dashboardApi, worksApi, actorsApi } from '../api'
+import { dashboardApi, worksApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 
@@ -88,82 +88,9 @@ function ActorAgeItem({ actor, onClick }: { actor: Actor & { avg_score?: number 
   )
 }
 
-// 태그 클라우드
-function TagCloud({ tags, onTagClick }: { tags: { id: number; name: string; count: number }[]; onTagClick?: (id: number, name: string) => void }) {
-  const counts = tags.map((t) => t.count)
-  const minCount = Math.min(...counts)
-  const maxCount = Math.max(...counts)
-  const minSize = 11
-  const maxSize = 22
-  const getSize = (count: number) =>
-    maxCount === minCount ? (minSize + maxSize) / 2 : minSize + ((count - minCount) / (maxCount - minCount)) * (maxSize - minSize)
-  return (
-    <div className="flex flex-wrap gap-2">
-      {tags.map(({ id, name, count }) => {
-        const size = getSize(count)
-        const opacity = 0.5 + ((count - minCount) / (maxCount - minCount || 1)) * 0.5
-        return (
-          <span
-            key={id}
-            style={{ fontSize: `${size}px`, opacity }}
-            className={`text-blue-300 leading-tight ${onTagClick ? 'cursor-pointer hover:text-blue-100' : 'cursor-default'}`}
-            title={`${count}개`}
-            onClick={() => onTagClick?.(id, name)}
-          >
-            {name}
-          </span>
-        )
-      })}
-    </div>
-  )
-}
-
 // 섹션 타이틀
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="text-white font-bold text-base mb-3">{children}</h2>
-}
-
-function getAge(birthday: string | null): string {
-  if (!birthday) return '-'
-  const diff = Date.now() - new Date(birthday).getTime()
-  return `${Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))}세`
-}
-
-// 배우 목록 카드 (배우 탭과 동일한 디자인)
-function ActorListCard({ actor, onClick }: { actor: Actor & { avg_score?: number; work_count?: number; rep_tags?: { id: number; name: string }[]; ratio_score?: number }; onClick: () => void }) {
-  const bwh = [
-    actor.height ? `${actor.height}cm` : '',
-    (actor.bust || actor.waist || actor.hip) ? `B${actor.bust ?? '?'}-W${actor.waist ?? '?'}-H${actor.hip ?? '?'}` : '',
-    actor.cup ? `${actor.cup}컵` : '',
-  ].filter(Boolean).join(' ')
-  return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-40" />
-      <div className="p-2 bg-gray-800">
-        <div className="flex items-center justify-between gap-1">
-          <p className="text-sm font-bold text-white truncate flex-1">{actor.name}</p>
-          <p className="text-sm font-bold text-yellow-400 shrink-0">{(actor.avg_score ?? 0).toFixed(2)}점</p>
-        </div>
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-400">{actor.birthday || '-'} ({getAge(actor.birthday ?? null)})</p>
-          <p className="text-xs text-gray-400">총{actor.work_count ?? 0}편</p>
-        </div>
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-400">{bwh || '-'}</p>
-          {actor.ratio_score != null && (
-            <p className="text-xs text-blue-400 shrink-0">{actor.ratio_score.toFixed(2)}점</p>
-          )}
-        </div>
-        {actor.rep_tags && actor.rep_tags.length > 0 && (
-          <div className="flex flex-wrap gap-0.5 mt-0.5">
-            {actor.rep_tags.map((t) => (
-              <span key={t.id} className="bg-blue-900/50 text-blue-300 text-xs px-1.5 py-0.5 rounded">{t.name}</span>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
 }
 
 // ===== 메인 대시보드 =====
@@ -198,27 +125,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [selectedScoreBucket, setSelectedScoreBucket] = useState<{ base: number; half: 'early' | 'late' } | null>(null)
 
   const [ratingDist, setRatingDist] = useState<{ bucket: number; count: number }[]>([])
-  const [workTagDist, setWorkTagDist] = useState<{ id: number; name: string; count: number }[]>([])
-  const [actorTagDist, setActorTagDist] = useState<{ id: number; name: string; count: number }[]>([])
-  const [expandedWorkTag, setExpandedWorkTag] = useState(false)
-  const [expandedActorTag, setExpandedActorTag] = useState(false)
-
-  const [scoreRanking, setScoreRanking] = useState<Actor[]>([])
-  const [workCountRanking, setWorkCountRanking] = useState<Actor[]>([])
-  const [bustRanking, setBustRanking] = useState<Actor[]>([])
-  const [hipRanking, setHipRanking] = useState<Actor[]>([])
-  const [waistRanking, setWaistRanking] = useState<Actor[]>([])
-  const [heightRanking, setHeightRanking] = useState<Actor[]>([])
-  const [ratioRanking, setRatioRanking] = useState<Actor[]>([])
-  const [favoriteRanking, setFavoriteRanking] = useState<Actor[]>([])
-
-  const [reversedRankings, setReversedRankings] = useState<Set<string>>(new Set())
-  const [reversedData, setReversedData] = useState<Record<string, Actor[]>>({})
-
-  const [rankModal, setRankModal] = useState<{ title: string; actors: Actor[]; subtitle: (a: Actor) => string; reversed: boolean } | null>(null)
   const [ratingModal, setRatingModal] = useState<{ bucket: number; works: Work[] } | null>(null)
-  const [tagModal, setTagModal] = useState<{ tagName: string; works: Work[] } | null>(null)
-  const [actorTagModal, setActorTagModal] = useState<{ tagName: string; actors: Actor[] } | null>(null)
 
   useEffect(() => {
     dashboardApi.newWorks().then((d) => setNewWorks(d as Work[]))
@@ -229,55 +136,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.actorCupDist().then((d) => setCupDist(d as (Actor & { avg_score: number; work_count: number })[]))
     dashboardApi.studioDist().then((d) => setStudioDist(d as { id: number; name: string; color: string | null; work_count: number }[]))
     dashboardApi.ratingDist().then((d) => setRatingDist(d as { bucket: number; count: number }[]))
-    dashboardApi.workTagDist().then((d) => setWorkTagDist(d as { id: number; name: string; count: number }[]))
-    dashboardApi.actorTagDist().then((d) => setActorTagDist(d as { id: number; name: string; count: number }[]))
-    dashboardApi.actorScoreRanking(10).then((d) => setScoreRanking(d as Actor[]))
-    dashboardApi.actorWorkCountRanking(10).then((d) => setWorkCountRanking(d as Actor[]))
-    dashboardApi.actorBustRanking(10).then((d) => setBustRanking(d as Actor[]))
-    dashboardApi.actorHipRanking(10).then((d) => setHipRanking(d as Actor[]))
-    dashboardApi.actorWaistRanking(10).then((d) => setWaistRanking(d as Actor[]))
-    dashboardApi.actorHeightRanking(10).then((d) => setHeightRanking(d as Actor[]))
-    dashboardApi.actorRatioRanking(10).then((d) => setRatioRanking(d as Actor[]))
-    dashboardApi.actorFavoriteRanking(10).then((d) => setFavoriteRanking(d as Actor[]))
   }, [])
-
-  const handleTagClick = async (tagId: number, tagName: string) => {
-    const works = await worksApi.list({ tagIds: [tagId] }) as Work[]
-    setTagModal({ tagName, works })
-  }
-
-  const handleActorTagClick = async (tagId: number, tagName: string) => {
-    const actors = await actorsApi.list({ tagIds: [tagId] }) as Actor[]
-    setActorTagModal({ tagName, actors })
-  }
-
-  const toggleReverse = async (
-    title: string,
-    fetcher: (reverse: boolean, limit?: number) => Promise<unknown>
-  ) => {
-    const next = new Set(reversedRankings)
-    const isNowReversed = !next.has(title)
-    if (isNowReversed) {
-      next.add(title)
-      if (!reversedData[title]) {
-        const data = await fetcher(true, 10) as Actor[]
-        setReversedData((prev) => ({ ...prev, [title]: data }))
-      }
-    } else {
-      next.delete(title)
-    }
-    setReversedRankings(next)
-  }
-
-  const handleShowRankAll = async (
-    title: string,
-    fetcher: (reverse?: boolean, limit?: number) => Promise<unknown>,
-    subtitle: (a: Actor) => string,
-    reversed: boolean
-  ) => {
-    const actors = await fetcher(reversed) as Actor[]
-    setRankModal({ title, actors, subtitle, reversed })
-  }
 
   const sortedStudioDist = useMemo(() => [...studioDist].sort((a, b) => {
     const dir = studioSortDir === 'asc' ? 1 : -1
@@ -343,9 +202,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     return Array.from(byAge.entries()).sort(([a], [b]) => a - b)
   }, [ageDist, selectedGroup])
 
-  const visibleRatingDist = ratingDist.filter((r) => r.count > 0)
-  const maxRating = Math.max(...visibleRatingDist.map((r) => r.count), 1)
-  const tagCloudHeight = Math.max(visibleRatingDist.length, 5) * 28
+  const ratingBuckets = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
+  const ratingCountMap = new Map(ratingDist.map((r) => [r.bucket, r.count]))
   const today = new Date().toISOString().slice(0, 10)
 
   return (
@@ -459,6 +317,48 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
               )}
             </>
           )}
+        </div>
+
+        {/* 별점 분포 */}
+        <div>
+          <SectionTitle>별점 분포</SectionTitle>
+          <div className="grid grid-cols-10 gap-1.5">
+            {ratingBuckets.map((bucket) => {
+              const count = ratingCountMap.get(bucket) ?? 0
+              const active = count > 0
+              return (
+                  <button
+                      key={bucket}
+                      disabled={!active}
+                      onClick={async () => {
+                        if (!active) return
+                        const works = await dashboardApi.ratingWorks(bucket) as Work[]
+                        setRatingModal({ bucket, works })
+                      }}
+                      className={`py-1.5 rounded text-center ${active ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}
+                  >
+                    <div className="flex justify-center gap-px mb-0.5">
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const full = bucket >= star
+                        const half = !full && bucket >= star - 0.5
+                        return (
+                            <span key={star} className="relative text-xs leading-none w-2.5 inline-block">
+                          <span className="text-gray-600">★</span>
+                              {(full || half) && (
+                                  <span
+                                      className="absolute inset-0 text-yellow-400 overflow-hidden whitespace-nowrap"
+                                      style={{ width: full ? '100%' : '50%' }}
+                                  >★</span>
+                              )}
+                        </span>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs">{active ? `${count}편` : '-'}</p>
+                  </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* 나이대별 분포 */}
@@ -693,212 +593,11 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           </div>
         )}
 
-        {/* 별점 분포 + 태그 클라우드 */}
-        <div className="grid grid-cols-3 gap-6">
-          {/* 별점 분포 */}
-          <div>
-            <SectionTitle>별점 분포</SectionTitle>
-            <div className="space-y-1.5">
-              {visibleRatingDist.map(({ bucket, count }) => (
-                <div
-                  key={bucket}
-                  className="flex items-center gap-2 cursor-pointer group"
-                  onClick={async () => {
-                    const works = await dashboardApi.ratingWorks(bucket) as Work[]
-                    setRatingModal({ bucket, works })
-                  }}
-                >
-                  <span className="text-xs text-gray-400 w-10 text-right">{bucket}점</span>
-                  <div className="flex-1 bg-gray-700 rounded h-5 relative overflow-hidden group-hover:bg-gray-600">
-                    <div className="bg-yellow-600 h-5 rounded transition-all" style={{ width: `${(count / maxRating) * 100}%` }} />
-                  </div>
-                  <span className="text-xs text-gray-400 w-8">{count}</span>
-                </div>
-              ))}
-              {visibleRatingDist.length === 0 && <p className="text-gray-500 text-sm">데이터가 없습니다</p>}
-            </div>
-          </div>
 
-          {/* 작품 태그 클라우드 */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-white font-bold text-base">작품 태그</h2>
-              <button
-                onClick={() => setExpandedWorkTag((v) => !v)}
-                className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
-              >
-                {expandedWorkTag ? '−' : '+'}
-              </button>
-            </div>
-            {workTagDist.length > 0 ? (
-              <div className={expandedWorkTag ? '' : 'overflow-y-auto [scrollbar-gutter:stable]'} style={expandedWorkTag ? {} : { maxHeight: `${tagCloudHeight}px` }}>
-                <TagCloud tags={workTagDist} onTagClick={handleTagClick} />
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">데이터가 없습니다</p>
-            )}
-          </div>
-
-          {/* 배우 태그 클라우드 */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-white font-bold text-base">배우 태그</h2>
-              <button
-                onClick={() => setExpandedActorTag((v) => !v)}
-                className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
-              >
-                {expandedActorTag ? '−' : '+'}
-              </button>
-            </div>
-            {actorTagDist.length > 0 ? (
-              <div className={expandedActorTag ? '' : 'overflow-y-auto [scrollbar-gutter:stable]'} style={expandedActorTag ? {} : { maxHeight: `${tagCloudHeight}px` }}>
-                <TagCloud tags={actorTagDist} onTagClick={handleActorTagClick} />
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">데이터가 없습니다</p>
-            )}
-          </div>
-        </div>
-
-        {/* 랭킹 */}
-        {[
-          { title: '평점 랭킹 TOP 10', data: scoreRanking, subtitle: (a: Actor & { avg_score?: number }) => `${(a.avg_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorScoreRanking(l, r) },
-          { title: '출연작 랭킹 TOP 10', data: workCountRanking, subtitle: (a: Actor & { work_count?: number }) => `${a.work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWorkCountRanking(l, r) },
-          { title: '찜 랭킹 TOP 10', data: favoriteRanking, subtitle: (a: Actor & { fav_work_count?: number }) => `♥ ${a.fav_work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorFavoriteRanking(l, r) },
-          { title: '바스트 랭킹 TOP 10', data: bustRanking, subtitle: (a: Actor) => `${a.bust ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorBustRanking(l, r) },
-          { title: '힙 랭킹 TOP 10', data: hipRanking, subtitle: (a: Actor) => `${a.hip ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorHipRanking(l, r) },
-          { title: '웨이스트 랭킹 TOP 10', data: waistRanking, subtitle: (a: Actor) => `${a.waist ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWaistRanking(l, r) },
-          { title: '키 랭킹 TOP 10', data: heightRanking, subtitle: (a: Actor) => `${a.height ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorHeightRanking(l, r) },
-          { title: '피지컬 랭킹 TOP 10', data: ratioRanking, subtitle: (a: Actor & { ratio_score?: number }) => `${(a.ratio_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorRatioRanking(l, r) },
-        ].map(({ title, data, subtitle, fetcher }) => {
-          const isReversed = reversedRankings.has(title)
-          const displayData = isReversed ? (reversedData[title] ?? []) : data
-          return (
-          <div key={title}>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-white font-bold text-base">{title}</h2>
-              {data.length > 0 && (
-                <>
-                  <button
-                    onClick={() => toggleReverse(title, fetcher)}
-                    className={`text-xs px-2 py-0.5 rounded ${isReversed ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >
-                    {isReversed ? '역순 ↑' : '정순 ↓'}
-                  </button>
-                  <button
-                    onClick={() => handleShowRankAll(title, fetcher, subtitle as (a: Actor) => string, isReversed)}
-                    className="text-xs text-gray-400 hover:text-gray-200 bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded"
-                  >
-                    전체보기
-                  </button>
-                </>
-              )}
-            </div>
-            {displayData.length > 0 ? (
-              <div className="grid grid-cols-10 gap-2">
-                {displayData.map((a, i) => {
-                  const rank = isReversed
-                    ? ((a as any).total_count ?? displayData.length) - i
-                    : i + 1
-                  return (
-                    <ActorRankCard
-                      key={a.id}
-                      actor={a}
-                      rank={rank}
-                      subtitle={subtitle(a as any)}
-                      onClick={() => onNavigateToActor(a.id)}
-                    />
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">데이터가 없습니다</p>
-            )}
-          </div>
-          )
-        })}
 
       </div>
     </div>
 
-    {/* 랭킹 전체보기 모달 */}
-    {rankModal && (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setRankModal(null)}>
-        <div className="bg-gray-800 rounded-lg w-[95vw] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => setRankModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
-          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
-            <h2 className="text-lg font-bold text-white">{rankModal.title.replace('TOP 10', '전체')}</h2>
-            <p className="text-sm text-gray-400 mt-0.5">{rankModal.actors.length}명</p>
-          </div>
-          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4">
-            <div className="grid grid-cols-10 gap-2">
-              {rankModal.actors.map((a, i) => {
-                const rank = rankModal.reversed
-                  ? ((a as any).total_count ?? rankModal.actors.length) - i
-                  : i + 1
-                return (
-                  <ActorRankCard
-                    key={a.id}
-                    actor={a}
-                    rank={rank}
-                    subtitle={rankModal.subtitle(a)}
-                    onClick={() => { setRankModal(null); onNavigateToActor(a.id) }}
-                  />
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* 태그 작품 목록 모달 */}
-    {tagModal && (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setTagModal(null)}>
-        <div className="bg-gray-800 rounded-lg w-[95vw] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => setTagModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
-          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
-            <h2 className="text-lg font-bold text-white">#{tagModal.tagName}</h2>
-            <p className="text-sm text-gray-400 mt-0.5">{tagModal.works.length}편</p>
-          </div>
-          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4">
-            {tagModal.works.length > 0 ? (
-              <div className="grid grid-cols-5 gap-3">
-                {tagModal.works.map((w) => (
-                  <WorkCard key={w.id} work={w} onClick={() => { setTagModal(null); onNavigateToWork(w.id) }} />
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">작품이 없습니다</p>
-            )}
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* 배우 태그 목록 모달 */}
-    {actorTagModal && (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setActorTagModal(null)}>
-        <div className="bg-gray-800 rounded-lg w-[95vw] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => setActorTagModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
-          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
-            <h2 className="text-lg font-bold text-white">#{actorTagModal.tagName}</h2>
-            <p className="text-sm text-gray-400 mt-0.5">{actorTagModal.actors.length}명</p>
-          </div>
-          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4">
-            {actorTagModal.actors.length > 0 ? (
-              <div className="grid grid-cols-5 gap-3">
-                {actorTagModal.actors.map((a) => (
-                  <ActorListCard key={a.id} actor={a} onClick={() => { setActorTagModal(null); onNavigateToActor(a.id) }} />
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">배우가 없습니다</p>
-            )}
-          </div>
-        </div>
-      </div>
-    )}
     {/* 별점 작품 목록 모달 */}
     {ratingModal && (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setRatingModal(null)}>

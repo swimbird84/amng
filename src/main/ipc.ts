@@ -582,7 +582,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('work-tags:list', (_e, withCount?: boolean) => {
     if (withCount) {
       return db().prepare(`
-        SELECT t.*, COUNT(wt.work_id) AS count
+        SELECT t.*,
+          COUNT(wt.work_id) AS total_count,
+          SUM(CASE WHEN wt.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count
         FROM work_tags_master t
         LEFT JOIN work_tags wt ON wt.tag_id = t.id
         GROUP BY t.id ORDER BY t.name
@@ -592,7 +594,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('work-tags:create', (_e, name: string) => {
-    const result = db().prepare('INSERT OR IGNORE INTO work_tags_master (name) VALUES (?)').run(name)
+    const result = db().prepare("INSERT OR IGNORE INTO work_tags_master (name, created_at) VALUES (?, datetime('now'))").run(name)
     if (result.changes > 0) return result.lastInsertRowid
     const existing = db().prepare('SELECT id FROM work_tags_master WHERE name = ?').get(name) as { id: number } | undefined
     return existing?.id ?? 0
@@ -611,7 +613,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('actor-tags:list', (_e, withCount?: boolean) => {
     if (withCount) {
       return db().prepare(`
-        SELECT t.*, COUNT(at2.actor_id) AS count
+        SELECT t.*,
+          COUNT(at2.actor_id) AS total_count,
+          SUM(CASE WHEN at2.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count
         FROM actor_tags_master t
         LEFT JOIN actor_tags at2 ON at2.tag_id = t.id
         GROUP BY t.id ORDER BY t.name
@@ -621,7 +625,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('actor-tags:create', (_e, name: string) => {
-    const result = db().prepare('INSERT OR IGNORE INTO actor_tags_master (name) VALUES (?)').run(name)
+    const result = db().prepare("INSERT OR IGNORE INTO actor_tags_master (name, created_at) VALUES (?, datetime('now'))").run(name)
     if (result.changes > 0) return result.lastInsertRowid
     const existing = db().prepare('SELECT id FROM actor_tags_master WHERE name = ?').get(name) as { id: number } | undefined
     return existing?.id ?? 0
@@ -739,6 +743,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('shell:fileExists', (_e, filePath: string) => {
     return fs.existsSync(filePath)
+  })
+
+  ipcMain.handle('shell:trashFolders', async (_e, filePaths: string[]) => {
+    const folders = [...new Set(filePaths.filter(Boolean).map((p) => path.dirname(p)))]
+    let deleted = 0
+    for (const folder of folders) {
+      if (fs.existsSync(folder)) {
+        await shell.trashItem(folder)
+        deleted++
+      }
+    }
+    return deleted
   })
 
   ipcMain.handle('shell:deleteFiles', async (_e, paths: string[]) => {

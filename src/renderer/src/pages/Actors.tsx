@@ -6,7 +6,6 @@ import ActorForm from '../components/ActorForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import RadarChart from '../components/RadarChart'
-import TagManager from '../components/TagManager'
 
 function getAge(birthday: string | null): string {
   if (!birthday) return '-'
@@ -33,15 +32,14 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
   const [tags, setTags] = useState<Tag[]>([])
   const [selected, setSelected] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [showTagManager, setShowTagManager] = useState(false)
   const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [editActor, setEditActor] = useState<(Actor & { tags?: Tag[] }) | undefined>(undefined)
   const [search, setSearch] = useState<ActorSearchParams>(() => {
     try {
       const saved = localStorage.getItem('actors:search')
-      return saved ? JSON.parse(saved) : { keyword: '', tagIds: [], tagMode: 'and', ageFrom: '', ageTo: '', ratingFrom: '', ratingTo: '' }
+      return saved ? JSON.parse(saved) : { keyword: '', tagIds: [], tagMode: 'and' }
     } catch {
-      return { keyword: '', tagIds: [], tagMode: 'and', ageFrom: '', ageTo: '', ratingFrom: '', ratingTo: '' }
+      return { keyword: '', tagIds: [], tagMode: 'and' }
     }
   })
   const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date'>(
@@ -58,10 +56,6 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
     const params: Record<string, unknown> = {}
     if (search.keyword) params.keyword = search.keyword
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
-    if (search.ageFrom) params.ageFrom = Number(search.ageFrom)
-    if (search.ageTo) params.ageTo = Number(search.ageTo)
-    if (search.ratingFrom) params.ratingFrom = Number(search.ratingFrom)
-    if (search.ratingTo) params.ratingTo = Number(search.ratingTo)
     params.sortBy = sortBy
     params.sortDir = sortDir
     if (favoriteOnly) params.favoriteOnly = true
@@ -148,47 +142,45 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
     <div className="h-full flex flex-col">
       {/* 목록 */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="p-4 space-y-3">
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setEditActor(undefined); setShowForm(true) }}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
-            >
-              + 배우 등록
-            </button>
-            <button
-              onClick={() => setShowTagManager(true)}
-              className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm"
-            >
-              태그 관리
-            </button>
-            <button
-              onClick={() => setFavoriteOnly((v) => !v)}
-              className={`px-3 py-1.5 rounded text-sm ${favoriteOnly ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-600 hover:bg-gray-500 text-white'}`}
-            >
-              {favoriteOnly ? '♥' : '♡'}
-            </button>
-          </div>
-          <SearchBar type="actors" params={search} onChange={setSearch} tags={tags} />
-          <div className="flex items-center gap-2">
-            <select
-              value={sortBy}
-              onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('actors:sortBy', v) }}
-              className="bg-gray-700 text-white text-sm px-2 py-1 rounded"
-            >
-              <option value="created_at">등록일</option>
-              <option value="name">이름</option>
-              <option value="avg_score">평점</option>
-              <option value="birthday">생년월일</option>
-              <option value="debut_date">데뷔일</option>
-              <option value="work_count">작품수</option>
-            </select>
-            <button
-              onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('actors:sortDir', next); return next })}
-              className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-2 py-1 rounded"
-            >
-              {sortDir === 'asc' ? '↑ 오름차순' : '↓ 내림차순'}
-            </button>
+        <div className="p-4">
+          <div className="flex items-center">
+            <div className="w-93 shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
+              <button
+                onClick={() => { setEditActor(undefined); setShowForm(true) }}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
+              >
+                + 배우 등록
+              </button>
+              <button
+                onClick={() => setFavoriteOnly((v) => !v)}
+                className={`px-3 py-1.5 rounded text-sm ${favoriteOnly ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-600 hover:bg-gray-500 text-white'}`}
+              >
+                {favoriteOnly ? '♥' : '♡'}
+              </button>
+            </div>
+            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+              <select
+                value={sortBy}
+                onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('actors:sortBy', v) }}
+                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
+              >
+                <option value="created_at">등록일</option>
+                <option value="name">이름</option>
+                <option value="avg_score">평점</option>
+                <option value="birthday">생년월일</option>
+                <option value="debut_date">데뷔일</option>
+                <option value="work_count">작품수</option>
+              </select>
+              <button
+                onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('actors:sortDir', next); return next })}
+                className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-2 py-1.5 rounded"
+              >
+                {sortDir === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+            <div className="w-[29rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+              <SearchBar type="actors" params={search} onChange={setSearch} tags={tags} />
+            </div>
           </div>
         </div>
 
@@ -453,9 +445,6 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
           onSave={() => { setShowForm(false); loadActors(); if (selected) handleSelect(selected.id) }}
           onCancel={() => setShowForm(false)}
         />
-      )}
-      {showTagManager && (
-        <TagManager defaultTab="actors" onClose={() => { setShowTagManager(false); loadTags(); loadActors() }} />
       )}
     </div>
   )
