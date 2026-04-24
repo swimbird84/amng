@@ -43,6 +43,7 @@ export interface ActorScores {
   sexy: number
   charm: number
   technique: number
+  proportions: number
 }
 
 export interface Actor {
@@ -60,6 +61,7 @@ export interface Actor {
   comment: string | null
   avg_score?: number
   work_count?: number
+  ratio_score?: number
   created_at: string
   works?: Work[]
   tags?: Tag[]

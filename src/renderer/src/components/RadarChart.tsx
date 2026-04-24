@@ -6,8 +6,8 @@ interface Props {
   size?: number
 }
 
-const LABELS = ['외모', '바스트', '힙', '피지컬', '피부', '연기력', '섹기', '매력', '테크닉']
-const KEYS: (keyof ActorScores)[] = ['face', 'bust', 'hip', 'physical', 'skin', 'acting', 'sexy', 'charm', 'technique']
+const LABELS = ['외모', '바스트', '힙', '피지컬', '피부', '연기력', '섹기', '매력', '테크닉', '비율']
+const KEYS: (keyof ActorScores)[] = ['face', 'bust', 'hip', 'physical', 'skin', 'acting', 'sexy', 'charm', 'technique', 'proportions']
 
 export default function RadarChart({ scores, size = 220 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -19,7 +19,7 @@ export default function RadarChart({ scores, size = 220 }: Props) {
     const cx = size / 2
     const cy = size / 2
     const r = size / 2 - 36
-    const n = 9
+    const n = 10
 
     ctx.clearRect(0, 0, size, size)
 

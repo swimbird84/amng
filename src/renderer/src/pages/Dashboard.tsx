@@ -130,28 +130,29 @@ function getAge(birthday: string | null): string {
 }
 
 // 배우 목록 카드 (배우 탭과 동일한 디자인)
-function ActorListCard({ actor, onClick }: { actor: Actor & { avg_score?: number; work_count?: number; rep_tags?: { id: number; name: string }[]; debut_date?: string | null }; onClick: () => void }) {
+function ActorListCard({ actor, onClick }: { actor: Actor & { avg_score?: number; work_count?: number; rep_tags?: { id: number; name: string }[]; ratio_score?: number }; onClick: () => void }) {
+  const bwh = [
+    actor.height ? `${actor.height}cm` : '',
+    (actor.bust || actor.waist || actor.hip) ? `B${actor.bust ?? '?'}-W${actor.waist ?? '?'}-H${actor.hip ?? '?'}` : '',
+    actor.cup ? `${actor.cup}컵` : '',
+  ].filter(Boolean).join(' ')
   return (
     <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-40" />
       <div className="p-2 bg-gray-800">
         <div className="flex items-center justify-between gap-1">
           <p className="text-sm font-bold text-white truncate flex-1">{actor.name}</p>
-          <p className="text-sm font-bold text-yellow-400 flex-shrink-0">{(actor.avg_score ?? 0).toFixed(2)}점</p>
+          <p className="text-sm font-bold text-yellow-400 shrink-0">{(actor.avg_score ?? 0).toFixed(2)}점</p>
         </div>
         <div className="flex items-center justify-between">
           <p className="text-xs text-gray-400">{actor.birthday || '-'} ({getAge(actor.birthday ?? null)})</p>
           <p className="text-xs text-gray-400">총{actor.work_count ?? 0}편</p>
         </div>
         <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-400">{actor.debut_date || '-'}</p>
-          <p className="text-xs text-gray-400 text-right">
-            {[
-              actor.height ? `${actor.height}cm` : '',
-              (actor.bust || actor.waist || actor.hip) ? `B${actor.bust ?? '?'}-W${actor.waist ?? '?'}-H${actor.hip ?? '?'}` : '',
-              actor.cup ? `${actor.cup}컵` : '',
-            ].filter(Boolean).join(' ')}
-          </p>
+          <p className="text-xs text-gray-400">{bwh || '-'}</p>
+          {actor.ratio_score != null && (
+            <p className="text-xs text-blue-400 shrink-0">{actor.ratio_score.toFixed(2)}점</p>
+          )}
         </div>
         {actor.rep_tags && actor.rep_tags.length > 0 && (
           <div className="flex flex-wrap gap-0.5 mt-0.5">

@@ -68,8 +68,8 @@ renderer → main 방향만 존재. 모든 호출은 `api.invoke(channel, ...arg
 
 - **works** — 작품 (cover_path, product_number, title, release_date, rating, is_favorite, comment)
 - **work_files** — 작품별 재생 경로 목록 (file_path, type: 'local'|'url', sort_order)
-- **actors** — 배우 (height, bust, waist, hip, comment, birthday, debut_date, is_favorite)
-- **actor_scores** — 배우 점수 9개 항목 (face, bust, hip, physical, skin, acting, sexy, charm, technique), avg_score = 합계 / 9.0
+- **actors** — 배우 (height, bust, waist, hip, comment, birthday, debut_date, is_favorite). `ratio_score`는 저장 컬럼이 아닌 `actors:list` / `actors:get` 조회 시 WITH stats CTE로 실시간 계산되는 파생 컬럼
+- **actor_scores** — 배우 점수 10개 항목 (face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions), avg_score = 합계 / 10.0
 - **work_tags_master / actor_tags_master** — 태그 마스터
 - **work_tags / actor_tags** — 작품·배우-태그 연결 (is_rep: 대표태그 여부)
 - **work_actors** — 작품-배우 연결
@@ -85,7 +85,7 @@ renderer → main 방향만 존재. 모든 호출은 `api.invoke(channel, ...arg
 3. `ActorForm.tsx` — SCORE_FIELDS, 기본값(신규/기존 배우 모두)
 4. `WorkForm.tsx` — 신규 배우 생성 시 scores 기본값
 5. `RadarChart.tsx` — LABELS, KEYS, `n` 값
-6. `ipc.ts` — avg_score 계산식(`/ N`), `actors:get` SELECT, `actors:create` INSERT/run, `actors:update` INSERT/run (create와 update 두 곳 모두)
+6. `ipc.ts` — avg_score 계산식(`/ N`) 전체 교체 (replace_all 가능), `actors:get` SELECT + ratio_score CTE, `actors:list` SELECT + ratio_score CTE, `actors:create` INSERT/run, `actors:update` INSERT/run (create와 update 두 곳 모두)
 7. `Actors.tsx` — 평점 평균 fallback 계산식(`/ N`)
 
 ### 이미지 처리

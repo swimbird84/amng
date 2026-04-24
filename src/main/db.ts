@@ -125,6 +125,9 @@ export function initDatabase(): void {
   if (!scoreCols.includes('technique')) {
     db.prepare('ALTER TABLE actor_scores ADD COLUMN technique INTEGER DEFAULT 0').run()
   }
+  if (!scoreCols.includes('proportions')) {
+    db.prepare('ALTER TABLE actor_scores ADD COLUMN proportions INTEGER DEFAULT 0').run()
+  }
 
   // is_favorite 컬럼 추가 마이그레이션
   const workCols = (db.prepare("PRAGMA table_info(works)").all() as { name: string }[]).map(c => c.name)

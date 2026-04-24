@@ -15,6 +15,13 @@ function getAge(birthday: string | null): string {
   return `${age}세`
 }
 
+function getDebutAge(birthday: string | null, debutDate: string | null): string {
+  if (!birthday || !debutDate) return '-'
+  const diff = new Date(debutDate).getTime() - new Date(birthday).getTime()
+  const age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
+  return `${age}세`
+}
+
 interface ActorsProps {
   navigateToId?: number | null
   onNavigateConsumed?: () => void
@@ -97,7 +104,7 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
     }
   }
 
-  const defaultScores = { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0 }
+  const defaultScores = { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
 
   const sortedWorks = useMemo(() => {
     const list = [...(selected?.works ?? [])]
@@ -216,14 +223,16 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
                     <p className="text-xs text-gray-400">총{a.work_count ?? 0}편</p>
                   </div>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-gray-400">{a.debut_date || '-'}</p>
-                    <p className="text-xs text-gray-400 text-right">
+                    <p className="text-xs text-gray-400">
                       {[
                         a.height ? `${a.height}cm` : '',
                         (a.bust || a.waist || a.hip) ? `B${a.bust ?? '?'}-W${a.waist ?? '?'}-H${a.hip ?? '?'}` : '',
                         a.cup ? `${a.cup}컵` : '',
-                      ].filter(Boolean).join(' ')}
+                      ].filter(Boolean).join(' ') || '-'}
                     </p>
+                    {a.ratio_score != null && (
+                      <p className="text-xs text-blue-400 shrink-0">{a.ratio_score.toFixed(2)}점</p>
+                    )}
                   </div>
                   {a.rep_tags && a.rep_tags.length > 0 && (
                     <div className="flex flex-wrap gap-0.5 mt-0.5">
@@ -277,16 +286,16 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
                       {selected.is_favorite ? '♥' : '♡'}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-400 mt-1">
-                    {selected.birthday || '-'} ({getAge(selected.birthday)})
-                  </p>
-                  {selected.debut_date && (
-                    <p className="text-sm text-gray-400">데뷔 {selected.debut_date}</p>
-                  )}
+                  <div className="grid gap-x-2 text-sm text-gray-400 mt-1" style={{ gridTemplateColumns: 'auto 1fr' }}>
+                    <span>생년월일</span>
+                    <span>{selected.birthday || '-'}{selected.birthday ? ` (${getAge(selected.birthday)})` : ''}</span>
+                    <span>데뷔일</span>
+                    <span>{selected.debut_date || '-'}{selected.debut_date ? ` (${getDebutAge(selected.birthday ?? null, selected.debut_date)})` : ''}</span>
+                  </div>
                   <p className="text-yellow-400 text-sm mt-1">
                     평점 {(selected.avg_score ?? (
                       selected.scores
-                        ? (Object.values(selected.scores).reduce((a, b) => a + b, 0) / 9)
+                        ? (Object.values(selected.scores).reduce((a, b) => a + b, 0) / 10)
                         : 0
                     )).toFixed(2)}점
                   </p>
@@ -304,17 +313,26 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
               {(selected.height || selected.bust || selected.waist || selected.hip || selected.cup) && (
                 <div>
                   <p className="text-xs text-gray-500 mb-1">신체</p>
-                  <p className="text-sm text-gray-300">
-                    {[
-                      selected.height ? `신장 ${selected.height}cm` : '',
-                      (selected.bust || selected.waist || selected.hip)
-                        ? `B${selected.bust ?? '?'} - W${selected.waist ?? '?'} - H${selected.hip ?? '?'}`
-                        : '',
-                      selected.cup ? `${selected.cup}컵` : '',
-                    ].filter(Boolean).join('  ')}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-300">
+                      {[
+                        selected.height ? `신장 ${selected.height}cm` : '',
+                        (selected.bust || selected.waist || selected.hip)
+                          ? `B${selected.bust ?? '?'} - W${selected.waist ?? '?'} - H${selected.hip ?? '?'}`
+                          : '',
+                        selected.cup ? `${selected.cup}컵` : '',
+                      ].filter(Boolean).join('  ')}
+                    </p>
+                    {selected.ratio_score != null && (
+                      <p className="text-sm text-blue-400 shrink-0 ml-2">{selected.ratio_score.toFixed(2)}점</p>
+                    )}
+                  </div>
                 </div>
               )}
+
+              <div className="flex justify-center">
+                <RadarChart scores={selected.scores ?? defaultScores} />
+              </div>
 
               {selected.comment && (
                 <div>
@@ -322,10 +340,6 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
                   <p className="text-sm text-gray-300 whitespace-pre-wrap">{selected.comment}</p>
                 </div>
               )}
-
-              <div className="flex justify-center">
-                <RadarChart scores={selected.scores ?? defaultScores} />
-              </div>
 
               {selected.tags && selected.tags.length > 0 && (
                 <div>

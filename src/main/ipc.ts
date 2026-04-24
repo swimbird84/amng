@@ -283,10 +283,32 @@ export function registerIpcHandlers(): void {
     favoriteOnly?: boolean
   }) => {
     let sql = `
+      WITH stats AS (
+        SELECT
+          MIN(height) AS min_h, MAX(height) AS max_h,
+          MIN(bust)   AS min_b, MAX(bust)   AS max_b,
+          MIN(waist)  AS min_w, MAX(waist)  AS max_w,
+          MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
+        FROM actors
+        WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+      )
       SELECT DISTINCT a.*,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
+          THEN ROUND((
+            (
+              COALESCE(CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10, 5.0) +
+              COALESCE(CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10, 5.0) +
+              COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
+              COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
+            ) / 4.0 * 0.3 +
+            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
+          ), 2)
+          ELSE NULL
+        END AS ratio_score
       FROM actors a
+      CROSS JOIN stats
       LEFT JOIN actor_scores s ON s.actor_id = a.id
     `
     const conditions: string[] = []
@@ -316,11 +338,11 @@ export function registerIpcHandlers(): void {
       bindings.push(params.ageTo)
     }
     if (params?.ratingFrom !== undefined) {
-      conditions.push('COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) >= ?')
+      conditions.push('COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) >= ?')
       bindings.push(params.ratingFrom)
     }
     if (params?.ratingTo !== undefined) {
-      conditions.push('COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) <= ?')
+      conditions.push('COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) <= ?')
       bindings.push(params.ratingTo)
     }
     if (params?.favoriteOnly) {
@@ -362,7 +384,34 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('actors:get', (_e, id: number) => {
-    const actor = db().prepare('SELECT * FROM actors WHERE id = ?').get(id)
+    const actor = db().prepare(`
+      WITH stats AS (
+        SELECT
+          MIN(height) AS min_h, MAX(height) AS max_h,
+          MIN(bust)   AS min_b, MAX(bust)   AS max_b,
+          MIN(waist)  AS min_w, MAX(waist)  AS max_w,
+          MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
+        FROM actors
+        WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+      )
+      SELECT a.*,
+        CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
+          THEN ROUND((
+            (
+              COALESCE(CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10, 5.0) +
+              COALESCE(CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10, 5.0) +
+              COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
+              COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
+            ) / 4.0 * 0.3 +
+            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
+          ), 2)
+          ELSE NULL
+        END AS ratio_score
+      FROM actors a
+      CROSS JOIN stats
+      LEFT JOIN actor_scores s ON s.actor_id = a.id
+      WHERE a.id = ?
+    `).get(id)
     if (!actor) return null
 
     const works = db().prepare(`
@@ -417,8 +466,8 @@ export function registerIpcHandlers(): void {
       ORDER BY t.name
     `).all(id)
 
-    const scores = db().prepare('SELECT face, bust, hip, physical, skin, acting, sexy, charm, technique FROM actor_scores WHERE actor_id = ?').get(id) || {
-      face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0
+    const scores = db().prepare('SELECT face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions FROM actor_scores WHERE actor_id = ?').get(id) || {
+      face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0
     }
 
     return { ...actor as object, works, tags, rep_tags, scores }
@@ -448,9 +497,9 @@ export function registerIpcHandlers(): void {
 
     const s = data.scores
     db().prepare(`
-      INSERT OR REPLACE INTO actor_scores (actor_id, face, bust, hip, physical, skin, acting, sexy, charm, technique)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(actorId, s?.face ?? 0, s?.bust ?? 0, s?.hip ?? 0, s?.physical ?? 0, s?.skin ?? 0, s?.acting ?? 0, s?.sexy ?? 0, s?.charm ?? 0, s?.technique ?? 0)
+      INSERT OR REPLACE INTO actor_scores (actor_id, face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(actorId, s?.face ?? 0, s?.bust ?? 0, s?.hip ?? 0, s?.physical ?? 0, s?.skin ?? 0, s?.acting ?? 0, s?.sexy ?? 0, s?.charm ?? 0, s?.technique ?? 0, s?.proportions ?? 0)
 
     if (data.tag_ids?.length) {
       const linkTag = db().prepare('INSERT OR IGNORE INTO actor_tags (actor_id, tag_id, is_rep) VALUES (?, ?, ?)')
@@ -501,9 +550,9 @@ export function registerIpcHandlers(): void {
     if (data.scores !== undefined) {
       const s = data.scores
       db().prepare(`
-        INSERT OR REPLACE INTO actor_scores (actor_id, face, bust, hip, physical, skin, acting, sexy, charm, technique)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, s.face, s.bust, s.hip, s.physical, s.skin, s.acting, s.sexy, s.charm ?? 0, s.technique ?? 0)
+        INSERT OR REPLACE INTO actor_scores (actor_id, face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, s.face, s.bust, s.hip, s.physical, s.skin, s.acting, s.sexy, s.charm ?? 0, s.technique ?? 0, s.proportions ?? 0)
     }
 
     if (data.tag_ids !== undefined) {
@@ -720,7 +769,7 @@ export function registerIpcHandlers(): void {
     const works = db().prepare(`
       SELECT w.*,
         COALESCE((
-          SELECT AVG((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0)
+          SELECT AVG((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0)
           FROM work_actors wa2
           JOIN actor_scores s ON s.actor_id = wa2.actor_id
           WHERE wa2.work_id = w.id
@@ -806,7 +855,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('dashboard:new-actors', () => {
     return db().prepare(`
       SELECT a.*,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.debut_date IS NOT NULL AND a.debut_date != ''
@@ -820,7 +869,7 @@ export function registerIpcHandlers(): void {
     return db().prepare(`
       SELECT a.*,
         CAST((julianday('now') - julianday(a.birthday)) / 365.25 AS INTEGER) AS age,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.birthday IS NOT NULL AND a.birthday != ''
       ORDER BY age ASC, avg_score DESC
@@ -832,7 +881,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -846,7 +895,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -860,7 +909,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -875,7 +924,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -891,7 +940,7 @@ export function registerIpcHandlers(): void {
     const secondary = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -906,7 +955,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -930,15 +979,15 @@ export function registerIpcHandlers(): void {
         WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
       )
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         ROUND((
           (
-            CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10 +
-            CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10 +
-            CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10 +
-            CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10
-          ) / 4.0 * 0.5 +
-          (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0)) / 4.0 * 0.5
+            COALESCE(CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10, 5.0) +
+            COALESCE(CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10, 5.0) +
+            COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
+            COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
+          ) / 4.0 * 0.3 +
+          (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
         ), 2) AS ratio_score,
         COUNT(*) OVER () AS total_count
       FROM actors a, stats
@@ -955,7 +1004,7 @@ export function registerIpcHandlers(): void {
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS fav_work_count,
         COALESCE((SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id), 0) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       JOIN work_actors wa ON wa.actor_id = a.id
@@ -986,7 +1035,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('dashboard:actor-score-dist', () => {
     return db().prepare(`
       SELECT a.*,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
@@ -1029,7 +1078,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('dashboard:actor-cup-dist', () => {
     return db().prepare(`
       SELECT a.*,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique) / 9.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Work, Tag, Actor, Studio } from '../types'
 import { worksApi, workTagsApi, actorsApi, studiosApi, dialogApi, imageApi, shellApi } from '../api'
 import Rating from './Rating'
@@ -38,6 +38,26 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [urlInput, setUrlInput] = useState('')
   const [labelAddMode, setLabelAddMode] = useState(false)
   const [newLabelName, setNewLabelName] = useState('')
+  const [studioDropOpen, setStudioDropOpen] = useState(false)
+  const studioDropRef = useRef<HTMLDivElement>(null)
+  const studioTriggerRef = useRef<HTMLButtonElement>(null)
+  const [studioDropRect, setStudioDropRect] = useState<{ top: number; left: number; width: number } | null>(null)
+
+  const handleStudioDropClose = useCallback(() => setStudioDropOpen(false), [])
+  useEffect(() => {
+    if (!studioDropOpen) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (
+        studioDropRef.current && !studioDropRef.current.contains(target) &&
+        studioTriggerRef.current && !studioTriggerRef.current.contains(target)
+      ) {
+        handleStudioDropClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [studioDropOpen, handleStudioDropClose])
 
   useEffect(() => {
     workTagsApi.list().then((t) => setAllTags(t as Tag[]))
@@ -190,7 +210,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         setSelectedActorIds((prev) => [...prev, existing.id])
       }
     } else {
-      const id = await actorsApi.create({ name, scores: { face: 5, bust: 5, hip: 5, physical: 5, skin: 5, acting: 5, sexy: 5, charm: 5, technique: 5 } }) as number
+      const id = await actorsApi.create({ name, scores: { face: 5, bust: 5, hip: 5, physical: 5, skin: 5, acting: 5, sexy: 5, charm: 5, technique: 5, proportions: 5 } }) as number
       const updated = await actorsApi.list() as Actor[]
       setAllActors(updated)
       setSelectedActorIds((prev) => [...prev, id])
@@ -370,16 +390,53 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                   </button>
                 </div>
               ) : (
-                <select
-                  value={studioId ?? ''}
-                  onChange={(e) => setStudioId(e.target.value ? Number(e.target.value) : null)}
-                  className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
-                >
-                  <option value="">없음</option>
-                  {allStudios.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                <div className="relative w-full">
+                  <button
+                    ref={studioTriggerRef}
+                    type="button"
+                    onClick={() => {
+                      if (studioTriggerRef.current) {
+                        const r = studioTriggerRef.current.getBoundingClientRect()
+                        setStudioDropRect({ top: r.bottom + 2, left: r.left, width: r.width })
+                      }
+                      setStudioDropOpen((v) => !v)
+                    }}
+                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full text-left flex items-center justify-between"
+                  >
+                    <span className="truncate">{allStudios.find((s) => s.id === studioId)?.name ?? '없음'}</span>
+                    <span className="text-gray-400 text-xs ml-1">▼</span>
+                  </button>
+                  {studioDropOpen && studioDropRect && (
+                    <div
+                      ref={studioDropRef}
+                      className="fixed z-50 bg-gray-800 rounded shadow-lg overflow-y-scroll"
+                      style={{
+                        top: studioDropRect.top,
+                        left: studioDropRect.left,
+                        width: studioDropRect.width,
+                        maxHeight: `calc(95vh - ${studioDropRect.top}px - 8px)`,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => { setStudioId(null); setStudioDropOpen(false) }}
+                        className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === null ? 'text-white font-bold' : 'text-gray-300'}`}
+                      >
+                        없음
+                      </button>
+                      {allStudios.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => { setStudioId(s.id); setStudioDropOpen(false) }}
+                          className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
