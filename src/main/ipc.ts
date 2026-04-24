@@ -484,7 +484,7 @@ export function registerIpcHandlers(): void {
     hip?: number | null
     cup?: string | null
     comment?: string | null
-    scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number }
+    scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
@@ -523,7 +523,7 @@ export function registerIpcHandlers(): void {
     hip?: number | null
     cup?: string | null
     comment?: string | null
-    scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number }
+    scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
