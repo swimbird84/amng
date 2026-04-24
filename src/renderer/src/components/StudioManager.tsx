@@ -235,7 +235,7 @@ export default function StudioManager({ onClose }: Props) {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            placeholder="새 레이블 이름"
+            placeholder="레이블 이름"
             className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
           />
           <button
