@@ -19,7 +19,7 @@ interface Props {
   onNavigateToActor: (id: number) => void
 }
 
-// 작품 카드 (발매 탐색용, 기존 Works.tsx 카드와 동일한 디자인)
+// 작품 카드 (발매일 분포용, 기존 Works.tsx 카드와 동일한 디자인)
 function WorkCard({ work, onClick }: { work: Work & { rep_tags?: { id: number; name: string }[] }; onClick: () => void }) {
   return (
     <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
@@ -156,6 +156,13 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   }
 
   const handleSelectYear = async (year: string) => {
+    if (selectedYear === year) {
+      setSelectedYear(null)
+      setSelectedMonth(null)
+      setMonthWorks([])
+      setMonthCounts([])
+      return
+    }
     setSelectedYear(year)
     setSelectedMonth(null)
     setMonthWorks([])
@@ -165,6 +172,11 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   const handleSelectMonth = async (month: number) => {
     if (!selectedYear) return
+    if (selectedMonth === month) {
+      setSelectedMonth(null)
+      setMonthWorks([])
+      return
+    }
     setSelectedMonth(month)
     const works = await dashboardApi.releaseWorks(selectedYear, month) as Work[]
     setMonthWorks(works)
@@ -264,9 +276,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           )}
         </div>
 
-        {/* 발매 탐색 */}
+        {/* 발매일 분포 */}
         <div>
-          <SectionTitle>발매 탐색</SectionTitle>
+          <SectionTitle>발매일 분포</SectionTitle>
           <div className="flex flex-wrap gap-2 mb-4">
             {years.map(({ year, count }) => (
               <button
