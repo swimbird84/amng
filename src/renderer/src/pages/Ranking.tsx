@@ -168,7 +168,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
                     actor={a}
                     rank={rank}
                     subtitle={rankModal.subtitle(a)}
-                    onClick={() => { setRankModal(null); onNavigateToActor(a.id) }}
+                    onClick={() => onNavigateToActor(a.id)}
                   />
                 )
               })}

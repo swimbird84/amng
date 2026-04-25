@@ -537,7 +537,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             {ratingModal.works.length > 0 ? (
               <div className="grid grid-cols-10 gap-2">
                 {ratingModal.works.map((w) => (
-                  <WorkMiniCard key={w.id} work={w} onClick={() => { setRatingModal(null); onNavigateToWork(w.id) }} />
+                  <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} />
                 ))}
               </div>
             ) : (

@@ -6,22 +6,22 @@ import Dashboard from './pages/Dashboard'
 import Ranking from './pages/Ranking'
 import Tags from './pages/Tags'
 import Labels from './pages/Labels'
+import ActorViewModal from './components/ActorViewModal'
+import WorkViewModal from './components/WorkViewModal'
 
 type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'labels' | 'tags'
+type ViewEntry = { type: 'actor'; id: number } | { type: 'work'; id: number }
 
 function App() {
   const [tab, setTab] = useState<Tab>('home')
-  const [navigateToActorId, setNavigateToActorId] = useState<number | null>(null)
-  const [navigateToWorkId, setNavigateToWorkId] = useState<number | null>(null)
+  const [viewStack, setViewStack] = useState<ViewEntry[]>([])
 
   const handleNavigateToActor = useCallback((id: number) => {
-    setNavigateToActorId(id)
-    setTab('actors')
+    setViewStack((s) => [...s, { type: 'actor', id }])
   }, [])
 
   const handleNavigateToWork = useCallback((id: number) => {
-    setNavigateToWorkId(id)
-    setTab('works')
+    setViewStack((s) => [...s, { type: 'work', id }])
   }, [])
 
   return (
@@ -110,18 +110,10 @@ function App() {
           <Ranking onNavigateToActor={handleNavigateToActor} />
         )}
         {tab === 'works' && (
-          <Works
-            navigateToId={navigateToWorkId}
-            onNavigateConsumed={() => setNavigateToWorkId(null)}
-            onNavigateToActor={handleNavigateToActor}
-          />
+          <Works onNavigateToActor={handleNavigateToActor} />
         )}
         {tab === 'actors' && (
-          <Actors
-            navigateToId={navigateToActorId}
-            onNavigateConsumed={() => setNavigateToActorId(null)}
-            onNavigateToWork={handleNavigateToWork}
-          />
+          <Actors onNavigateToWork={handleNavigateToWork} />
         )}
         {tab === 'labels' && (
           <Labels onNavigateToWork={handleNavigateToWork} />
@@ -133,6 +125,34 @@ function App() {
           />
         )}
       </main>
+
+      {viewStack.length > 0 && (
+        <div
+          className="fixed inset-0 bg-black/60"
+          style={{ zIndex: 59 }}
+          onClick={() => setViewStack([])}
+        />
+      )}
+      {viewStack.length > 0 && (() => {
+        const v = viewStack[viewStack.length - 1]
+        return v.type === 'actor' ? (
+          <ActorViewModal
+            key={`a-${v.id}`}
+            actorId={v.id}
+            onClose={() => setViewStack([])}
+            onViewWork={(id) => setViewStack([{ type: 'work', id }])}
+            zIndex={60}
+          />
+        ) : (
+          <WorkViewModal
+            key={`w-${v.id}`}
+            workId={v.id}
+            onClose={() => setViewStack([])}
+            onViewActor={(id) => setViewStack([{ type: 'actor', id }])}
+            zIndex={60}
+          />
+        )
+      })()}
     </div>
   )
 }

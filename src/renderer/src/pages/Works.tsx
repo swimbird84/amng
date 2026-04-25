@@ -17,12 +17,10 @@ function studioColor(name: string, color?: string | null): string {
 }
 
 interface WorksProps {
-  navigateToId?: number | null
-  onNavigateConsumed?: () => void
   onNavigateToActor?: (id: number) => void
 }
 
-export default function Works({ navigateToId, onNavigateConsumed, onNavigateToActor }: WorksProps) {
+export default function Works({ onNavigateToActor }: WorksProps) {
   const [works, setWorks] = useState<Work[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [actorList, setActorList] = useState<Actor[]>([])
@@ -69,13 +67,6 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   useEffect(() => { loadWorks() }, [loadWorks])
   useEffect(() => { loadTags(); loadActorList() }, [])
   useEffect(() => { localStorage.setItem('works:search', JSON.stringify(search)) }, [search])
-
-  useEffect(() => {
-    if (navigateToId != null) {
-      handleSelect(navigateToId)
-      onNavigateConsumed?.()
-    }
-  }, [navigateToId])
 
   const handleSelect = async (id: number) => {
     const detail = await worksApi.get(id) as Work & { actors?: Actor[]; tags?: Tag[] }

@@ -22,12 +22,10 @@ function getDebutAge(birthday: string | null, debutDate: string | null): string 
 }
 
 interface ActorsProps {
-  navigateToId?: number | null
-  onNavigateConsumed?: () => void
   onNavigateToWork?: (id: number) => void
 }
 
-export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToWork }: ActorsProps) {
+export default function Actors({ onNavigateToWork }: ActorsProps) {
   const [actors, setActors] = useState<Actor[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [selected, setSelected] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
@@ -70,13 +68,6 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
   useEffect(() => { loadActors() }, [loadActors])
   useEffect(() => { loadTags() }, [])
   useEffect(() => { localStorage.setItem('actors:search', JSON.stringify(search)) }, [search])
-
-  useEffect(() => {
-    if (navigateToId != null) {
-      handleSelect(navigateToId)
-      onNavigateConsumed?.()
-    }
-  }, [navigateToId])
 
   const handleSelect = async (id: number) => {
     const detail = await actorsApi.get(id) as Actor & { works?: Work[]; tags?: Tag[] }

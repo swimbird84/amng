@@ -93,7 +93,7 @@ export default function SearchBar(props: Props) {
         <select
           value={(params as WorkSearchParams).actorId}
           onChange={(e) => onChange({ ...params, actorId: e.target.value ? Number(e.target.value) : '' } as never)}
-          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-30 shrink-0"
         >
           <option value="">배우 전체</option>
           {actors.map((a) => (
