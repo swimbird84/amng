@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type { Work, Tag, Actor, Studio } from '../types'
 import { worksApi, workTagsApi, actorsApi, studiosApi, dialogApi, imageApi, shellApi } from '../api'
 import Rating from './Rating'
@@ -31,7 +31,11 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [allActors, setAllActors] = useState<Actor[]>([])
   const [allStudios, setAllStudios] = useState<Studio[]>([])
-  const [studioId, setStudioId] = useState<number | null>(work?.studio_id ?? null)
+  const [studioId, setStudioId] = useState<number | null>(() => {
+    if (work?.studio_id != null) return work.studio_id
+    const saved = localStorage.getItem('workform:lastStudioId')
+    return saved ? Number(saved) : null
+  })
   const [actorOpen, setActorOpen] = useState(false)
   const [newActor, setNewActor] = useState('')
   const [urlInputOpen, setUrlInputOpen] = useState(false)
@@ -42,6 +46,18 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const studioDropRef = useRef<HTMLDivElement>(null)
   const studioTriggerRef = useRef<HTMLButtonElement>(null)
   const [studioDropRect, setStudioDropRect] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [studioSortBy, setStudioSortBy] = useState<'name' | 'id'>(
+    (localStorage.getItem('workform:studioSortBy') as 'name' | 'id') || 'id'
+  )
+  const [studioSortDir, setStudioSortDir] = useState<'asc' | 'desc'>(
+    (localStorage.getItem('workform:studioSortDir') as 'asc' | 'desc') || 'asc'
+  )
+
+  const sortedStudios = useMemo(() => [...allStudios].sort((a, b) => {
+    const dir = studioSortDir === 'asc' ? 1 : -1
+    if (studioSortBy === 'name') return a.name.localeCompare(b.name, 'ko') * dir
+    return (a.id - b.id) * dir
+  }), [allStudios, studioSortBy, studioSortDir])
 
   const handleStudioDropClose = useCallback(() => setStudioDropOpen(false), [])
   useEffect(() => {
@@ -359,6 +375,32 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                 >
                   +
                 </button>
+                {(['name', 'id'] as const).map((s) => {
+                  const isActive = studioSortBy === s
+                  const label = s === 'name' ? '이름' : '등록'
+                  const handleClick = () => {
+                    if (isActive) {
+                      const next = studioSortDir === 'asc' ? 'desc' : 'asc'
+                      setStudioSortDir(next)
+                      localStorage.setItem('workform:studioSortDir', next)
+                    } else {
+                      setStudioSortBy(s)
+                      setStudioSortDir('asc')
+                      localStorage.setItem('workform:studioSortBy', s)
+                      localStorage.setItem('workform:studioSortDir', 'asc')
+                    }
+                  }
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={handleClick}
+                      className={`px-1.5 py-0.5 rounded text-xs ${isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      {label}{isActive ? (studioSortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                    </button>
+                  )
+                })}
               </div>
               {labelAddMode ? (
                 <div className="flex gap-1">
@@ -419,16 +461,16 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                     >
                       <button
                         type="button"
-                        onClick={() => { setStudioId(null); setStudioDropOpen(false) }}
+                        onClick={() => { setStudioId(null); localStorage.removeItem('workform:lastStudioId'); setStudioDropOpen(false) }}
                         className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === null ? 'text-white font-bold' : 'text-gray-300'}`}
                       >
                         없음
                       </button>
-                      {allStudios.map((s) => (
+                      {sortedStudios.map((s) => (
                         <button
                           key={s.id}
                           type="button"
-                          onClick={() => { setStudioId(s.id); setStudioDropOpen(false) }}
+                          onClick={() => { setStudioId(s.id); localStorage.setItem('workform:lastStudioId', String(s.id)); setStudioDropOpen(false) }}
                           className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
                         >
                           {s.name}

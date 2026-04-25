@@ -31,8 +31,8 @@ export default function StudioManager({ onClose }: Props) {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [colorPickerId, setColorPickerId] = useState<number | null>(null)
   const [newName, setNewName] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'count'>(
-    (localStorage.getItem('studiomanager:sortBy') as 'name' | 'count') || 'count'
+  const [sortBy, setSortBy] = useState<'name' | 'count' | 'id'>(
+    (localStorage.getItem('studiomanager:sortBy') as 'name' | 'count' | 'id') || 'count'
   )
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('studiomanager:sortDir') as 'asc' | 'desc') || 'desc'
@@ -41,6 +41,7 @@ export default function StudioManager({ onClose }: Props) {
   const sortedStudios = useMemo(() => [...studios].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1
     if (sortBy === 'name') return a.name.localeCompare(b.name, 'ko') * dir
+    if (sortBy === 'id') return (a.id - b.id) * dir
     return (a.work_count - b.work_count) * dir
   }), [studios, sortBy, sortDir])
 
@@ -110,27 +111,30 @@ export default function StudioManager({ onClose }: Props) {
         </div>
 
         <div className="flex gap-1.5 mb-3">
-          {(['name', 'count'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => {
-                if (sortBy === s) {
-                  const next = sortDir === 'asc' ? 'desc' : 'asc'
-                  setSortDir(next)
-                  localStorage.setItem('studiomanager:sortDir', next)
-                } else {
-                  const nextDir = s === 'name' ? 'asc' : 'desc'
-                  setSortBy(s)
-                  setSortDir(nextDir)
-                  localStorage.setItem('studiomanager:sortBy', s)
-                  localStorage.setItem('studiomanager:sortDir', nextDir)
-                }
-              }}
-              className={`px-2.5 py-1 rounded text-xs ${sortBy === s ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >
-              {s === 'name' ? '이름' : '참조'}{sortBy === s ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-            </button>
-          ))}
+          {(['name', 'count', 'id'] as const).map((s) => {
+            const label = s === 'name' ? '이름' : s === 'count' ? '작품' : '등록'
+            const defaultDir = s === 'name' || s === 'id' ? 'asc' : 'desc'
+            return (
+              <button
+                key={s}
+                onClick={() => {
+                  if (sortBy === s) {
+                    const next = sortDir === 'asc' ? 'desc' : 'asc'
+                    setSortDir(next)
+                    localStorage.setItem('studiomanager:sortDir', next)
+                  } else {
+                    setSortBy(s)
+                    setSortDir(defaultDir)
+                    localStorage.setItem('studiomanager:sortBy', s)
+                    localStorage.setItem('studiomanager:sortDir', defaultDir)
+                  }
+                }}
+                className={`px-2.5 py-1 rounded text-xs ${sortBy === s ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >
+                {label}{sortBy === s ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+              </button>
+            )
+          })}
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-1 min-h-0">

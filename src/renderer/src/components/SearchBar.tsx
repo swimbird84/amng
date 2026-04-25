@@ -86,8 +86,21 @@ export default function SearchBar(props: Props) {
         value={params.keyword}
         onChange={(e) => onChange({ ...params, keyword: e.target.value } as never)}
         placeholder={type === 'works' ? '품번 검색...' : '이름 검색...'}
-        className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-36"
+        className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
       />
+
+      {type === 'works' && (
+        <select
+          value={(params as WorkSearchParams).actorId}
+          onChange={(e) => onChange({ ...params, actorId: e.target.value ? Number(e.target.value) : '' } as never)}
+          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+        >
+          <option value="">배우 전체</option>
+          {actors.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+      )}
 
       {/* 태그 드롭다운 */}
       <div className="relative">
@@ -170,19 +183,6 @@ export default function SearchBar(props: Props) {
           </div>
         )}
       </div>
-
-      {type === 'works' && (
-        <select
-          value={(params as WorkSearchParams).actorId}
-          onChange={(e) => onChange({ ...params, actorId: e.target.value ? Number(e.target.value) : '' } as never)}
-          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-36"
-        >
-          <option value="">배우 전체</option>
-          {actors.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
-      )}
 
       <button
         onClick={() => {

@@ -5,7 +5,6 @@ import SearchBar, { type WorkSearchParams } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
-import StudioManager from '../components/StudioManager'
 
 function hashColor(name: string): string {
   let hash = 0
@@ -30,8 +29,7 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
   const [selected, setSelected] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [showForm, setShowForm] = useState(false)
-  const [showStudioManager, setShowStudioManager] = useState(false)
-  const [favoriteOnly, setFavoriteOnly] = useState(false)
+const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [editWork, setEditWork] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | undefined>(undefined)
   const [search, setSearch] = useState<WorkSearchParams>(() => {
     try {
@@ -178,10 +176,10 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
                 {sortDir === 'asc' ? '↑' : '↓'}
               </button>
             </div>
-            <div className="w-[29rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <div className="w-[30rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} />
             </div>
-            <div className="w-93 shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <button
                 onClick={() => { setEditWork(undefined); setShowForm(true) }}
                 className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
@@ -194,13 +192,7 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
               >
                 폴더 스캔
               </button>
-              <button
-                onClick={() => setShowStudioManager(true)}
-                className="bg-fuchsia-700 hover:bg-fuchsia-600 text-white px-3 py-1.5 rounded text-sm"
-              >
-                레이블 관리
-              </button>
-              <button
+<button
                 onClick={() => setFavoriteOnly((v) => !v)}
                 className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
               >
@@ -455,9 +447,7 @@ export default function Works({ navigateToId, onNavigateConsumed, onNavigateToAc
           onCancel={() => setShowForm(false)}
         />
       )}
-      {showStudioManager && (
-        <StudioManager onClose={() => { setShowStudioManager(false); loadWorks() }} />
-      )}
+
     </div>
   )
 }

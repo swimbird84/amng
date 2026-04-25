@@ -5,8 +5,9 @@ import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Ranking from './pages/Ranking'
 import Tags from './pages/Tags'
+import Labels from './pages/Labels'
 
-type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'tags'
+type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'labels' | 'tags'
 
 function App() {
   const [tab, setTab] = useState<Tab>('home')
@@ -74,6 +75,16 @@ function App() {
             배우
           </button>
           <button
+            onClick={() => setTab('labels')}
+            className={`px-4 py-3 text-sm border-b-2 transition ${
+              tab === 'labels'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            레이블
+          </button>
+          <button
             onClick={() => setTab('tags')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'tags'
@@ -111,6 +122,9 @@ function App() {
             onNavigateConsumed={() => setNavigateToActorId(null)}
             onNavigateToWork={handleNavigateToWork}
           />
+        )}
+        {tab === 'labels' && (
+          <Labels onNavigateToWork={handleNavigateToWork} />
         )}
         {tab === 'tags' && (
           <Tags

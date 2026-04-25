@@ -164,10 +164,10 @@ export default function Actors({ navigateToId, onNavigateConsumed, onNavigateToW
                 {sortDir === 'asc' ? '↑' : '↓'}
               </button>
             </div>
-            <div className="w-[29rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <div className="w-[30rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <SearchBar type="actors" params={search} onChange={setSearch} tags={tags} />
             </div>
-            <div className="w-93 shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <button
                 onClick={() => { setEditActor(undefined); setShowForm(true) }}
                 className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"

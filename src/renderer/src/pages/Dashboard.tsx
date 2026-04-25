@@ -1,16 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 
-function hashColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return `hsl(${Math.abs(hash) % 360}, 65%, 45%)`
-}
-
-function studioColor(name: string, color?: string | null): string {
-  return color || hashColor(name)
-}
 import type { Work, Actor } from '../types'
-import { dashboardApi, worksApi } from '../api'
+import { dashboardApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 
@@ -77,6 +68,27 @@ function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick }: {
   )
 }
 
+// 배우 컵 분포 카드
+function ActorCupCard({ actor, onClick }: {
+  actor: Actor & { avg_score?: number; ratio_score?: number }
+  onClick: () => void
+}) {
+  const parts = [actor.bust ? `B${actor.bust}` : null, actor.waist ? `W${actor.waist}` : null].filter(Boolean)
+  const bw = parts.join('-')
+  return (
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
+      <div className="p-1 bg-gray-800">
+        <p className="text-xs font-bold text-white truncate">{actor.name}</p>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-white">{bw || '-'}</span>
+          {actor.ratio_score != null && <span className="text-xs text-blue-400">{actor.ratio_score.toFixed(2)}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // 나이대별 배우 아이템 (작은 썸네일 + 이름 + 평점)
 function ActorAgeItem({ actor, onClick }: { actor: Actor & { avg_score?: number }; onClick: () => void }) {
   return (
@@ -111,17 +123,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [selectedGroup, setSelectedGroup] = useState<{ decade: number; phase: 'early' | 'mid' | 'late' } | null>(null)
 
   const [scoreDist, setScoreDist] = useState<(Actor & { avg_score: number; work_count: number })[]>([])
-  const [cupDist, setCupDist] = useState<(Actor & { avg_score: number; work_count: number })[]>([])
+  const [cupDist, setCupDist] = useState<(Actor & { avg_score: number; work_count: number; ratio_score?: number })[]>([])
   const [selectedCup, setSelectedCup] = useState<string | null>(null)
-  const [studioDist, setStudioDist] = useState<{ id: number; name: string; color: string | null; work_count: number }[]>([])
-  const [studioSortBy, setStudioSortBy] = useState<'name' | 'count'>(
-    (localStorage.getItem('dashboard:studioSortBy') as 'name' | 'count') || 'count'
-  )
-  const [studioSortDir, setStudioSortDir] = useState<'asc' | 'desc'>(
-    (localStorage.getItem('dashboard:studioSortDir') as 'asc' | 'desc') || 'desc'
-  )
-  const [selectedStudioId, setSelectedStudioId] = useState<number | null>(null)
-  const [studioWorks, setStudioWorks] = useState<Work[]>([])
   const [selectedScoreBucket, setSelectedScoreBucket] = useState<{ base: number; half: 'early' | 'late' } | null>(null)
 
   const [ratingDist, setRatingDist] = useState<{ bucket: number; count: number }[]>([])
@@ -134,26 +137,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.ageDist().then((d) => setAgeDist(d as (Actor & { age: number; avg_score: number })[]))
     dashboardApi.actorScoreDist().then((d) => setScoreDist(d as (Actor & { avg_score: number; work_count: number })[]))
     dashboardApi.actorCupDist().then((d) => setCupDist(d as (Actor & { avg_score: number; work_count: number })[]))
-    dashboardApi.studioDist().then((d) => setStudioDist(d as { id: number; name: string; color: string | null; work_count: number }[]))
     dashboardApi.ratingDist().then((d) => setRatingDist(d as { bucket: number; count: number }[]))
   }, [])
 
-  const sortedStudioDist = useMemo(() => [...studioDist].sort((a, b) => {
-    const dir = studioSortDir === 'asc' ? 1 : -1
-    if (studioSortBy === 'name') return a.name.localeCompare(b.name, 'ko') * dir
-    return (a.work_count - b.work_count) * dir
-  }), [studioDist, studioSortBy, studioSortDir])
-
-  const handleSelectStudio = async (id: number) => {
-    if (selectedStudioId === id) {
-      setSelectedStudioId(null)
-      setStudioWorks([])
-      return
-    }
-    setSelectedStudioId(id)
-    const works = await worksApi.list({ studioId: id, sortBy: 'release_date', sortDir: 'asc' }) as Work[]
-    setStudioWorks(works)
-  }
 
   const handleSelectYear = async (year: string) => {
     if (selectedYear === year) {
@@ -522,8 +508,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
               {selectedCup !== null && (
                 <div className="border border-gray-700 rounded-lg p-4">
                   <div className="grid grid-cols-10 gap-2">
-                    {cupDist.filter((a) => a.cup === selectedCup).map((a, i) => (
-                      <ActorRankCard key={a.id} actor={a} rank={i + 1} subtitle={`${(a.avg_score ?? 0).toFixed(2)}점`} showRank={false} onClick={() => onNavigateToActor(a.id)} />
+                    {cupDist.filter((a) => a.cup === selectedCup).map((a) => (
+                      <ActorCupCard key={a.id} actor={a} onClick={() => onNavigateToActor(a.id)} />
                     ))}
                   </div>
                 </div>
@@ -532,78 +518,6 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           )
         })()}
 
-        {/* 제작사별 작품 분포 */}
-        {studioDist.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-white font-bold text-base">레이블별 작품 분포</h2>
-              {(['name', 'count'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    if (studioSortBy === s) {
-                      const next = studioSortDir === 'asc' ? 'desc' : 'asc'
-                      setStudioSortDir(next)
-                      localStorage.setItem('dashboard:studioSortDir', next)
-                    } else {
-                      const nextDir = s === 'name' ? 'asc' : 'desc'
-                      setStudioSortBy(s)
-                      setStudioSortDir(nextDir)
-                      localStorage.setItem('dashboard:studioSortBy', s)
-                      localStorage.setItem('dashboard:studioSortDir', nextDir)
-                    }
-                  }}
-                  className={`px-2.5 py-1 rounded text-xs ${studioSortBy === s ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  {s === 'name' ? '이름' : '작품수'}{studioSortBy === s ? (studioSortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-10 gap-1.5 mb-4">
-
-              {sortedStudioDist.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleSelectStudio(s.id)}
-                  title={s.name}
-                  className={`py-1.5 px-2 rounded text-center transition-colors ${selectedStudioId === s.id ? 'text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  style={selectedStudioId === s.id ? { backgroundColor: studioColor(s.name, s.color) } : undefined}
-                >
-                  <p className="text-xs font-bold truncate">{s.name}</p>
-                  <p className="text-xs">{s.work_count}편</p>
-                </button>
-              ))}
-            </div>
-            {selectedStudioId !== null && studioWorks.length > 0 && (() => {
-              const byYear = new Map<string, Work[]>()
-              for (const w of studioWorks) {
-                const year = w.release_date?.slice(0, 4) ?? '연도미상'
-                if (!byYear.has(year)) byYear.set(year, [])
-                byYear.get(year)!.push(w)
-              }
-              const sortedYears = Array.from(byYear.keys()).sort((a, b) => a.localeCompare(b))
-              const selected = studioDist.find((s) => s.id === selectedStudioId)!
-              return (
-                <div className="border border-gray-700 rounded-lg p-4 space-y-4">
-                  <p className="text-base font-bold" style={{ color: studioColor(selected.name, selected.color) }}>{selected.name}</p>
-                  {sortedYears.map((year) => (
-                    <div key={year} className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-400 flex-shrink-0">{year}년</span>
-                        <div className="flex-1 border-t border-gray-700" />
-                      </div>
-                      <div className="grid grid-cols-10 gap-2">
-                        {byYear.get(year)!.map((w) => (
-                          <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            })()}
-          </div>
-        )}
 
 
 

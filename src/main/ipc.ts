@@ -1093,10 +1093,32 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('dashboard:actor-cup-dist', () => {
     return db().prepare(`
+      WITH stats AS (
+        SELECT
+          MIN(height) AS min_h, MAX(height) AS max_h,
+          MIN(bust)   AS min_b, MAX(bust)   AS max_b,
+          MIN(waist)  AS min_w, MAX(waist)  AS max_w,
+          MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
+        FROM actors
+        WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+      )
       SELECT a.*,
         COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
-        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
+        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
+        CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
+          THEN ROUND((
+            (
+              COALESCE(CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10, 5.0) +
+              COALESCE(CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10, 5.0) +
+              COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
+              COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
+            ) / 4.0 * 0.3 +
+            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
+          ), 2)
+          ELSE NULL
+        END AS ratio_score
       FROM actors a
+      CROSS JOIN stats
       LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.cup IS NOT NULL AND a.cup != ''
       ORDER BY a.cup, avg_score DESC, work_count DESC
