@@ -350,20 +350,26 @@ export default function Tags({ onNavigateToWork, onNavigateToActor }: Props) {
       </div>
     )}
     {viewWorkId !== null && (
-      <WorkViewModal
-        workId={viewWorkId}
-        onClose={() => setViewWorkId(null)}
-        onViewActor={(id) => { setViewWorkId(null); setViewActorId(id) }}
-        zIndex={70}
-      />
+      <>
+        <div className="fixed inset-0 bg-black/60" style={{ zIndex: 69 }} onClick={() => setViewWorkId(null)} />
+        <WorkViewModal
+          workId={viewWorkId}
+          onClose={() => setViewWorkId(null)}
+          onViewActor={(id) => { setViewWorkId(null); setViewActorId(id) }}
+          zIndex={70}
+        />
+      </>
     )}
     {viewActorId !== null && (
-      <ActorViewModal
-        actorId={viewActorId}
-        onClose={() => setViewActorId(null)}
-        onViewWork={(id) => { setViewActorId(null); setViewWorkId(id) }}
-        zIndex={70}
-      />
+      <>
+        <div className="fixed inset-0 bg-black/60" style={{ zIndex: 69 }} onClick={() => setViewActorId(null)} />
+        <ActorViewModal
+          actorId={viewActorId}
+          onClose={() => setViewActorId(null)}
+          onViewWork={(id) => { setViewActorId(null); setViewWorkId(id) }}
+          zIndex={70}
+        />
+      </>
     )}
     </>
   )
