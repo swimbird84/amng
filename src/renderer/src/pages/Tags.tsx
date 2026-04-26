@@ -3,6 +3,8 @@ import type { Work, Actor } from '../types'
 import { workTagsApi, actorTagsApi, worksApi, actorsApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
+import WorkViewModal from '../components/WorkViewModal'
+import ActorViewModal from '../components/ActorViewModal'
 
 interface Props {
   onNavigateToWork: (id: number) => void
@@ -85,24 +87,21 @@ function TagPanel({
     localStorage.setItem(`tags:${title}:search`, v)
   }
 
-  const handleSortClick = (s: SortBy) => {
-    if (sortBy === s) {
-      const next = sortDir === 'asc' ? 'desc' : 'asc'
-      setSortDir(next)
-      localStorage.setItem(`tags:${title}:sortDir`, next)
-    } else {
-      const nextDir = s === 'name' ? 'asc' : 'desc'
-      setSortBy(s)
-      setSortDir(nextDir)
-      localStorage.setItem(`tags:${title}:sortBy`, s)
-      localStorage.setItem(`tags:${title}:sortDir`, nextDir)
-    }
+  const handleSortByChange = (s: SortBy) => {
+    setSortBy(s)
+    localStorage.setItem(`tags:${title}:sortBy`, s)
+  }
+
+  const handleSortDirToggle = () => {
+    const next = sortDir === 'asc' ? 'desc' : 'asc'
+    setSortDir(next)
+    localStorage.setItem(`tags:${title}:sortDir`, next)
   }
 
   const filtered = useMemo(() => {
     let result = tags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()))
     const dir = sortDir === 'asc' ? 1 : -1
-    if (sortBy === 'name') result = [...result].sort((a, b) => a.name.localeCompare(b.name, 'ko') * dir)
+    if (sortBy === 'name') result = [...result].sort((a, b) => a.name.localeCompare(b.name, 'en-US') * dir)
     if (sortBy === 'total_count') result = [...result].sort((a, b) => (a.total_count - b.total_count) * dir)
     if (sortBy === 'created_at') result = [...result].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? '') * dir)
     return result
@@ -141,6 +140,21 @@ function TagPanel({
       {/* 검색바(정렬 포함) + 등록바 (한 줄 반반) */}
       <div className="flex gap-2 mb-3">
         <div className="flex gap-1 min-w-0" style={{ flex: '3 1 0' }}>
+          <select
+            value={sortBy}
+            onChange={(e) => handleSortByChange(e.target.value as SortBy)}
+            className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded shrink-0"
+          >
+            <option value="name">이름</option>
+            <option value="total_count">참조</option>
+            <option value="created_at">최신</option>
+          </select>
+          <button
+            onClick={handleSortDirToggle}
+            className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-2 py-1.5 rounded shrink-0"
+          >
+            {sortDir === 'asc' ? '↑' : '↓'}
+          </button>
           <input
             type="text"
             value={search}
@@ -148,16 +162,12 @@ function TagPanel({
             placeholder="태그 검색..."
             className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
-          {(['name', 'total_count', 'created_at'] as SortBy[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => handleSortClick(s)}
-              className={`px-2 py-1.5 rounded text-xs shrink-0 ${sortBy === s ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >
-              {s === 'name' ? '이름' : s === 'total_count' ? '참조' : '최신'}
-              {sortBy === s ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-            </button>
-          ))}
+          <button
+            onClick={() => handleSearchChange('')}
+            className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"
+          >
+            초기화
+          </button>
         </div>
         <div className="flex gap-1 min-w-0" style={{ flex: '2 1 0' }}>
           <input
@@ -243,6 +253,8 @@ export default function Tags({ onNavigateToWork, onNavigateToActor }: Props) {
   const [actorTags, setActorTags] = useState<TagItem[]>([])
   const [workTagModal, setWorkTagModal] = useState<{ tagName: string; works: Work[] } | null>(null)
   const [actorTagModal, setActorTagModal] = useState<{ tagName: string; actors: Actor[] } | null>(null)
+  const [viewWorkId, setViewWorkId] = useState<number | null>(null)
+  const [viewActorId, setViewActorId] = useState<number | null>(null)
 
   const loadWorkTags = () =>
     workTagsApi.list(true).then((d) => setWorkTags(d as TagItem[]))
@@ -303,7 +315,7 @@ export default function Tags({ onNavigateToWork, onNavigateToActor }: Props) {
             {workTagModal.works.length > 0 ? (
               <div className="grid grid-cols-5 gap-3">
                 {workTagModal.works.map((w) => (
-                  <WorkCard key={w.id} work={w} onClick={() => { setWorkTagModal(null); onNavigateToWork(w.id) }} />
+                  <WorkCard key={w.id} work={w} onClick={() => setViewWorkId(w.id)} />
                 ))}
               </div>
             ) : (
@@ -327,7 +339,7 @@ export default function Tags({ onNavigateToWork, onNavigateToActor }: Props) {
             {actorTagModal.actors.length > 0 ? (
               <div className="grid grid-cols-5 gap-3">
                 {actorTagModal.actors.map((a) => (
-                  <ActorListCard key={a.id} actor={a} onClick={() => { setActorTagModal(null); onNavigateToActor(a.id) }} />
+                  <ActorListCard key={a.id} actor={a} onClick={() => setViewActorId(a.id)} />
                 ))}
               </div>
             ) : (
@@ -336,6 +348,22 @@ export default function Tags({ onNavigateToWork, onNavigateToActor }: Props) {
           </div>
         </div>
       </div>
+    )}
+    {viewWorkId !== null && (
+      <WorkViewModal
+        workId={viewWorkId}
+        onClose={() => setViewWorkId(null)}
+        onViewActor={(id) => { setViewWorkId(null); setViewActorId(id) }}
+        zIndex={70}
+      />
+    )}
+    {viewActorId !== null && (
+      <ActorViewModal
+        actorId={viewActorId}
+        onClose={() => setViewActorId(null)}
+        onViewWork={(id) => { setViewActorId(null); setViewWorkId(id) }}
+        zIndex={70}
+      />
     )}
     </>
   )
