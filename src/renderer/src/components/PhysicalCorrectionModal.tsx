@@ -205,6 +205,19 @@ const SCORE_ITEMS: { key: keyof PhysicalSettings['score']; label: string }[] = [
   { key: 'proportions', label: '비율'  },
 ]
 
+const ALL_SCORE_ITEMS: { label: string; getValue: (a: ActorPhysicalData) => number }[] = [
+  { label: '외모',   getValue: a => a.face        },
+  { label: '바스트', getValue: a => a.score_bust  },
+  { label: '힙',     getValue: a => a.score_hip   },
+  { label: '피지컬', getValue: a => a.physical    },
+  { label: '피부',   getValue: a => a.skin        },
+  { label: '연기력', getValue: a => a.acting      },
+  { label: '섹기',   getValue: a => a.sexy        },
+  { label: '매력',   getValue: a => a.charm       },
+  { label: '테크닉', getValue: a => a.technique   },
+  { label: '비율',   getValue: a => a.proportions },
+]
+
 export default function PhysicalCorrectionModal({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<PhysicalSettings>(loadSettings)
   const [actors, setActors] = useState<ActorPhysicalData[]>([])
@@ -274,7 +287,7 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
                   type="number" min={0} max={10} step={0.5}
                   value={settings.profileWeight}
                   onChange={e => setProfileWeight(parseFloat(e.target.value))}
-                  className="bg-gray-800 text-white text-sm px-2 py-1 rounded w-14 text-center"
+                  className="bg-gray-800 text-white text-sm px-2 py-1 rounded w-14 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -283,7 +296,7 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
                   type="number" min={0} max={10} step={0.5}
                   value={settings.scoreWeight}
                   onChange={e => setScoreWeight(parseFloat(e.target.value))}
-                  className="bg-gray-800 text-white text-sm px-2 py-1 rounded w-14 text-center"
+                  className="bg-gray-800 text-white text-sm px-2 py-1 rounded w-14 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                 />
               </div>
             </div>
@@ -396,27 +409,30 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
                   a.hip != null    ? `H:${a.hip}`       : '',
                   a.cup            ? `컵:${a.cup}`       : '',
                 ].filter(Boolean).join('  ')
-                const scoreParts = [
-                  `외모:${a.face.toFixed(1)}`,
-                  `바스트:${a.score_bust.toFixed(1)}`,
-                  `힙:${a.score_hip.toFixed(1)}`,
-                  `피지컬:${a.physical.toFixed(1)}`,
-                  `피부:${a.skin.toFixed(1)}`,
-                  `비율:${a.proportions.toFixed(1)}`,
-                ].join('  ')
                 return (
-                  <div key={a.id} className="flex items-stretch gap-3 bg-gray-700/60 rounded px-3 py-2">
-                    <span className="text-gray-400 text-sm w-6 text-right shrink-0 self-center">{i + 1}</span>
-                    <ImagePreview path={a.photo_path} alt={a.name} className="w-14 h-20 rounded shrink-0 object-cover" />
-                    <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-                      <p className="text-white text-sm font-bold truncate">{a.name}</p>
+                  <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
+                    <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? i + 1 : ranked.length - i}</span>
+                    <ImagePreview path={a.photo_path} alt={a.name} className="self-stretch aspect-square rounded shrink-0 object-cover" />
+                    <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
+                      <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-gray-400 text-xs truncate">{profileParts || '-'}</p>
+                        <p className="text-gray-400 text-xs truncate pl-1.5">{profileParts || '-'}</p>
                         <p className="text-blue-400 text-xs font-bold shrink-0">{a.physScore.toFixed(2)}점</p>
                       </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-gray-500 text-xs truncate">{scoreParts}</p>
-                        <p className="text-yellow-400 text-xs font-bold shrink-0">{avgScore.toFixed(2)}점</p>
+                      <div className="flex items-end justify-between gap-2">
+                        <div className="flex flex-col gap-0 shrink-0">
+                          <div className="flex gap-0.5">
+                            {ALL_SCORE_ITEMS.map(({ label }) => (
+                              <div key={label} className="w-9 text-center text-gray-500 text-xs leading-tight">{label}</div>
+                            ))}
+                          </div>
+                          <div className="flex gap-0.5">
+                            {ALL_SCORE_ITEMS.map(({ label, getValue }) => (
+                              <div key={label} className="w-9 text-center text-gray-300 text-xs leading-tight">{Math.round(getValue(a))}</div>
+                            ))}
+                          </div>
+                        </div>
+                        <p className="text-yellow-400 text-xs font-bold shrink-0 leading-tight">{avgScore.toFixed(2)}점</p>
                       </div>
                     </div>
                   </div>
