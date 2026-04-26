@@ -169,16 +169,16 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
                 + 배우 등록
               </button>
               <button
-                onClick={() => setFavoriteOnly((v) => !v)}
-                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
+                onClick={() => setShowPhysical(true)}
+                className="bg-fuchsia-700 hover:bg-fuchsia-600 text-white px-3 py-1.5 rounded text-sm"
               >
-                {favoriteOnly ? '♥' : '♡'}
+                피지컬 계산기
               </button>
               <button
-                onClick={() => setShowPhysical(true)}
-                className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm"
+                  onClick={() => setFavoriteOnly((v) => !v)}
+                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
               >
-                피지컬
+                {favoriteOnly ? '♥' : '♡'}
               </button>
             </div>
           </div>

@@ -208,6 +208,7 @@ const SCORE_ITEMS: { key: keyof PhysicalSettings['score']; label: string }[] = [
 export default function PhysicalCorrectionModal({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<PhysicalSettings>(loadSettings)
   const [actors, setActors] = useState<ActorPhysicalData[]>([])
+  const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
     actorsApi.physicalData().then(d => setActors(d as ActorPhysicalData[]))
@@ -219,8 +220,8 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
     return actors
       .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
       .filter((a): a is typeof a & { physScore: number } => a.physScore !== null)
-      .sort((a, b) => b.physScore - a.physScore)
-  }, [actors, settings, stats])
+      .sort((a, b) => rankSortDir === 'desc' ? b.physScore - a.physScore : a.physScore - b.physScore)
+  }, [actors, settings, stats, rankSortDir])
 
   const update = (s: PhysicalSettings) => {
     setSettings(s)
@@ -256,7 +257,7 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-gray-800 rounded-lg w-[820px] h-[95vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 shrink-0">
-          <h2 className="text-white font-bold text-base">피지컬 보정 설정</h2>
+          <h2 className="text-white font-bold text-base">피지컬 계산기</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
         </div>
 
@@ -378,25 +379,49 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
             <div className="flex items-center gap-2 mb-2 shrink-0">
               <p className="text-sm text-gray-300 font-bold">피지컬 점수 랭킹</p>
               <span className="text-xs text-gray-500">{ranked.length}명</span>
+              <button
+                onClick={() => setRankSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-0.5 rounded"
+              >
+                {rankSortDir === 'desc' ? '↓' : '↑'}
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto space-y-1 [scrollbar-gutter:stable]">
-              {ranked.map((a, i) => (
-                <div key={a.id} className="flex items-center gap-3 bg-gray-700/60 rounded px-3 py-2">
-                  <span className="text-gray-400 text-sm w-6 text-right shrink-0">{i + 1}</span>
-                  <ImagePreview path={a.photo_path} alt={a.name} className="w-10 h-10 rounded shrink-0 object-cover" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-bold truncate">{a.name}</p>
-                    <p className="text-gray-400 text-xs">
-                      {[
-                        a.height ? `${a.height}cm` : '',
-                        (a.bust || a.waist || a.hip) ? `B${a.bust ?? '?'}-W${a.waist ?? '?'}-H${a.hip ?? '?'}` : '',
-                        a.cup ? `${a.cup}컵` : '',
-                      ].filter(Boolean).join('  ') || '-'}
-                    </p>
+              {ranked.map((a, i) => {
+                const avgScore = (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 10
+                const profileParts = [
+                  a.height != null ? `키:${a.height}cm` : '',
+                  a.bust != null   ? `B:${a.bust}`      : '',
+                  a.waist != null  ? `W:${a.waist}`     : '',
+                  a.hip != null    ? `H:${a.hip}`       : '',
+                  a.cup            ? `컵:${a.cup}`       : '',
+                ].filter(Boolean).join('  ')
+                const scoreParts = [
+                  `외모:${a.face.toFixed(1)}`,
+                  `바스트:${a.score_bust.toFixed(1)}`,
+                  `힙:${a.score_hip.toFixed(1)}`,
+                  `피지컬:${a.physical.toFixed(1)}`,
+                  `피부:${a.skin.toFixed(1)}`,
+                  `비율:${a.proportions.toFixed(1)}`,
+                ].join('  ')
+                return (
+                  <div key={a.id} className="flex items-stretch gap-3 bg-gray-700/60 rounded px-3 py-2">
+                    <span className="text-gray-400 text-sm w-6 text-right shrink-0 self-center">{i + 1}</span>
+                    <ImagePreview path={a.photo_path} alt={a.name} className="w-14 h-20 rounded shrink-0 object-cover" />
+                    <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                      <p className="text-white text-sm font-bold truncate">{a.name}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-gray-400 text-xs truncate">{profileParts || '-'}</p>
+                        <p className="text-blue-400 text-xs font-bold shrink-0">{a.physScore.toFixed(2)}점</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-gray-500 text-xs truncate">{scoreParts}</p>
+                        <p className="text-yellow-400 text-xs font-bold shrink-0">{avgScore.toFixed(2)}점</p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-blue-400 text-sm font-bold shrink-0">{a.physScore.toFixed(2)}점</p>
-                </div>
-              ))}
+                )
+              })}
               {ranked.length === 0 && (
                 <p className="text-gray-500 text-sm text-center py-8">데이터가 없습니다</p>
               )}
