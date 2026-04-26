@@ -22,7 +22,10 @@ function resolvedColor(studio: StudioWithCount): string {
   return studio.color || hashColor(studio.name)
 }
 
-const COLOR_PALETTE = Array.from({ length: 100 }, (_, i) => `hsl(${i * 3.6}, 65%, 45%)`)
+const COLOR_PALETTE = [
+  ...Array.from({ length: 100 }, (_, i) => `hsl(${i * 3.6}, 65%, 45%)`),
+  ...Array.from({ length: 10 }, (_, i) => `hsl(0, 0%, ${60 - i * 6}%)`),
+]
 
 export default function StudioManager({ onClose }: Props) {
   const [studios, setStudios] = useState<StudioWithCount[]>([])
@@ -40,7 +43,7 @@ export default function StudioManager({ onClose }: Props) {
 
   const sortedStudios = useMemo(() => [...studios].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1
-    if (sortBy === 'name') return a.name.localeCompare(b.name, 'ko') * dir
+    if (sortBy === 'name') return a.name.localeCompare(b.name, 'en-US') * dir
     if (sortBy === 'id') return (a.id - b.id) * dir
     return (a.work_count - b.work_count) * dir
   }), [studios, sortBy, sortDir])
@@ -62,7 +65,7 @@ export default function StudioManager({ onClose }: Props) {
     const name = editingName.trim()
     if (!name) return
     try {
-      await studiosApi.update(studio.id, name, studio.color)
+      await studiosApi.update(studio.id, name, studio.color ?? hashColor(studio.name))
       setEditingId(null)
       await load()
     } catch (err) {
