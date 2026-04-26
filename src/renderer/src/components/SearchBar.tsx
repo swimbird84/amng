@@ -8,6 +8,7 @@ interface WorkSearchParams {
   tagIds: number[]
   tagMode: TagMode
   actorId: number | ''
+  studioId: number | ''
 }
 
 interface ActorSearchParams {
@@ -22,6 +23,7 @@ interface WorkSearchProps {
   onChange: (params: WorkSearchParams) => void
   tags: Tag[]
   actors: Actor[]
+  studios: { id: number; name: string }[]
 }
 
 interface ActorSearchProps {
@@ -38,6 +40,7 @@ export type { WorkSearchParams, ActorSearchParams, TagMode }
 export default function SearchBar(props: Props) {
   const { type, params, onChange, tags } = props
   const actors = type === 'works' ? (props as WorkSearchProps).actors : []
+  const studios = type === 'works' ? (props as WorkSearchProps).studios : []
 
   const [tagOpen, setTagOpen] = useState(false)
   const [tagFilter, setTagFilter] = useState('')
@@ -93,11 +96,24 @@ export default function SearchBar(props: Props) {
         <select
           value={(params as WorkSearchParams).actorId}
           onChange={(e) => onChange({ ...params, actorId: e.target.value ? Number(e.target.value) : '' } as never)}
-          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-30 shrink-0"
+          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-25 shrink-0"
         >
           <option value="">배우 전체</option>
           {actors.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+      )}
+
+      {type === 'works' && (
+        <select
+          value={(params as WorkSearchParams).studioId}
+          onChange={(e) => onChange({ ...params, studioId: e.target.value ? Number(e.target.value) : '' } as never)}
+          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-25 shrink-0"
+        >
+          <option value="">레이블 전체</option>
+          {studios.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
       )}
@@ -187,7 +203,7 @@ export default function SearchBar(props: Props) {
       <button
         onClick={() => {
           if (type === 'works') {
-            onChange({ keyword: '', tagIds: [], tagMode: 'and', actorId: '' } as never)
+            onChange({ keyword: '', tagIds: [], tagMode: 'and', actorId: '', studioId: '' } as never)
           } else {
             onChange({ keyword: '', tagIds: [], tagMode: 'and' } as never)
           }

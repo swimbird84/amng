@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Work, Tag, Actor } from '../types'
-import { worksApi, workTagsApi, actorsApi, dialogApi, scanApi, shellApi } from '../api'
+import type { Work, Tag, Actor, Studio } from '../types'
+import { worksApi, workTagsApi, actorsApi, studiosApi, dialogApi, scanApi, shellApi } from '../api'
 import SearchBar, { type WorkSearchParams } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import ImagePreview from '../components/ImagePreview'
@@ -24,6 +24,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const [works, setWorks] = useState<Work[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [actorList, setActorList] = useState<Actor[]>([])
+  const [studioList, setStudioList] = useState<Studio[]>([])
   const [selected, setSelected] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [showForm, setShowForm] = useState(false)
@@ -32,9 +33,9 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [search, setSearch] = useState<WorkSearchParams>(() => {
     try {
       const saved = localStorage.getItem('works:search')
-      return saved ? JSON.parse(saved) : { keyword: '', tagIds: [], tagMode: 'and', actorId: '' }
+      return saved ? JSON.parse(saved) : { keyword: '', tagIds: [], tagMode: 'and', actorId: '', studioId: '' }
     } catch {
-      return { keyword: '', tagIds: [], tagMode: 'and', actorId: '' }
+      return { keyword: '', tagIds: [], tagMode: 'and', actorId: '', studioId: '' }
     }
   })
   const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at'>(
@@ -49,6 +50,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     if (search.keyword) params.keyword = search.keyword
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
     if (search.actorId) params.actorId = Number(search.actorId)
+    if (search.studioId) params.studioId = Number(search.studioId)
     params.sortBy = sortBy
     params.sortDir = sortDir
     if (favoriteOnly) params.favoriteOnly = true
@@ -65,7 +67,11 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   }
 
   useEffect(() => { loadWorks() }, [loadWorks])
-  useEffect(() => { loadTags(); loadActorList() }, [])
+  useEffect(() => {
+    loadTags()
+    loadActorList()
+    studiosApi.list().then((d) => setStudioList(d as Studio[]))
+  }, [])
   useEffect(() => { localStorage.setItem('works:search', JSON.stringify(search)) }, [search])
 
   const handleSelect = async (id: number) => {
@@ -168,7 +174,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
               </button>
             </div>
             <div className="w-[30rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
-              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} />
+              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} studios={studioList} />
             </div>
             <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <button
