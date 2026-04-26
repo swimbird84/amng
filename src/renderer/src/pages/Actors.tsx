@@ -6,7 +6,7 @@ import ActorForm from '../components/ActorForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import RadarChart from '../components/RadarChart'
-import PhysicalCorrectionModal from '../components/PhysicalCorrectionModal'
+import PhysicalCorrectionModal, { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
 
 function getAge(birthday: string | null): string {
   if (!birthday) return '-'
@@ -51,17 +51,41 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
   const [workSortDir, setWorkSortDir] = useState<'desc' | 'asc'>('desc')
   const [hoverCover, setHoverCover] = useState<string | null>(null)
+  const [physScoreMap, setPhysScoreMap] = useState<Map<number, number>>(new Map())
+
+  const computePhysScores = useCallback(async () => {
+    const data = await actorsApi.physicalData() as ActorPhysicalData[]
+    const settings = loadSettings()
+    const stats = computeStats(data)
+    const map = new Map<number, number>()
+    for (const a of data) {
+      const score = calcPhysicalScore(a, settings, stats)
+      if (score !== null) map.set(a.id, score)
+    }
+    setPhysScoreMap(map)
+  }, [])
 
   const loadActors = useCallback(async () => {
     const params: Record<string, unknown> = {}
     if (search.keyword) params.keyword = search.keyword
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
-    params.sortBy = sortBy
-    params.sortDir = sortDir
+    if (sortBy !== 'ratio_score') {
+      params.sortBy = sortBy
+      params.sortDir = sortDir
+    }
     if (favoriteOnly) params.favoriteOnly = true
     const list = await actorsApi.list(params) as Actor[]
     setActors(list)
   }, [search, sortBy, sortDir, favoriteOnly])
+
+  const displayActors = useMemo(() => {
+    if (sortBy !== 'ratio_score') return actors
+    return [...actors].sort((a, b) => {
+      const sa = physScoreMap.get(a.id) ?? -1
+      const sb = physScoreMap.get(b.id) ?? -1
+      return sortDir === 'desc' ? sb - sa : sa - sb
+    })
+  }, [actors, sortBy, sortDir, physScoreMap])
 
   const loadTags = async () => {
     setTags(await actorTagsApi.list() as Tag[])
@@ -69,6 +93,11 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
 
   useEffect(() => { loadActors() }, [loadActors])
   useEffect(() => { loadTags() }, [])
+  useEffect(() => {
+    computePhysScores()
+    window.addEventListener('physicalSettingsChange', computePhysScores)
+    return () => window.removeEventListener('physicalSettingsChange', computePhysScores)
+  }, [computePhysScores])
   useEffect(() => { localStorage.setItem('actors:search', JSON.stringify(search)) }, [search])
 
   const handleSelect = async (id: number) => {
@@ -186,7 +215,7 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
 
         <div className="flex-1 overflow-y-auto p-4 pt-0">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {actors.map((a) => (
+            {displayActors.map((a) => (
               <div
                 key={a.id}
                 onClick={() => handleSelect(a.id)}
@@ -222,8 +251,8 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
                         a.cup ? `${a.cup}컵` : '',
                       ].filter(Boolean).join(' ') || '-'}
                     </p>
-                    {a.ratio_score != null && (
-                      <p className="text-xs text-blue-400 shrink-0">{a.ratio_score.toFixed(2)}점</p>
+                    {(physScoreMap.get(a.id) != null || a.ratio_score != null) && (
+                      <p className="text-xs text-blue-400 shrink-0">{(physScoreMap.get(a.id) ?? a.ratio_score!).toFixed(2)}점</p>
                     )}
                   </div>
                   {a.rep_tags && a.rep_tags.length > 0 && (
@@ -315,8 +344,8 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
                         selected.cup ? `${selected.cup}컵` : '',
                       ].filter(Boolean).join('  ')}
                     </p>
-                    {selected.ratio_score != null && (
-                      <p className="text-sm text-blue-400 shrink-0 ml-2">{selected.ratio_score.toFixed(2)}점</p>
+                    {(physScoreMap.get(selected.id) != null || selected.ratio_score != null) && (
+                      <p className="text-sm text-blue-400 shrink-0 ml-2">{(physScoreMap.get(selected.id) ?? selected.ratio_score!).toFixed(2)}점</p>
                     )}
                   </div>
                 </div>

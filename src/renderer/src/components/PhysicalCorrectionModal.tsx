@@ -135,33 +135,34 @@ export function calcPhysicalScore(
   if (settings.profileEnabled) {
     const items: number[] = []
     const p = settings.profile
-    if (p.height.enabled && actor.height != null) {
-      let v = norm(actor.height, stats.minH, stats.maxH)
+    if (p.height.enabled) {
+      let v = actor.height != null ? norm(actor.height, stats.minH, stats.maxH) : 5
       if (p.height.dir === 'N') v = 10 - v
       items.push(v)
     }
-    if (p.bust.enabled && actor.bust != null) {
-      let v = norm(actor.bust, stats.minB, stats.maxB)
+    if (p.bust.enabled) {
+      let v = actor.bust != null ? norm(actor.bust, stats.minB, stats.maxB) : 5
       if (p.bust.dir === 'N') v = 10 - v
       items.push(v)
     }
-    if (p.waist.enabled && actor.waist != null) {
-      let v = norm(actor.waist, stats.minW, stats.maxW)
+    if (p.waist.enabled) {
+      let v = actor.waist != null ? norm(actor.waist, stats.minW, stats.maxW) : 5
       if (p.waist.dir === 'N') v = 10 - v
       items.push(v)
     }
-    if (p.hip.enabled && actor.hip != null) {
-      let v = norm(actor.hip, stats.minHip, stats.maxHip)
+    if (p.hip.enabled) {
+      let v = actor.hip != null ? norm(actor.hip, stats.minHip, stats.maxHip) : 5
       if (p.hip.dir === 'N') v = 10 - v
       items.push(v)
     }
-    if (p.cup.enabled && actor.cup) {
-      const cn = cupToNum(actor.cup)
-      if (cn > 0 && stats.maxCup > stats.minCup) {
-        let v = norm(cn, stats.minCup, stats.maxCup)
-        if (p.cup.dir === 'N') v = 10 - v
-        items.push(v)
+    if (p.cup.enabled) {
+      let v = 5
+      if (actor.cup) {
+        const cn = cupToNum(actor.cup)
+        if (cn > 0 && stats.maxCup > stats.minCup) v = norm(cn, stats.minCup, stats.maxCup)
       }
+      if (p.cup.dir === 'N') v = 10 - v
+      items.push(v)
     }
     if (items.length > 0) profileScore = items.reduce((a, b) => a + b, 0) / items.length
   }
@@ -412,7 +413,7 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
                 return (
                   <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
                     <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? i + 1 : ranked.length - i}</span>
-                    <ImagePreview path={a.photo_path} alt={a.name} className="self-stretch aspect-square rounded shrink-0 object-cover" />
+                    <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" />
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
                       <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
                       <div className="flex items-center justify-between gap-2">
