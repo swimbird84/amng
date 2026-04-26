@@ -89,14 +89,14 @@ export default function SearchBar(props: Props) {
         value={params.keyword}
         onChange={(e) => onChange({ ...params, keyword: e.target.value } as never)}
         placeholder={type === 'works' ? '품번 검색...' : '이름 검색...'}
-        className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+        className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded ${type === 'works' ? 'w-22 shrink-0' : 'flex-1'}`}
       />
 
       {type === 'works' && (
         <select
           value={(params as WorkSearchParams).actorId}
           onChange={(e) => onChange({ ...params, actorId: e.target.value ? Number(e.target.value) : '' } as never)}
-          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-25 shrink-0"
+          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-24 shrink-0"
         >
           <option value="">배우 전체</option>
           {actors.map((a) => (
@@ -109,7 +109,7 @@ export default function SearchBar(props: Props) {
         <select
           value={(params as WorkSearchParams).studioId}
           onChange={(e) => onChange({ ...params, studioId: e.target.value ? Number(e.target.value) : '' } as never)}
-          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-25 shrink-0"
+          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28 shrink-0"
         >
           <option value="">레이블 전체</option>
           {studios.map((s) => (
