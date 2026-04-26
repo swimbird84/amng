@@ -278,7 +278,7 @@ export function registerIpcHandlers(): void {
     ageTo?: number
     ratingFrom?: number
     ratingTo?: number
-    sortBy?: 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date'
+    sortBy?: 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
   }) => {
@@ -358,6 +358,8 @@ export function registerIpcHandlers(): void {
       sql += ` ORDER BY work_count ${sortDir}`
     } else if (params?.sortBy === 'avg_score') {
       sql += ` ORDER BY avg_score ${sortDir}`
+    } else if (params?.sortBy === 'ratio_score') {
+      sql += ` ORDER BY ratio_score IS NULL ASC, ratio_score ${sortDir}`
     } else {
       const validActorSortCols = ['name', 'birthday', 'created_at', 'debut_date']
       const sortCol = validActorSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
@@ -1122,6 +1124,27 @@ export function registerIpcHandlers(): void {
       LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.cup IS NOT NULL AND a.cup != ''
       ORDER BY a.cup, avg_score DESC, work_count DESC
+    `).all()
+  })
+
+  ipcMain.handle('actors:physical-data', () => {
+    return db().prepare(`
+      SELECT
+        a.id, a.name, a.photo_path,
+        a.height, a.bust, a.waist, a.hip, a.cup,
+        COALESCE(s.face, 0)        AS face,
+        COALESCE(s.bust, 0)        AS score_bust,
+        COALESCE(s.hip, 0)         AS score_hip,
+        COALESCE(s.physical, 0)    AS physical,
+        COALESCE(s.skin, 0)        AS skin,
+        COALESCE(s.acting, 0)      AS acting,
+        COALESCE(s.sexy, 0)        AS sexy,
+        COALESCE(s.charm, 0)       AS charm,
+        COALESCE(s.technique, 0)   AS technique,
+        COALESCE(s.proportions, 0) AS proportions,
+        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
+      FROM actors a
+      LEFT JOIN actor_scores s ON s.actor_id = a.id
     `).all()
   })
 

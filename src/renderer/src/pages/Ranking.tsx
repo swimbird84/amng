@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Actor } from '../types'
-import { dashboardApi } from '../api'
+import { actorsApi, dashboardApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
+import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
 
 interface Props {
   onNavigateToActor: (id: number) => void
@@ -35,13 +36,30 @@ export default function Ranking({ onNavigateToActor }: Props) {
   const [hipRanking, setHipRanking] = useState<Actor[]>([])
   const [waistRanking, setWaistRanking] = useState<Actor[]>([])
   const [heightRanking, setHeightRanking] = useState<Actor[]>([])
-  const [ratioRanking, setRatioRanking] = useState<Actor[]>([])
+  const [physicalRankingAll, setPhysicalRankingAll] = useState<Array<Actor & { ratio_score: number; total_count: number }>>([])
+
   const [favoriteRanking, setFavoriteRanking] = useState<Actor[]>([])
 
   const [reversedRankings, setReversedRankings] = useState<Set<string>>(new Set())
   const [reversedData, setReversedData] = useState<Record<string, Actor[]>>({})
 
   const [rankModal, setRankModal] = useState<{ title: string; actors: Actor[]; subtitle: (a: Actor) => string; reversed: boolean } | null>(null)
+
+  const computePhysicalRanking = useCallback(async () => {
+    const data = await actorsApi.physicalData() as ActorPhysicalData[]
+    const settings = loadSettings()
+    const stats = computeStats(data)
+    const scored = data
+      .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
+      .filter((a): a is typeof a & { physScore: number } => a.physScore !== null)
+      .sort((a, b) => b.physScore - a.physScore)
+    const total = scored.length
+    setPhysicalRankingAll(
+      scored.map(a => ({ ...a, ratio_score: a.physScore, total_count: total })) as unknown as Array<Actor & { ratio_score: number; total_count: number }>
+    )
+    setReversedData(prev => { const next = { ...prev }; delete next['피지컬 랭킹 TOP 10']; return next })
+    setReversedRankings(prev => { const next = new Set(prev); next.delete('피지컬 랭킹 TOP 10'); return next })
+  }, [])
 
   useEffect(() => {
     dashboardApi.actorScoreRanking(10).then((d) => setScoreRanking(d as Actor[]))
@@ -50,9 +68,12 @@ export default function Ranking({ onNavigateToActor }: Props) {
     dashboardApi.actorHipRanking(10).then((d) => setHipRanking(d as Actor[]))
     dashboardApi.actorWaistRanking(10).then((d) => setWaistRanking(d as Actor[]))
     dashboardApi.actorHeightRanking(10).then((d) => setHeightRanking(d as Actor[]))
-    dashboardApi.actorRatioRanking(10).then((d) => setRatioRanking(d as Actor[]))
     dashboardApi.actorFavoriteRanking(10).then((d) => setFavoriteRanking(d as Actor[]))
-  }, [])
+    computePhysicalRanking()
+
+    window.addEventListener('physicalSettingsChange', computePhysicalRanking)
+    return () => window.removeEventListener('physicalSettingsChange', computePhysicalRanking)
+  }, [computePhysicalRanking])
 
   const toggleReverse = async (
     title: string,
@@ -91,7 +112,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
           { title: '출연작 랭킹 TOP 10', data: workCountRanking, subtitle: (a: Actor & { work_count?: number }) => `${a.work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWorkCountRanking(l, r) },
           { title: '찜 랭킹 TOP 10', data: favoriteRanking, subtitle: (a: Actor & { fav_work_count?: number }) => `♥ ${a.fav_work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorFavoriteRanking(l, r) },
           { title: '평점 랭킹 TOP 10', data: scoreRanking, subtitle: (a: Actor & { avg_score?: number }) => `${(a.avg_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorScoreRanking(l, r) },
-          { title: '피지컬 랭킹 TOP 10', data: ratioRanking, subtitle: (a: Actor & { ratio_score?: number }) => `${(a.ratio_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorRatioRanking(l, r) },
+          { title: '피지컬 랭킹 TOP 10', data: physicalRankingAll.slice(0, 10), subtitle: (a: Actor & { ratio_score?: number }) => `${(a.ratio_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => { const sorted = r ? [...physicalRankingAll].reverse() : physicalRankingAll; return Promise.resolve(l !== undefined ? sorted.slice(0, l) : sorted) } },
           { title: '바스트 랭킹 TOP 10', data: bustRanking, subtitle: (a: Actor) => `${a.bust ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorBustRanking(l, r) },
           { title: '힙 랭킹 TOP 10', data: hipRanking, subtitle: (a: Actor) => `${a.hip ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorHipRanking(l, r) },
           { title: '웨이스트 랭킹 TOP 10', data: waistRanking, subtitle: (a: Actor) => `${a.waist ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWaistRanking(l, r) },

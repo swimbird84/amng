@@ -16,6 +16,7 @@ export const actorsApi = {
   create: (data: object) => api.invoke('actors:create', data),
   update: (id: number, data: object) => api.invoke('actors:update', id, data),
   delete: (id: number) => api.invoke('actors:delete', id),
+  physicalData: () => api.invoke('actors:physical-data'),
 }
 
 // 태그

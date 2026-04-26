@@ -6,6 +6,7 @@ import ActorForm from '../components/ActorForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import RadarChart from '../components/RadarChart'
+import PhysicalCorrectionModal from '../components/PhysicalCorrectionModal'
 
 function getAge(birthday: string | null): string {
   if (!birthday) return '-'
@@ -40,9 +41,10 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
       return { keyword: '', tagIds: [], tagMode: 'and' }
     }
   })
-  const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date'>(
-    (localStorage.getItem('actors:sortBy') as 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date') || 'avg_score'
+  const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score'>(
+    (localStorage.getItem('actors:sortBy') as 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score') || 'avg_score'
   )
+  const [showPhysical, setShowPhysical] = useState(false)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('actors:sortDir') as 'asc' | 'desc') || 'desc'
   )
@@ -144,6 +146,7 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
                 <option value="created_at">등록일</option>
                 <option value="name">이름</option>
                 <option value="avg_score">평점</option>
+                <option value="ratio_score">피지컬</option>
                 <option value="birthday">생년월일</option>
                 <option value="debut_date">데뷔일</option>
                 <option value="work_count">작품수</option>
@@ -170,6 +173,12 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
                 className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
               >
                 {favoriteOnly ? '♥' : '♡'}
+              </button>
+              <button
+                onClick={() => setShowPhysical(true)}
+                className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm"
+              >
+                피지컬
               </button>
             </div>
           </div>
@@ -436,6 +445,10 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
           onSave={() => { setShowForm(false); loadActors(); if (selected) handleSelect(selected.id) }}
           onCancel={() => setShowForm(false)}
         />
+      )}
+
+      {showPhysical && (
+        <PhysicalCorrectionModal onClose={() => setShowPhysical(false)} />
       )}
     </div>
   )
