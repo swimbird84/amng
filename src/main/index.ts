@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import path from 'path'
 import { initDatabase } from './db'
 import { registerIpcHandlers } from './ipc'
@@ -9,6 +9,8 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1300,
     height: 870,
+    resizable: false,
+    fullscreenable: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -24,6 +26,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null)
   initDatabase()
   registerIpcHandlers()
   createWindow()
