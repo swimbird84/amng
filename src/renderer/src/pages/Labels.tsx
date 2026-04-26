@@ -52,6 +52,7 @@ export default function Labels({ onNavigateToWork }: Props) {
     (localStorage.getItem('labels:yearSortDir') as 'asc' | 'desc') || 'asc'
   )
   const [showManager, setShowManager] = useState(false)
+  const [hoveredId, setHoveredId] = useState<number | null>(null)
 
   const loadStudios = async () => {
     setStudios(await studiosApi.list(true) as StudioWithCount[])
@@ -64,7 +65,7 @@ export default function Labels({ onNavigateToWork }: Props) {
     if (keyword) list = list.filter((s) => s.name.toLowerCase().includes(keyword.toLowerCase()))
     list.sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
-      if (sortBy === 'name') return a.name.localeCompare(b.name, 'ko') * dir
+      if (sortBy === 'name') return a.name.localeCompare(b.name, 'en-US') * dir
       if (sortBy === 'id') return (a.id - b.id) * dir
       return (a.work_count - b.work_count) * dir
     })
@@ -121,25 +122,27 @@ export default function Labels({ onNavigateToWork }: Props) {
           <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
             <button
               onClick={() => setShowManager(true)}
-              className="bg-fuchsia-700 hover:bg-fuchsia-600 text-white px-3 py-1.5 rounded text-sm"
+              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
             >
-              레이블 관리
+              + 레이블 관리
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 pb-4">
         {filteredStudios.length > 0 ? (
           <>
-            <div className="grid grid-cols-10 gap-1.5 mb-4">
+            <div className="grid grid-cols-6 gap-1.5 mb-4">
               {filteredStudios.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => handleSelectStudio(s.id)}
+                  onMouseEnter={() => setHoveredId(s.id)}
+                  onMouseLeave={() => setHoveredId(null)}
                   title={s.name}
-                  className={`py-1.5 px-2 rounded text-center transition-colors ${selectedStudioId === s.id ? 'text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  style={selectedStudioId === s.id ? { backgroundColor: studioColor(s.name, s.color) } : undefined}
+                  className={`py-1.5 px-2 rounded text-center transition-colors ${selectedStudioId === s.id || hoveredId === s.id ? 'text-white' : 'bg-gray-700 text-gray-300'}`}
+                  style={selectedStudioId === s.id || hoveredId === s.id ? { backgroundColor: studioColor(s.name, s.color) } : undefined}
                 >
                   <p className="text-xs font-bold truncate">{s.name}</p>
                   <p className="text-xs">{s.work_count}편</p>
