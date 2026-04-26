@@ -199,18 +199,18 @@ const PROFILE_ITEMS: { key: keyof PhysicalSettings['profile']; label: string }[]
 
 const SCORE_ITEMS: { key: keyof PhysicalSettings['score']; label: string }[] = [
   { key: 'face',        label: '외모'  },
-  { key: 'bust',        label: '바스트' },
-  { key: 'hip',         label: '힙'    },
-  { key: 'physical',    label: '피지컬' },
+  { key: 'bust',        label: '가슴'   },
+  { key: 'hip',         label: '엉덩이' },
+  { key: 'physical',    label: '몸매'  },
   { key: 'skin',        label: '피부'  },
   { key: 'proportions', label: '비율'  },
 ]
 
 const ALL_SCORE_ITEMS: { label: string; getValue: (a: ActorPhysicalData) => number }[] = [
   { label: '외모',   getValue: a => a.face        },
-  { label: '바스트', getValue: a => a.score_bust  },
-  { label: '힙',     getValue: a => a.score_hip   },
-  { label: '피지컬', getValue: a => a.physical    },
+  { label: '가슴',   getValue: a => a.score_bust  },
+  { label: '엉덩이', getValue: a => a.score_hip   },
+  { label: '몸매',   getValue: a => a.physical    },
   { label: '피부',   getValue: a => a.skin        },
   { label: '연기력', getValue: a => a.acting      },
   { label: '섹기',   getValue: a => a.sexy        },
