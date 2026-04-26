@@ -390,12 +390,19 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                           <polyline points="14 2 14 8 20 8" />
                         </svg>
                       )}
-                      <span
-                        className="text-xs flex-1 truncate text-gray-300"
+                      <button
+                        type="button"
                         title={f.file_path}
+                        onClick={() => {
+                          if (f.type === 'url') shellApi.openExternal(f.file_path)
+                          else if (fileStatuses[f.id]) shellApi.showItemInFolder(f.file_path)
+                        }}
+                        className={`text-xs flex-1 truncate text-left hover:underline ${
+                          fileStatuses[f.id] ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-default'
+                        }`}
                       >
                         {f.type === 'url' ? f.file_path : f.file_path.split(/[\\/]/).pop()}
-                      </span>
+                      </button>
                       {f.type === 'local' && (
                         <span className={`text-xs flex-shrink-0 ${fileStatuses[f.id] ? 'text-green-400' : 'text-red-400'}`}>
                           {fileStatuses[f.id] ? '●' : '✗'}

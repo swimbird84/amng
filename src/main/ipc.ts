@@ -738,6 +738,10 @@ export function registerIpcHandlers(): void {
     return shell.openPath(filePath)
   })
 
+  ipcMain.handle('shell:showItemInFolder', (_e, filePath: string) => {
+    shell.showItemInFolder(filePath)
+  })
+
   ipcMain.handle('shell:openExternal', (_e, url: string) => {
     shell.openExternal(url)
     return true

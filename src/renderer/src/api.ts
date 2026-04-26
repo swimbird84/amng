@@ -64,6 +64,7 @@ export const workFilesApi = {
 export const shellApi = {
   openPath: (filePath: string) => api.invoke('shell:openPath', filePath) as Promise<string>,
   openExternal: (url: string) => api.invoke('shell:openExternal', url) as Promise<boolean>,
+  showItemInFolder: (filePath: string) => api.invoke('shell:showItemInFolder', filePath) as Promise<void>,
   fileExists: (filePath: string) => api.invoke('shell:fileExists', filePath) as Promise<boolean>,
   deleteFiles: (paths: string[]) => api.invoke('shell:deleteFiles', paths) as Promise<number>,
   trashFolders: (filePaths: string[]) => api.invoke('shell:trashFolders', filePaths) as Promise<number>,

@@ -55,7 +55,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   const sortedStudios = useMemo(() => [...allStudios].sort((a, b) => {
     const dir = studioSortDir === 'asc' ? 1 : -1
-    if (studioSortBy === 'name') return a.name.localeCompare(b.name, 'ko') * dir
+    if (studioSortBy === 'name') return a.name.localeCompare(b.name, 'en-US') * dir
     return (a.id - b.id) * dir
   }), [allStudios, studioSortBy, studioSortDir])
 
@@ -277,12 +277,19 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                       <polyline points="14 2 14 8 20 8" />
                     </svg>
                   )}
-                  <span
-                    className={`text-xs flex-1 truncate ${fileStatuses[entry.path] ? 'text-gray-300' : 'text-gray-500'}`}
+                  <button
+                    type="button"
                     title={entry.path}
+                    onClick={() => {
+                      if (entry.type === 'url') shellApi.openExternal(entry.path)
+                      else if (fileStatuses[entry.path]) shellApi.showItemInFolder(entry.path)
+                    }}
+                    className={`text-xs flex-1 truncate text-left hover:underline ${
+                      fileStatuses[entry.path] ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-default'
+                    }`}
                   >
                     {entry.type === 'url' ? entry.path : entry.path.split(/[\\/]/).pop()}
-                  </span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleRemoveFile(i)}
