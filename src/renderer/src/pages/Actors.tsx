@@ -471,7 +471,7 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
       {showForm && (
         <ActorForm
           actor={editActor}
-          onSave={() => { setShowForm(false); loadActors(); if (selected) handleSelect(selected.id) }}
+          onSave={() => { setShowForm(false); loadActors(); computePhysScores(); if (selected) handleSelect(selected.id) }}
           onCancel={() => setShowForm(false)}
         />
       )}
