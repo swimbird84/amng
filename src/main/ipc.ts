@@ -99,7 +99,19 @@ export function registerIpcHandlers(): void {
       if (!repTagMap.has(row.work_id)) repTagMap.set(row.work_id, [])
       repTagMap.get(row.work_id)!.push({ id: row.id, name: row.name })
     }
-    return rawList.map(w => ({ ...w, rep_tags: repTagMap.get(w.id as number) ?? [] }))
+    const repActorRows = db().prepare(`
+      SELECT wa.work_id, a.id, a.name
+      FROM work_actors wa
+      JOIN actors a ON a.id = wa.actor_id
+      WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
+      ORDER BY a.name
+    `).all(...workIds) as Array<{ work_id: number; id: number; name: string }>
+    const repActorMap = new Map<number, Array<{ id: number; name: string }>>()
+    for (const row of repActorRows) {
+      if (!repActorMap.has(row.work_id)) repActorMap.set(row.work_id, [])
+      repActorMap.get(row.work_id)!.push({ id: row.id, name: row.name })
+    }
+    return rawList.map(w => ({ ...w, rep_tags: repTagMap.get(w.id as number) ?? [], rep_actors: repActorMap.get(w.id as number) ?? [] }))
   })
 
   ipcMain.handle('works:get', (_e, id: number) => {
@@ -131,9 +143,16 @@ export function registerIpcHandlers(): void {
       ORDER BY t.name
     `).all(id)
 
+    const rep_actors = db().prepare(`
+      SELECT a.id, a.name FROM actors a
+      JOIN work_actors wa ON wa.actor_id = a.id
+      WHERE wa.work_id = ? AND wa.is_rep = 1
+      ORDER BY a.name
+    `).all(id) as Array<{ id: number; name: string }>
+
     const files = db().prepare('SELECT * FROM work_files WHERE work_id = ? ORDER BY sort_order, id').all(id)
 
-    return { ...work as object, actors, tags, rep_tags, files }
+    return { ...work as object, actors, tags, rep_tags, rep_actors, files }
   })
 
   ipcMain.handle('works:create', (_e, data: {
@@ -148,6 +167,7 @@ export function registerIpcHandlers(): void {
     comment?: string
     studio_id?: number | null
     actor_ids?: number[]
+    rep_actor_ids?: number[]
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
@@ -171,8 +191,8 @@ export function registerIpcHandlers(): void {
     entries.forEach((e, i) => insertFile.run(workId, e.path, e.type, i))
 
     if (data.actor_ids?.length) {
-      const linkActor = db().prepare('INSERT OR IGNORE INTO work_actors (work_id, actor_id) VALUES (?, ?)')
-      for (const actorId of data.actor_ids) linkActor.run(workId, actorId)
+      const linkActor = db().prepare('INSERT OR IGNORE INTO work_actors (work_id, actor_id, is_rep) VALUES (?, ?, ?)')
+      for (const actorId of data.actor_ids) linkActor.run(workId, actorId, data.rep_actor_ids?.includes(actorId) ? 1 : 0)
     }
     if (data.tag_ids?.length) {
       const linkTag = db().prepare('INSERT OR IGNORE INTO work_tags (work_id, tag_id, is_rep) VALUES (?, ?, ?)')
@@ -197,6 +217,7 @@ export function registerIpcHandlers(): void {
     comment?: string | null
     studio_id?: number | null
     actor_ids?: number[]
+    rep_actor_ids?: number[]
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
@@ -232,8 +253,14 @@ export function registerIpcHandlers(): void {
 
     if (data.actor_ids !== undefined) {
       db().prepare('DELETE FROM work_actors WHERE work_id = ?').run(id)
-      const linkActor = db().prepare('INSERT OR IGNORE INTO work_actors (work_id, actor_id) VALUES (?, ?)')
-      for (const actorId of data.actor_ids) linkActor.run(id, actorId)
+      const linkActor = db().prepare('INSERT OR IGNORE INTO work_actors (work_id, actor_id, is_rep) VALUES (?, ?, ?)')
+      for (const actorId of data.actor_ids) linkActor.run(id, actorId, data.rep_actor_ids?.includes(actorId) ? 1 : 0)
+    } else if (data.rep_actor_ids !== undefined) {
+      db().prepare('UPDATE work_actors SET is_rep = 0 WHERE work_id = ?').run(id)
+      if (data.rep_actor_ids.length > 0) {
+        const ph = data.rep_actor_ids.map(() => '?').join(',')
+        db().prepare(`UPDATE work_actors SET is_rep = 1 WHERE work_id = ? AND actor_id IN (${ph})`).run(id, ...data.rep_actor_ids)
+      }
     }
     if (data.tag_ids !== undefined) {
       db().prepare('DELETE FROM work_tags WHERE work_id = ?').run(id)
@@ -728,7 +755,13 @@ export function registerIpcHandlers(): void {
     }
 
     scanDir(folderPath)
-    return files
+
+    const existingPaths = new Set(
+      (db().prepare('SELECT file_path FROM work_files').all() as { file_path: string }[]).map(r => r.file_path)
+    )
+    const newFiles = files.filter(f => !existingPaths.has(f))
+    const duplicates = files.filter(f => existingPaths.has(f))
+    return { newFiles, duplicates }
   })
 
   // ========== 파일 실행 (기본 프로그램) ==========
@@ -815,7 +848,17 @@ export function registerIpcHandlers(): void {
       if (!repMap.has(r.work_id)) repMap.set(r.work_id, [])
       repMap.get(r.work_id)!.push({ id: r.id, name: r.name })
     }
-    return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [] }))
+    const repActorRows2 = db().prepare(`
+      SELECT wa.work_id, a.id, a.name FROM work_actors wa
+      JOIN actors a ON a.id = wa.actor_id
+      WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
+    `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
+    const repActorMap2 = new Map<number, Array<{ id: number; name: string }>>()
+    for (const r of repActorRows2) {
+      if (!repActorMap2.has(r.work_id)) repActorMap2.set(r.work_id, [])
+      repActorMap2.get(r.work_id)!.push({ id: r.id, name: r.name })
+    }
+    return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [], rep_actors: repActorMap2.get(w.id as number) ?? [] }))
   })
 
   ipcMain.handle('dashboard:release-years', () => {
@@ -860,7 +903,17 @@ export function registerIpcHandlers(): void {
       if (!repMap.has(r.work_id)) repMap.set(r.work_id, [])
       repMap.get(r.work_id)!.push({ id: r.id, name: r.name })
     }
-    return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [] }))
+    const repActorRows3 = db().prepare(`
+      SELECT wa.work_id, a.id, a.name FROM work_actors wa
+      JOIN actors a ON a.id = wa.actor_id
+      WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
+    `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
+    const repActorMap3 = new Map<number, Array<{ id: number; name: string }>>()
+    for (const r of repActorRows3) {
+      if (!repActorMap3.has(r.work_id)) repActorMap3.set(r.work_id, [])
+      repActorMap3.get(r.work_id)!.push({ id: r.id, name: r.name })
+    }
+    return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [], rep_actors: repActorMap3.get(w.id as number) ?? [] }))
   })
 
   ipcMain.handle('dashboard:rating-dist', () => {
@@ -1084,7 +1137,17 @@ export function registerIpcHandlers(): void {
       if (!repMap.has(r.work_id)) repMap.set(r.work_id, [])
       repMap.get(r.work_id)!.push({ id: r.id, name: r.name })
     }
-    return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [] }))
+    const repActorRows4 = db().prepare(`
+      SELECT wa.work_id, a.id, a.name FROM work_actors wa
+      JOIN actors a ON a.id = wa.actor_id
+      WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
+    `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
+    const repActorMap4 = new Map<number, Array<{ id: number; name: string }>>()
+    for (const r of repActorRows4) {
+      if (!repActorMap4.has(r.work_id)) repActorMap4.set(r.work_id, [])
+      repActorMap4.get(r.work_id)!.push({ id: r.id, name: r.name })
+    }
+    return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [], rep_actors: repActorMap4.get(w.id as number) ?? [] }))
   })
 
   ipcMain.handle('dashboard:studio-dist', () => {

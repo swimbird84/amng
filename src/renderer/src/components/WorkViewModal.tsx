@@ -104,15 +104,25 @@ export default function WorkViewModal({ workId, onClose, onViewActor, zIndex = 6
             <div>
               <p className="text-xs text-gray-500 mb-1">배우</p>
               <div className="flex flex-wrap gap-1">
-                {work.actors.map((a) => (
-                  <span
-                    key={a.id}
-                    onClick={() => onViewActor(a.id)}
-                    className="bg-purple-900/50 text-purple-300 text-xs px-2 py-0.5 rounded cursor-pointer hover:bg-purple-800/50"
-                  >
-                    {a.name}
-                  </span>
-                ))}
+                {[
+                  ...(work.actors.filter((a) => work.rep_actors?.some((r) => r.id === a.id))),
+                  ...(work.actors.filter((a) => !work.rep_actors?.some((r) => r.id === a.id))),
+                ].map((a) => {
+                  const isRep = work.rep_actors?.some((r) => r.id === a.id)
+                  return (
+                    <span
+                      key={a.id}
+                      onClick={() => onViewActor(a.id)}
+                      className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
+                        isRep
+                          ? 'bg-fuchsia-700 text-fuchsia-200 hover:bg-fuchsia-600'
+                          : 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50'
+                      }`}
+                    >
+                      {a.name}
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -179,7 +189,7 @@ export default function WorkViewModal({ workId, onClose, onViewActor, zIndex = 6
                       fileStatuses[f.id] ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-default'
                     }`}
                   >
-                    {f.type === 'url' ? f.file_path : f.file_path.split(/[\\/]/).pop()}
+                    {f.type === 'url' ? f.file_path : f.file_path.replace(/^[A-Za-z]:[/\\]/, '')}
                   </button>
                   {f.type === 'local' && (
                     <span className={`text-xs flex-shrink-0 ${fileStatuses[f.id] ? 'text-green-400' : 'text-red-400'}`}>

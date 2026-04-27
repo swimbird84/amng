@@ -11,7 +11,7 @@ interface Props {
 }
 
 // 작품 카드 (발매일 분포용, 기존 Works.tsx 카드와 동일한 디자인)
-function WorkCard({ work, onClick }: { work: Work & { rep_tags?: { id: number; name: string }[] }; onClick: () => void }) {
+function WorkCard({ work, onClick }: { work: Work & { rep_tags?: { id: number; name: string }[]; rep_actors?: { id: number; name: string }[] }; onClick: () => void }) {
   return (
     <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
@@ -21,6 +21,13 @@ function WorkCard({ work, onClick }: { work: Work & { rep_tags?: { id: number; n
           <div className="flex-shrink-0"><Rating value={work.rating} readonly small /></div>
         </div>
         <p className="text-xs text-gray-500">{work.release_date || '-'}</p>
+        {work.rep_actors && work.rep_actors.length > 0 && (
+          <div className="flex flex-wrap gap-0.5 mt-0.5">
+            {work.rep_actors.map((a) => (
+              <span key={a.id} className="bg-purple-900/50 text-purple-300 text-xs px-1.5 py-0.5 rounded">{a.name}</span>
+            ))}
+          </div>
+        )}
         {work.rep_tags && work.rep_tags.length > 0 && (
           <div className="flex flex-wrap gap-0.5 mt-0.5">
             {work.rep_tags.map((t) => (

@@ -112,6 +112,12 @@ export function initDatabase(): void {
     db.prepare("ALTER TABLE work_files ADD COLUMN type TEXT NOT NULL DEFAULT 'local'").run()
   }
 
+  // work_actors.is_rep 컬럼 추가 마이그레이션
+  const workActorsCols = (db.prepare("PRAGMA table_info(work_actors)").all() as { name: string }[]).map(c => c.name)
+  if (!workActorsCols.includes('is_rep')) {
+    db.prepare('ALTER TABLE work_actors ADD COLUMN is_rep INTEGER NOT NULL DEFAULT 0').run()
+  }
+
   // 기존 배우에 대한 scores 행 생성 (마이그레이션)
   db.prepare('INSERT OR IGNORE INTO actor_scores (actor_id) SELECT id FROM actors').run()
   // sexy 컬럼 추가 마이그레이션

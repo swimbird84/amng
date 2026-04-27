@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { actorsApi } from '../api'
 import ImagePreview from './ImagePreview'
+import type { ActorScores } from '../types'
 
 export interface PhysicalSettings {
   profileWeight: number
@@ -198,7 +199,7 @@ const PROFILE_ITEMS: { key: keyof PhysicalSettings['profile']; label: string }[]
 ]
 
 const SCORE_ITEMS: { key: keyof PhysicalSettings['score']; label: string }[] = [
-  { key: 'face',        label: '외모'  },
+  { key: 'face',        label: '얼굴'  },
   { key: 'bust',        label: '가슴'   },
   { key: 'hip',         label: '엉덩이' },
   { key: 'physical',    label: '몸매'  },
@@ -206,27 +207,44 @@ const SCORE_ITEMS: { key: keyof PhysicalSettings['score']; label: string }[] = [
   { key: 'proportions', label: '비율'  },
 ]
 
-const ALL_SCORE_ITEMS: { label: string; getValue: (a: ActorPhysicalData) => number }[] = [
-  { label: '외모',   getValue: a => a.face        },
-  { label: '가슴',   getValue: a => a.score_bust  },
-  { label: '엉덩이', getValue: a => a.score_hip   },
-  { label: '몸매',   getValue: a => a.physical    },
-  { label: '피부',   getValue: a => a.skin        },
-  { label: '연기력', getValue: a => a.acting      },
-  { label: '섹기',   getValue: a => a.sexy        },
-  { label: '매력',   getValue: a => a.charm       },
-  { label: '테크닉', getValue: a => a.technique   },
-  { label: '비율',   getValue: a => a.proportions },
+const EDIT_SCORE_FIELDS: { label: string; getValue: (a: ActorPhysicalData) => number; apiKey: keyof ActorScores }[] = [
+  { label: '얼굴',   getValue: a => a.face,        apiKey: 'face'        },
+  { label: '가슴',   getValue: a => a.score_bust,  apiKey: 'bust'        },
+  { label: '엉덩이', getValue: a => a.score_hip,   apiKey: 'hip'         },
+  { label: '몸매',   getValue: a => a.physical,    apiKey: 'physical'    },
+  { label: '피부',   getValue: a => a.skin,        apiKey: 'skin'        },
+  { label: '연기력', getValue: a => a.acting,      apiKey: 'acting'      },
+  { label: '섹기',   getValue: a => a.sexy,        apiKey: 'sexy'        },
+  { label: '매력',   getValue: a => a.charm,       apiKey: 'charm'       },
+  { label: '테크닉', getValue: a => a.technique,   apiKey: 'technique'   },
+  { label: '비율',   getValue: a => a.proportions, apiKey: 'proportions' },
 ]
 
 export default function PhysicalCorrectionModal({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<PhysicalSettings>(loadSettings)
   const [actors, setActors] = useState<ActorPhysicalData[]>([])
   const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>('desc')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editScores, setEditScores] = useState<ActorScores>({ face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 })
 
   useEffect(() => {
     actorsApi.physicalData().then(d => setActors(d as ActorPhysicalData[]))
   }, [])
+
+  const startEdit = (a: ActorPhysicalData) => {
+    setEditingId(a.id)
+    setEditScores({ face: a.face, bust: a.score_bust, hip: a.score_hip, physical: a.physical, skin: a.skin, acting: a.acting, sexy: a.sexy, charm: a.charm, technique: a.technique, proportions: a.proportions })
+  }
+
+  const cancelEdit = () => setEditingId(null)
+
+  const saveEdit = async (id: number) => {
+    await actorsApi.update(id, { scores: editScores })
+    const data = await actorsApi.physicalData()
+    setActors(data as ActorPhysicalData[])
+    setEditingId(null)
+    window.dispatchEvent(new Event('actorScoresUpdated'))
+  }
 
   const stats = useMemo(() => computeStats(actors), [actors])
 
@@ -410,12 +428,23 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
                   a.hip != null    ? `H:${a.hip}`       : '',
                   a.cup            ? `컵:${a.cup}`       : '',
                 ].filter(Boolean).join('  ')
+                const isEditing = editingId === a.id
                 return (
                   <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
                     <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? i + 1 : ranked.length - i}</span>
                     <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" />
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
-                      <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
+                        {isEditing ? (
+                          <div className="flex gap-1 shrink-0">
+                            <button onClick={() => saveEdit(a.id)} className="bg-green-600 hover:bg-green-500 text-white text-xs px-2 py-0.5 rounded">저장</button>
+                            <button onClick={cancelEdit} className="bg-red-600 hover:bg-red-500 text-white text-xs px-2 py-0.5 rounded">취소</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => startEdit(a)} className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-0.5 rounded shrink-0">수정</button>
+                        )}
+                      </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-gray-400 text-xs truncate pl-1.5">{profileParts || '-'}</p>
                         <p className="text-blue-400 text-xs font-bold shrink-0">{a.physScore.toFixed(2)}점</p>
@@ -423,14 +452,26 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
                       <div className="flex items-end justify-between gap-2">
                         <div className="flex flex-col gap-0 shrink-0">
                           <div className="flex gap-0.5">
-                            {ALL_SCORE_ITEMS.map(({ label }) => (
+                            {EDIT_SCORE_FIELDS.map(({ label }) => (
                               <div key={label} className="w-9 text-center text-gray-500 text-xs leading-tight">{label}</div>
                             ))}
                           </div>
                           <div className="flex gap-0.5">
-                            {ALL_SCORE_ITEMS.map(({ label, getValue }) => (
-                              <div key={label} className="w-9 text-center text-gray-300 text-xs leading-tight">{Math.round(getValue(a))}</div>
-                            ))}
+                            {isEditing ? (
+                              EDIT_SCORE_FIELDS.map(({ label, apiKey }) => (
+                                <input
+                                  key={label}
+                                  type="number" min={0} max={10} step={1}
+                                  value={editScores[apiKey]}
+                                  onChange={e => setEditScores(prev => ({ ...prev, [apiKey]: Math.max(0, Math.min(10, parseFloat(e.target.value) || 0)) }))}
+                                  className="w-9 text-center bg-gray-600 text-white text-xs leading-tight rounded px-0 py-0.5 [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                                />
+                              ))
+                            ) : (
+                              EDIT_SCORE_FIELDS.map(({ label, getValue }) => (
+                                <div key={label} className="w-9 text-center text-gray-300 text-xs leading-tight">{Math.round(getValue(a))}</div>
+                              ))
+                            )}
                           </div>
                         </div>
                         <p className="text-yellow-400 text-xs font-bold shrink-0 leading-tight">{avgScore.toFixed(2)}점</p>

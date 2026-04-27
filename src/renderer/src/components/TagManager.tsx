@@ -30,7 +30,7 @@ export default function TagManager({ defaultTab = 'works', onClose }: Props) {
 
   const sortedTags = useMemo(() => [...tags].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1
-    if (sortBy === 'name') return a.name.localeCompare(b.name, 'ko') * dir
+    if (sortBy === 'name') return a.name.localeCompare(b.name, 'en-US') * dir
     return (a.count - b.count) * dir
   }), [tags, sortBy, sortDir])
 

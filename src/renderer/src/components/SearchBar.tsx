@@ -93,6 +93,19 @@ export default function SearchBar(props: Props) {
       />
 
       {type === 'works' && (
+          <select
+              value={(params as WorkSearchParams).studioId}
+              onChange={(e) => onChange({ ...params, studioId: e.target.value ? Number(e.target.value) : '' } as never)}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28 shrink-0"
+          >
+            <option value="">레이블 전체</option>
+            {studios.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+      )}
+
+      {type === 'works' && (
         <select
           value={(params as WorkSearchParams).actorId}
           onChange={(e) => onChange({ ...params, actorId: e.target.value ? Number(e.target.value) : '' } as never)}
@@ -101,19 +114,6 @@ export default function SearchBar(props: Props) {
           <option value="">배우 전체</option>
           {actors.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
-      )}
-
-      {type === 'works' && (
-        <select
-          value={(params as WorkSearchParams).studioId}
-          onChange={(e) => onChange({ ...params, studioId: e.target.value ? Number(e.target.value) : '' } as never)}
-          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28 shrink-0"
-        >
-          <option value="">레이블 전체</option>
-          {studios.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
       )}

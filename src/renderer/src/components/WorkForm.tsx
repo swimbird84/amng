@@ -27,6 +27,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(work?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(work?.rep_tags?.map((t) => t.id) || [])
   const [selectedActorIds, setSelectedActorIds] = useState<number[]>(work?.actors?.map((a) => a.id) || [])
+  const [repActorIds, setRepActorIds] = useState<number[]>(work?.rep_actors?.map((a) => a.id) || [])
   const [fileStatuses, setFileStatuses] = useState<Record<string, boolean>>({})
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [allActors, setAllActors] = useState<Actor[]>([])
@@ -164,6 +165,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         comment: comment.trim() || null,
         studio_id: studioId,
         actor_ids: selectedActorIds,
+        rep_actor_ids: repActorIds,
         tag_ids: selectedTagIds,
         rep_tag_ids: repTagIds,
       })
@@ -181,6 +183,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         comment: comment.trim() || null,
         studio_id: studioId,
         actor_ids: selectedActorIds,
+        rep_actor_ids: repActorIds,
         tag_ids: selectedTagIds,
         rep_tag_ids: repTagIds,
       }) as number
@@ -212,7 +215,25 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   }
 
   const toggleActor = (id: number) => {
-    setSelectedActorIds((prev) =>
+    if (selectedActorIds.includes(id)) {
+      const nextSelected = selectedActorIds.filter((a) => a !== id)
+      const nextRep = repActorIds.filter((a) => a !== id)
+      setSelectedActorIds(nextSelected)
+      // 대표 배우가 제거된 경우 남은 첫 번째 배우를 자동 대표로
+      if (repActorIds.includes(id) && nextSelected.length > 0) {
+        setRepActorIds([nextSelected[0]])
+      } else {
+        setRepActorIds(nextRep)
+      }
+    } else {
+      setSelectedActorIds((prev) => [...prev, id])
+      // 대표 배우가 없으면 자동 대표로
+      if (repActorIds.length === 0) setRepActorIds([id])
+    }
+  }
+
+  const toggleRepActor = (id: number) => {
+    setRepActorIds((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     )
   }
@@ -224,12 +245,14 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
     if (existing) {
       if (!selectedActorIds.includes(existing.id)) {
         setSelectedActorIds((prev) => [...prev, existing.id])
+        if (repActorIds.length === 0) setRepActorIds([existing.id])
       }
     } else {
       const id = await actorsApi.create({ name, scores: { face: 5, bust: 5, hip: 5, physical: 5, skin: 5, acting: 5, sexy: 5, charm: 5, technique: 5, proportions: 5 } }) as number
       const updated = await actorsApi.list() as Actor[]
       setAllActors(updated)
       setSelectedActorIds((prev) => [...prev, id])
+      if (repActorIds.length === 0) setRepActorIds([id])
     }
     setNewActor('')
   }
@@ -288,7 +311,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                       fileStatuses[entry.path] ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-default'
                     }`}
                   >
-                    {entry.type === 'url' ? entry.path : entry.path.split(/[\\/]/).pop()}
+                    {entry.type === 'url' ? entry.path : entry.path.replace(/^[A-Za-z]:[/\\]/, '')}
                   </button>
                   <button
                     type="button"
@@ -528,14 +551,24 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                 {actorOpen ? '−' : '+'}
               </span>
             </button>
-            {/* 선택된 배우 칩 */}
+            {/* 선택된 배우 칩 - 클릭 시 대표 배우 토글 */}
             {selectedActorIds.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-1.5">
-                {allActors.filter((a) => selectedActorIds.includes(a.id)).map((a) => (
-                  <span key={a.id} className="bg-purple-900/60 text-purple-300 text-xs px-2 py-0.5 rounded">
-                    {a.name}
-                  </span>
-                ))}
+                {allActors.filter((a) => selectedActorIds.includes(a.id)).map((a) => {
+                  const isRep = repActorIds.includes(a.id)
+                  return (
+                    <span
+                      key={a.id}
+                      onClick={() => toggleRepActor(a.id)}
+                      title={isRep ? '대표 배우 해제' : '대표 배우로 설정'}
+                      className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
+                        isRep ? 'bg-fuchsia-700 text-fuchsia-200' : 'bg-purple-900/60 text-purple-300'
+                      }`}
+                    >
+                      {a.name}
+                    </span>
+                  )
+                })}
               </div>
             )}
             {/* 펼쳐지는 전체 목록 */}
@@ -561,20 +594,23 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                 </div>
                 <div className="border-t border-gray-700" />
                 <div className="flex flex-wrap gap-1.5">
-                  {allActors.map((actor) => (
-                    <button
+                  {allActors.map((actor) => {
+                    const isRep = repActorIds.includes(actor.id)
+                    return (<button
                       key={actor.id}
                       type="button"
                       onClick={() => toggleActor(actor.id)}
                       className={`px-2 py-0.5 rounded text-sm ${
-                        selectedActorIds.includes(actor.id)
+                        isRep
+                          ? 'bg-fuchsia-600 text-white'
+                          : selectedActorIds.includes(actor.id)
                           ? 'bg-purple-600 text-white'
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                       }`}
                     >
                       {actor.name}
-                    </button>
-                  ))}
+                    </button>)
+                  })}
                   {allActors.length === 0 && (
                     <span className="text-sm text-gray-500">등록된 배우가 없습니다</span>
                   )}

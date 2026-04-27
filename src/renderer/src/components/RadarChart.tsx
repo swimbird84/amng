@@ -6,7 +6,7 @@ interface Props {
   size?: number
 }
 
-const LABELS = ['외모', '가슴', '엉덩이', '몸매', '피부', '연기력', '섹기', '매력', '테크닉', '비율']
+const LABELS = ['얼굴', '가슴', '엉덩이', '몸매', '피부', '연기력', '섹기', '매력', '테크닉', '비율']
 const KEYS: (keyof ActorScores)[] = ['face', 'bust', 'hip', 'physical', 'skin', 'acting', 'sexy', 'charm', 'technique', 'proportions']
 
 export default function RadarChart({ scores, size = 220 }: Props) {

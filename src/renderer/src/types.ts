@@ -30,6 +30,7 @@ export interface Work {
   actors?: Actor[]
   tags?: Tag[]
   rep_tags?: Tag[]
+  rep_actors?: Array<{ id: number; name: string }>
   files?: WorkFile[]
 }
 

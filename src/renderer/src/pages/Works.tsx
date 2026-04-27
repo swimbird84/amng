@@ -103,19 +103,23 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const handleScan = async () => {
     const folder = await dialogApi.openFolder() as string | null
     if (!folder) return
-    const files = await scanApi.folder(folder) as string[]
-    if (files.length === 0) return alert('동영상 파일이 없습니다')
+    const { newFiles, duplicates } = await scanApi.folder(folder) as { newFiles: string[], duplicates: string[] }
+    if (newFiles.length === 0 && duplicates.length === 0) return alert('동영상 파일이 없습니다')
 
     let added = 0
-    for (const file of files) {
+    for (const file of newFiles) {
       try {
-        await worksApi.create({ file_path: file })
+        const fileName = file.split(/[\\/]/).pop() ?? ''
+        const productNumber = fileName.replace(/\.[^.]+$/, '')
+        await worksApi.create({ file_path: file, product_number: productNumber })
         added++
       } catch {
-        // 중복 등 무시
+        // 무시
       }
     }
-    alert(`${added}개 파일 등록 완료`)
+
+    const dupMsg = duplicates.length > 0 ? ` (${duplicates.length}개는 이미 등록된 파일)` : ''
+    alert(`${added}개 파일 등록 완료${dupMsg}`)
     loadWorks()
   }
 
@@ -136,6 +140,20 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     await worksApi.update(selected.id, { rep_tag_ids: newRepIds })
     const newRepTags = (selected.tags ?? []).filter((t) => newRepIds.includes(t.id))
     setSelected({ ...selected, rep_tags: newRepTags })
+    loadWorks()
+  }
+
+  const handleToggleRepActor = async (actorId: number) => {
+    if (!selected) return
+    const currentRepIds = selected.rep_actors?.map((a) => a.id) ?? []
+    const newRepIds = currentRepIds.includes(actorId)
+      ? currentRepIds.filter((id) => id !== actorId)
+      : [...currentRepIds, actorId]
+    await worksApi.update(selected.id, { rep_actor_ids: newRepIds })
+    const newRepActors = (selected.actors ?? [])
+      .filter((a) => newRepIds.includes(a.id))
+      .map((a) => ({ id: a.id, name: a.name }))
+    setSelected({ ...selected, rep_actors: newRepActors })
     loadWorks()
   }
 
@@ -236,6 +254,15 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                     </div>
                   </div>
                   <p className="text-xs text-gray-500">{w.release_date || '-'}</p>
+                  {w.rep_actors && w.rep_actors.length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 mt-0.5">
+                      {w.rep_actors.map((a) => (
+                        <span key={a.id} className="bg-purple-900/50 text-purple-300 text-xs px-1.5 py-0.5 rounded">
+                          {a.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {w.rep_tags && w.rep_tags.length > 0 && (
                     <div className="flex flex-wrap gap-0.5 mt-0.5">
                       {w.rep_tags.map((t) => (
@@ -324,15 +351,26 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                 <div>
                   <p className="text-xs text-gray-500 mb-1">배우</p>
                   <div className="flex flex-wrap gap-1">
-                    {selected.actors.map((a) => (
-                      <span
-                        key={a.id}
-                        onClick={() => onNavigateToActor?.(a.id)}
-                        className="bg-purple-900/50 text-purple-300 text-xs px-2 py-0.5 rounded cursor-pointer hover:bg-purple-800/50"
-                      >
-                        {a.name}
-                      </span>
-                    ))}
+                    {[
+                      ...(selected.actors.filter((a) => selected.rep_actors?.some((r) => r.id === a.id))),
+                      ...(selected.actors.filter((a) => !selected.rep_actors?.some((r) => r.id === a.id))),
+                    ].map((a) => {
+                      const isRep = selected.rep_actors?.some((r) => r.id === a.id)
+                      return (
+                        <span
+                          key={a.id}
+                          onClick={() => handleToggleRepActor(a.id)}
+                          title={isRep ? '대표 배우 해제' : '대표 배우로 설정'}
+                          className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
+                            isRep
+                              ? 'bg-fuchsia-700 text-fuchsia-200 hover:bg-fuchsia-600'
+                              : 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50'
+                          }`}
+                        >
+                          {a.name}
+                        </span>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -407,7 +445,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                           fileStatuses[f.id] ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-default'
                         }`}
                       >
-                        {f.type === 'url' ? f.file_path : f.file_path.split(/[\\/]/).pop()}
+                        {f.type === 'url' ? f.file_path : f.file_path.replace(/^[A-Za-z]:[/\\]/, '')}
                       </button>
                       {f.type === 'local' && (
                         <span className={`text-xs flex-shrink-0 ${fileStatuses[f.id] ? 'text-green-400' : 'text-red-400'}`}>

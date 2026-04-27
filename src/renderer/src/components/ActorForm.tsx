@@ -12,7 +12,7 @@ interface Props {
 }
 
 const SCORE_FIELDS: { key: keyof ActorScores; label: string }[] = [
-  { key: 'face', label: '외모' },
+  { key: 'face', label: '얼굴' },
   { key: 'bust', label: '가슴' },
   { key: 'hip', label: '엉덩이' },
   { key: 'physical', label: '몸매' },

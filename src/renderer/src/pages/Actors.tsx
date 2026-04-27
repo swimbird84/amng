@@ -98,6 +98,11 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
     window.addEventListener('physicalSettingsChange', computePhysScores)
     return () => window.removeEventListener('physicalSettingsChange', computePhysScores)
   }, [computePhysScores])
+  useEffect(() => {
+    const handler = () => { loadActors(); computePhysScores() }
+    window.addEventListener('actorScoresUpdated', handler)
+    return () => window.removeEventListener('actorScoresUpdated', handler)
+  }, [loadActors, computePhysScores])
   useEffect(() => { localStorage.setItem('actors:search', JSON.stringify(search)) }, [search])
 
   const handleSelect = async (id: number) => {
