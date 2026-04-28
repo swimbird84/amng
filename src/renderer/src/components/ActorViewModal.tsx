@@ -9,6 +9,7 @@ interface Props {
   actorId: number
   onClose: () => void
   onViewWork: (id: number) => void
+  onEdit?: () => void
   zIndex?: number
 }
 
@@ -24,7 +25,7 @@ function getDebutAge(birthday: string | null, debutDate: string | null): string 
 
 const defaultScores = { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
 
-export default function ActorViewModal({ actorId, onClose, onViewWork, zIndex = 60 }: Props) {
+export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, zIndex = 60 }: Props) {
   const [actor, setActor] = useState<Actor | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
@@ -203,6 +204,18 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, zIndex = 
           )}
 
         </div>
+
+        {onEdit && (
+          <div className="px-6 pb-5 pt-2 flex-shrink-0">
+            <button
+              onClick={onEdit}
+              className="w-full bg-gray-600 hover:bg-gray-500 text-white text-sm px-3 py-1.5 rounded"
+            >
+              수정하기
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { version } from '../../../package.json'
 import Works from './pages/Works'
 import Actors from './pages/Actors'
 import Home from './pages/Home'
@@ -15,6 +16,8 @@ type ViewEntry = { type: 'actor'; id: number } | { type: 'work'; id: number }
 function App() {
   const [tab, setTab] = useState<Tab>('home')
   const [viewStack, setViewStack] = useState<ViewEntry[]>([])
+  const [pendingEditWork, setPendingEditWork] = useState<number | null>(null)
+  const [pendingEditActor, setPendingEditActor] = useState<number | null>(null)
 
   const handleNavigateToActor = useCallback((id: number) => {
     setViewStack((s) => [...s, { type: 'actor', id }])
@@ -22,6 +25,18 @@ function App() {
 
   const handleNavigateToWork = useCallback((id: number) => {
     setViewStack((s) => [...s, { type: 'work', id }])
+  }, [])
+
+  const handleEditWork = useCallback((id: number) => {
+    setViewStack([])
+    setTab('works')
+    setPendingEditWork(id)
+  }, [])
+
+  const handleEditActor = useCallback((id: number) => {
+    setViewStack([])
+    setTab('actors')
+    setPendingEditActor(id)
   }, [])
 
   return (
@@ -110,10 +125,18 @@ function App() {
           <Ranking onNavigateToActor={handleNavigateToActor} />
         )}
         {tab === 'works' && (
-          <Works onNavigateToActor={handleNavigateToActor} />
+          <Works
+            onNavigateToActor={handleNavigateToActor}
+            openEditId={pendingEditWork}
+            onEditHandled={() => setPendingEditWork(null)}
+          />
         )}
         {tab === 'actors' && (
-          <Actors onNavigateToWork={handleNavigateToWork} />
+          <Actors
+            onNavigateToWork={handleNavigateToWork}
+            openEditId={pendingEditActor}
+            onEditHandled={() => setPendingEditActor(null)}
+          />
         )}
         {tab === 'labels' && (
           <Labels onNavigateToWork={handleNavigateToWork} />
@@ -122,9 +145,13 @@ function App() {
           <Tags
             onNavigateToWork={handleNavigateToWork}
             onNavigateToActor={handleNavigateToActor}
+            onEditWork={handleEditWork}
+            onEditActor={handleEditActor}
           />
         )}
       </main>
+
+      {tab === 'home' && <span className="fixed bottom-2 right-3 text-xs text-gray-600 pointer-events-none select-none">v{version}</span>}
 
       {viewStack.length > 0 && (
         <div
@@ -141,6 +168,7 @@ function App() {
             actorId={v.id}
             onClose={() => setViewStack([])}
             onViewWork={(id) => setViewStack([{ type: 'work', id }])}
+            onEdit={() => handleEditActor(v.id)}
             zIndex={60}
           />
         ) : (
@@ -149,6 +177,7 @@ function App() {
             workId={v.id}
             onClose={() => setViewStack([])}
             onViewActor={(id) => setViewStack([{ type: 'actor', id }])}
+            onEdit={() => handleEditWork(v.id)}
             zIndex={60}
           />
         )

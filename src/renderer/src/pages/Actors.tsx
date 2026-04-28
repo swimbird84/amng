@@ -24,9 +24,11 @@ function getDebutAge(birthday: string | null, debutDate: string | null): string 
 
 interface ActorsProps {
   onNavigateToWork?: (id: number) => void
+  openEditId?: number | null
+  onEditHandled?: () => void
 }
 
-export default function Actors({ onNavigateToWork }: ActorsProps) {
+export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: ActorsProps) {
   const [actors, setActors] = useState<Actor[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [selected, setSelected] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
@@ -93,6 +95,14 @@ export default function Actors({ onNavigateToWork }: ActorsProps) {
 
   useEffect(() => { loadActors() }, [loadActors])
   useEffect(() => { loadTags() }, [])
+  useEffect(() => {
+    if (!openEditId) return
+    actorsApi.get(openEditId).then((a) => {
+      setEditActor(a as Actor & { tags?: Tag[] })
+      setShowForm(true)
+      onEditHandled?.()
+    })
+  }, [openEditId])
   useEffect(() => {
     computePhysScores()
     window.addEventListener('physicalSettingsChange', computePhysScores)

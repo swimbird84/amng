@@ -36,14 +36,28 @@ export function initDatabase(): void {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS work_tag_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      sort_order INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS actor_tag_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      sort_order INTEGER DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS work_tags_master (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL
+      name TEXT UNIQUE NOT NULL,
+      category_id INTEGER REFERENCES work_tag_categories(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS actor_tags_master (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL
+      name TEXT UNIQUE NOT NULL,
+      category_id INTEGER REFERENCES actor_tag_categories(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS work_actors (
@@ -110,6 +124,18 @@ export function initDatabase(): void {
   const workFilesCols = (db.prepare("PRAGMA table_info(work_files)").all() as { name: string }[]).map(c => c.name)
   if (!workFilesCols.includes('type')) {
     db.prepare("ALTER TABLE work_files ADD COLUMN type TEXT NOT NULL DEFAULT 'local'").run()
+  }
+
+  // work_tags_master.category_id 마이그레이션
+  const workTagsMasterCols = (db.prepare("PRAGMA table_info(work_tags_master)").all() as { name: string }[]).map(c => c.name)
+  if (!workTagsMasterCols.includes('category_id')) {
+    db.prepare('ALTER TABLE work_tags_master ADD COLUMN category_id INTEGER REFERENCES work_tag_categories(id) ON DELETE SET NULL').run()
+  }
+
+  // actor_tags_master.category_id 마이그레이션
+  const actorTagsMasterCols = (db.prepare("PRAGMA table_info(actor_tags_master)").all() as { name: string }[]).map(c => c.name)
+  if (!actorTagsMasterCols.includes('category_id')) {
+    db.prepare('ALTER TABLE actor_tags_master ADD COLUMN category_id INTEGER REFERENCES actor_tag_categories(id) ON DELETE SET NULL').run()
   }
 
   // work_actors.is_rep 컬럼 추가 마이그레이션

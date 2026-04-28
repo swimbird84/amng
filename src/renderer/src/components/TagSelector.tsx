@@ -106,31 +106,58 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
             </button>
           </div>
           <div className="border-t border-gray-700" />
-          <div className="flex flex-wrap gap-1.5">
-            {allTags.map((tag) => {
-              const isSelected = selectedIds.includes(tag.id)
-              const isRep = repTagIds?.includes(tag.id)
-              return (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => toggle(tag.id)}
-                  className={`px-2 py-0.5 rounded text-sm ${
-                    isRep
-                      ? 'bg-green-600 text-white'
-                      : isSelected
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  {tag.name}
-                </button>
-              )
-            })}
-            {allTags.length === 0 && (
-              <span className="text-xs text-gray-500">등록된 태그가 없습니다</span>
-            )}
-          </div>
+          {allTags.length === 0 ? (
+            <span className="text-xs text-gray-500">등록된 태그가 없습니다</span>
+          ) : (() => {
+            type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof allTags }
+            const catMap = new Map<number | null, Group>()
+            const groups: Group[] = []
+            for (const tag of allTags) {
+              const key = tag.category_id ?? null
+              if (!catMap.has(key)) {
+                const g: Group = { catId: key, catName: tag.category_name ?? null, sortOrder: tag.category_sort_order ?? 999999, tags: [] }
+                catMap.set(key, g)
+                groups.push(g)
+              }
+              catMap.get(key)!.tags.push(tag)
+            }
+            groups.sort((a, b) => {
+              if (a.catId === null) return 1
+              if (b.catId === null) return -1
+              return a.sortOrder - b.sortOrder
+            })
+            return (
+              <div className="space-y-2">
+                {groups.map((g) => (
+                  <div key={g.catId ?? 'none'}>
+                    <p className="text-xs text-gray-500 mb-1">{g.catName ?? '미분류'}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {g.tags.map((tag) => {
+                        const isSelected = selectedIds.includes(tag.id)
+                        const isRep = repTagIds?.includes(tag.id)
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => toggle(tag.id)}
+                            className={`px-2 py-0.5 rounded text-sm ${
+                              isRep
+                                ? 'bg-green-600 text-white'
+                                : isSelected
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            }`}
+                          >
+                            {tag.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>

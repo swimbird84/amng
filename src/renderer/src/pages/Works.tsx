@@ -18,9 +18,11 @@ function studioColor(name: string, color?: string | null): string {
 
 interface WorksProps {
   onNavigateToActor?: (id: number) => void
+  openEditId?: number | null
+  onEditHandled?: () => void
 }
 
-export default function Works({ onNavigateToActor }: WorksProps) {
+export default function Works({ onNavigateToActor, openEditId, onEditHandled }: WorksProps) {
   const [works, setWorks] = useState<Work[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [actorList, setActorList] = useState<Actor[]>([])
@@ -73,6 +75,14 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     studiosApi.list().then((d) => setStudioList(d as Studio[]))
   }, [])
   useEffect(() => { localStorage.setItem('works:search', JSON.stringify(search)) }, [search])
+  useEffect(() => {
+    if (!openEditId) return
+    worksApi.get(openEditId).then((w) => {
+      setEditWork(w as Work & { actors?: Actor[]; tags?: Tag[] })
+      setShowForm(true)
+      onEditHandled?.()
+    })
+  }, [openEditId])
 
   const handleSelect = async (id: number) => {
     const detail = await worksApi.get(id) as Work & { actors?: Actor[]; tags?: Tag[] }

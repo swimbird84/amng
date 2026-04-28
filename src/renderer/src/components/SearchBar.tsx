@@ -167,24 +167,71 @@ export default function SearchBar(props: Props) {
                 </div>
               )}
             </div>
-            <div className="max-h-[39rem] overflow-y-auto p-2 flex flex-wrap gap-1">
+            <div className="max-h-[39rem] overflow-y-auto p-2">
               {filteredTags.length === 0 && (
                 <p className="text-xs text-gray-500 w-full text-center py-2">태그 없음</p>
               )}
-              {filteredTags.map((t) => {
-                const active = params.tagIds.includes(t.id)
+              {filteredTags.length > 0 && (tagFilter ? (
+                <div className="flex flex-wrap gap-1">
+                  {filteredTags.map((t) => {
+                    const active = params.tagIds.includes(t.id)
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => toggleTag(t.id)}
+                        className={`px-2 py-0.5 rounded text-xs ${
+                          active ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        }`}
+                      >
+                        {t.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (() => {
+                type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: Tag[] }
+                const catMap = new Map<number | null, Group>()
+                const groups: Group[] = []
+                for (const tag of tags) {
+                  const key = tag.category_id ?? null
+                  if (!catMap.has(key)) {
+                    const g: Group = { catId: key, catName: tag.category_name ?? null, sortOrder: tag.category_sort_order ?? 999999, tags: [] }
+                    catMap.set(key, g)
+                    groups.push(g)
+                  }
+                  catMap.get(key)!.tags.push(tag)
+                }
+                groups.sort((a, b) => {
+                  if (a.catId === null) return 1
+                  if (b.catId === null) return -1
+                  return a.sortOrder - b.sortOrder
+                })
                 return (
-                  <button
-                    key={t.id}
-                    onClick={() => toggleTag(t.id)}
-                    className={`px-2 py-0.5 rounded text-xs ${
-                      active ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {t.name}
-                  </button>
+                  <div className="space-y-2">
+                    {groups.map((g) => (
+                      <div key={g.catId ?? 'none'}>
+                        <p className="text-xs text-gray-500 mb-1 border-b border-gray-700 pb-0.5">{g.catName ?? '미분류'}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {g.tags.map((t) => {
+                            const active = params.tagIds.includes(t.id)
+                            return (
+                              <button
+                                key={t.id}
+                                onClick={() => toggleTag(t.id)}
+                                className={`px-2 py-0.5 rounded text-xs ${
+                                  active ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                }`}
+                              >
+                                {t.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )
-              })}
+              })())}
             </div>
             {params.tagIds.length > 0 && (
               <div className="p-2 border-t border-gray-700">

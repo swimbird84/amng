@@ -73,4 +73,14 @@ export interface Actor {
 export interface Tag {
   id: number
   name: string
+  category_id?: number | null
+  category_name?: string | null
+  category_sort_order?: number | null
+}
+
+export interface TagCategory {
+  id: number
+  name: string
+  sort_order: number
+  tag_count: number
 }

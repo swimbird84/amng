@@ -8,6 +8,7 @@ interface Props {
   workId: number
   onClose: () => void
   onViewActor: (id: number) => void
+  onEdit?: () => void
   zIndex?: number
 }
 
@@ -21,7 +22,7 @@ function studioColor(name: string, color?: string | null): string {
   return color || hashColor(name)
 }
 
-export default function WorkViewModal({ workId, onClose, onViewActor, zIndex = 60 }: Props) {
+export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zIndex = 60 }: Props) {
   const [work, setWork] = useState<Work | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
 
@@ -202,6 +203,18 @@ export default function WorkViewModal({ workId, onClose, onViewActor, zIndex = 6
           </div>
 
         </div>
+
+        {onEdit && (
+          <div className="px-5 pb-5 pt-2 flex-shrink-0">
+            <button
+              onClick={onEdit}
+              className="w-full bg-gray-600 hover:bg-gray-500 text-white text-sm px-3 py-1.5 rounded"
+            >
+              수정하기
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   )

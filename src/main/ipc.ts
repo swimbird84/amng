@@ -608,18 +608,107 @@ export function registerIpcHandlers(): void {
 
   // ========== 태그 CRUD ==========
 
+  // ========== 작품 태그 카테고리 ==========
+
+  ipcMain.handle('work-tag-categories:list', () => {
+    return db().prepare(`
+      SELECT c.*, COUNT(t.id) AS tag_count
+      FROM work_tag_categories c
+      LEFT JOIN work_tags_master t ON t.category_id = c.id
+      GROUP BY c.id ORDER BY c.sort_order ASC, c.id ASC
+    `).all()
+  })
+
+  ipcMain.handle('work-tag-categories:create', (_e, name: string) => {
+    const maxOrder = (db().prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM work_tag_categories').get() as { m: number }).m
+    const result = db().prepare('INSERT INTO work_tag_categories (name, sort_order) VALUES (?, ?)').run(name, maxOrder + 1)
+    return result.lastInsertRowid
+  })
+
+  ipcMain.handle('work-tag-categories:update', (_e, id: number, name: string) => {
+    db().prepare('UPDATE work_tag_categories SET name = ? WHERE id = ?').run(name, id)
+    return true
+  })
+
+  ipcMain.handle('work-tag-categories:delete', (_e, id: number) => {
+    db().prepare('UPDATE work_tags_master SET category_id = NULL WHERE category_id = ?').run(id)
+    db().prepare('DELETE FROM work_tag_categories WHERE id = ?').run(id)
+    return true
+  })
+
+  ipcMain.handle('work-tag-categories:reorder', (_e, ids: number[]) => {
+    const stmt = db().prepare('UPDATE work_tag_categories SET sort_order = ? WHERE id = ?')
+    const update = db().transaction((list: number[]) => list.forEach((id, i) => stmt.run(i, id)))
+    update(ids)
+    return true
+  })
+
+  ipcMain.handle('work-tag-categories:setTagCategory', (_e, tagId: number, categoryId: number | null) => {
+    db().prepare('UPDATE work_tags_master SET category_id = ? WHERE id = ?').run(categoryId, tagId)
+    return true
+  })
+
+  // ========== 배우 태그 카테고리 ==========
+
+  ipcMain.handle('actor-tag-categories:list', () => {
+    return db().prepare(`
+      SELECT c.*, COUNT(t.id) AS tag_count
+      FROM actor_tag_categories c
+      LEFT JOIN actor_tags_master t ON t.category_id = c.id
+      GROUP BY c.id ORDER BY c.sort_order ASC, c.id ASC
+    `).all()
+  })
+
+  ipcMain.handle('actor-tag-categories:create', (_e, name: string) => {
+    const maxOrder = (db().prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM actor_tag_categories').get() as { m: number }).m
+    const result = db().prepare('INSERT INTO actor_tag_categories (name, sort_order) VALUES (?, ?)').run(name, maxOrder + 1)
+    return result.lastInsertRowid
+  })
+
+  ipcMain.handle('actor-tag-categories:update', (_e, id: number, name: string) => {
+    db().prepare('UPDATE actor_tag_categories SET name = ? WHERE id = ?').run(name, id)
+    return true
+  })
+
+  ipcMain.handle('actor-tag-categories:delete', (_e, id: number) => {
+    db().prepare('UPDATE actor_tags_master SET category_id = NULL WHERE category_id = ?').run(id)
+    db().prepare('DELETE FROM actor_tag_categories WHERE id = ?').run(id)
+    return true
+  })
+
+  ipcMain.handle('actor-tag-categories:reorder', (_e, ids: number[]) => {
+    const stmt = db().prepare('UPDATE actor_tag_categories SET sort_order = ? WHERE id = ?')
+    const update = db().transaction((list: number[]) => list.forEach((id, i) => stmt.run(i, id)))
+    update(ids)
+    return true
+  })
+
+  ipcMain.handle('actor-tag-categories:setTagCategory', (_e, tagId: number, categoryId: number | null) => {
+    db().prepare('UPDATE actor_tags_master SET category_id = ? WHERE id = ?').run(categoryId, tagId)
+    return true
+  })
+
+  // ========== 태그 ==========
+
   ipcMain.handle('work-tags:list', (_e, withCount?: boolean) => {
     if (withCount) {
       return db().prepare(`
         SELECT t.*,
           COUNT(wt.work_id) AS total_count,
-          SUM(CASE WHEN wt.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count
+          SUM(CASE WHEN wt.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count,
+          c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
         FROM work_tags_master t
         LEFT JOIN work_tags wt ON wt.tag_id = t.id
+        LEFT JOIN work_tag_categories c ON c.id = t.category_id
         GROUP BY t.id ORDER BY t.name
       `).all()
     }
-    return db().prepare('SELECT * FROM work_tags_master ORDER BY name').all()
+    return db().prepare(`
+      SELECT t.*, c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
+      FROM work_tags_master t
+      LEFT JOIN work_tag_categories c ON c.id = t.category_id
+      ORDER BY t.name
+    `).all()
   })
 
   ipcMain.handle('work-tags:create', (_e, name: string) => {
@@ -644,13 +733,20 @@ export function registerIpcHandlers(): void {
       return db().prepare(`
         SELECT t.*,
           COUNT(at2.actor_id) AS total_count,
-          SUM(CASE WHEN at2.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count
+          SUM(CASE WHEN at2.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count,
+          c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
         FROM actor_tags_master t
         LEFT JOIN actor_tags at2 ON at2.tag_id = t.id
+        LEFT JOIN actor_tag_categories c ON c.id = t.category_id
         GROUP BY t.id ORDER BY t.name
       `).all()
     }
-    return db().prepare('SELECT * FROM actor_tags_master ORDER BY name').all()
+    return db().prepare(`
+      SELECT t.*, c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
+      FROM actor_tags_master t
+      LEFT JOIN actor_tag_categories c ON c.id = t.category_id
+      ORDER BY t.name
+    `).all()
   })
 
   ipcMain.handle('actor-tags:create', (_e, name: string) => {

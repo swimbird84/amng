@@ -19,6 +19,25 @@ export const actorsApi = {
   physicalData: () => api.invoke('actors:physical-data'),
 }
 
+// 태그 카테고리
+export const workTagCategoriesApi = {
+  list: () => api.invoke('work-tag-categories:list'),
+  create: (name: string) => api.invoke('work-tag-categories:create', name),
+  update: (id: number, name: string) => api.invoke('work-tag-categories:update', id, name),
+  delete: (id: number) => api.invoke('work-tag-categories:delete', id),
+  reorder: (ids: number[]) => api.invoke('work-tag-categories:reorder', ids),
+  setTagCategory: (tagId: number, categoryId: number | null) => api.invoke('work-tag-categories:setTagCategory', tagId, categoryId),
+}
+
+export const actorTagCategoriesApi = {
+  list: () => api.invoke('actor-tag-categories:list'),
+  create: (name: string) => api.invoke('actor-tag-categories:create', name),
+  update: (id: number, name: string) => api.invoke('actor-tag-categories:update', id, name),
+  delete: (id: number) => api.invoke('actor-tag-categories:delete', id),
+  reorder: (ids: number[]) => api.invoke('actor-tag-categories:reorder', ids),
+  setTagCategory: (tagId: number, categoryId: number | null) => api.invoke('actor-tag-categories:setTagCategory', tagId, categoryId),
+}
+
 // 태그
 export const workTagsApi = {
   list: (withCount?: boolean) => api.invoke('work-tags:list', withCount),
