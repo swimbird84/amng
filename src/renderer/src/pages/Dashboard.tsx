@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 
 import type { Work, Actor } from '../types'
 import { dashboardApi } from '../api'
@@ -11,9 +11,9 @@ interface Props {
 }
 
 // 작품 카드 (발매일 분포용, 기존 Works.tsx 카드와 동일한 디자인)
-function WorkCard({ work, onClick }: { work: Work & { rep_tags?: { id: number; name: string }[]; rep_actors?: { id: number; name: string }[] }; onClick: () => void }) {
+function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & { rep_tags?: { id: number; name: string }[]; rep_actors?: { id: number; name: string }[] }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
       <div className="p-2 bg-gray-800">
         <div className="flex items-center justify-between gap-1">
@@ -136,6 +136,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   const [ratingDist, setRatingDist] = useState<{ bucket: number; count: number }[]>([])
   const [ratingModal, setRatingModal] = useState<{ bucket: number; works: Work[] } | null>(null)
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
 
   useEffect(() => {
     dashboardApi.newWorks().then((d) => setNewWorks(d as Work[]))
@@ -312,7 +313,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                   {monthWorks.length > 0 ? (
                     <div className="grid grid-cols-5 gap-3">
                       {monthWorks.map((w) => (
-                        <WorkCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} />
+                        <WorkCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => w.comment ? setTooltip({ text: w.comment, x: e.clientX, y: e.clientY }) : undefined} onMouseLeave={() => setTooltip(null)} />
                       ))}
                     </div>
                   ) : (
@@ -552,6 +553,14 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             )}
           </div>
         </div>
+      </div>
+    )}
+    {tooltip && (
+      <div
+        className="fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 whitespace-pre-wrap w-[220px]"
+        style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}
+      >
+        {tooltip.text}
       </div>
     )}
     </>

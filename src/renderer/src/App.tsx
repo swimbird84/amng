@@ -14,7 +14,8 @@ type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'labels' | 't
 type ViewEntry = { type: 'actor'; id: number } | { type: 'work'; id: number }
 
 function App() {
-  const [tab, setTab] = useState<Tab>('home')
+  const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem('app:tab') as Tab) || 'home')
+  const setTabAndSave = useCallback((t: Tab) => { setTab(t); sessionStorage.setItem('app:tab', t) }, [])
   const [viewStack, setViewStack] = useState<ViewEntry[]>([])
   const [pendingEditWork, setPendingEditWork] = useState<number | null>(null)
   const [pendingEditActor, setPendingEditActor] = useState<number | null>(null)
@@ -29,13 +30,13 @@ function App() {
 
   const handleEditWork = useCallback((id: number) => {
     setViewStack([])
-    setTab('works')
+    setTabAndSave('works')
     setPendingEditWork(id)
   }, [])
 
   const handleEditActor = useCallback((id: number) => {
     setViewStack([])
-    setTab('actors')
+    setTabAndSave('actors')
     setPendingEditActor(id)
   }, [])
 
@@ -43,14 +44,14 @@ function App() {
     <div className="h-screen flex flex-col bg-gray-900 text-white">
       <header className="flex items-center border-b border-gray-700 px-4">
         <button
-          onClick={() => setTab('home')}
+          onClick={() => setTabAndSave('home')}
           className="text-lg font-bold mr-6 py-3 hover:text-blue-400 transition"
         >
           AMNG
         </button>
         <nav className="flex">
           <button
-            onClick={() => setTab('dashboard')}
+            onClick={() => setTabAndSave('dashboard')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'dashboard'
                 ? 'border-blue-500 text-white'
@@ -60,7 +61,7 @@ function App() {
             대시보드
           </button>
           <button
-            onClick={() => setTab('ranking')}
+            onClick={() => setTabAndSave('ranking')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'ranking'
                 ? 'border-blue-500 text-white'
@@ -70,7 +71,7 @@ function App() {
             랭킹
           </button>
           <button
-            onClick={() => setTab('works')}
+            onClick={() => setTabAndSave('works')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'works'
                 ? 'border-blue-500 text-white'
@@ -80,7 +81,7 @@ function App() {
             작품
           </button>
           <button
-            onClick={() => setTab('actors')}
+            onClick={() => setTabAndSave('actors')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'actors'
                 ? 'border-blue-500 text-white'
@@ -90,7 +91,7 @@ function App() {
             배우
           </button>
           <button
-            onClick={() => setTab('labels')}
+            onClick={() => setTabAndSave('labels')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'labels'
                 ? 'border-blue-500 text-white'
@@ -100,7 +101,7 @@ function App() {
             레이블
           </button>
           <button
-            onClick={() => setTab('tags')}
+            onClick={() => setTabAndSave('tags')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'tags'
                 ? 'border-blue-500 text-white'
@@ -113,7 +114,7 @@ function App() {
       </header>
       <main className="flex-1 overflow-hidden">
         {tab === 'home' && (
-          <Home onNavigate={(t) => setTab(t)} />
+          <Home onNavigate={(t) => setTabAndSave(t)} />
         )}
         {tab === 'dashboard' && (
           <Dashboard

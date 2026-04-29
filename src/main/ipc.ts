@@ -88,13 +88,14 @@ export function registerIpcHandlers(): void {
     const workIds = rawList.map(w => w.id as number)
     const ph = workIds.map(() => '?').join(',')
     const repRows = db().prepare(`
-      SELECT wt.work_id, t.id, t.name
+      SELECT wt.work_id, t.id, t.name, COALESCE(c.sort_order, 999999) AS category_sort_order
       FROM work_tags wt
       JOIN work_tags_master t ON t.id = wt.tag_id
+      LEFT JOIN work_tag_categories c ON c.id = t.category_id
       WHERE wt.is_rep = 1 AND wt.work_id IN (${ph})
-      ORDER BY t.name
-    `).all(...workIds) as Array<{ work_id: number; id: number; name: string }>
-    const repTagMap = new Map<number, Array<{ id: number; name: string }>>()
+      ORDER BY COALESCE(c.sort_order, 999999), t.name
+    `).all(...workIds) as Array<{ work_id: number; id: number; name: string; category_sort_order: number }>
+    const repTagMap = new Map<number, Array<{ id: number; name: string; category_sort_order: number }>>()
     for (const row of repRows) {
       if (!repTagMap.has(row.work_id)) repTagMap.set(row.work_id, [])
       repTagMap.get(row.work_id)!.push({ id: row.id, name: row.name })
@@ -130,17 +131,21 @@ export function registerIpcHandlers(): void {
     `).all(id)
 
     const tags = db().prepare(`
-      SELECT t.* FROM work_tags_master t
+      SELECT t.id, t.name, t.category_id, c.name AS category_name, c.sort_order AS category_sort_order
+      FROM work_tags_master t
       JOIN work_tags wt ON wt.tag_id = t.id
+      LEFT JOIN work_tag_categories c ON c.id = t.category_id
       WHERE wt.work_id = ?
-      ORDER BY t.name
+      ORDER BY COALESCE(c.sort_order, 999999), t.name
     `).all(id)
 
     const rep_tags = db().prepare(`
-      SELECT t.* FROM work_tags_master t
+      SELECT t.id, t.name, t.category_id, c.name AS category_name, c.sort_order AS category_sort_order
+      FROM work_tags_master t
       JOIN work_tags wt ON wt.tag_id = t.id
+      LEFT JOIN work_tag_categories c ON c.id = t.category_id
       WHERE wt.work_id = ? AND wt.is_rep = 1
-      ORDER BY t.name
+      ORDER BY COALESCE(c.sort_order, 999999), t.name
     `).all(id)
 
     const rep_actors = db().prepare(`
@@ -398,13 +403,14 @@ export function registerIpcHandlers(): void {
     const actorIds = rawActors.map(a => a.id as number)
     const aph = actorIds.map(() => '?').join(',')
     const aRepRows = db().prepare(`
-      SELECT at2.actor_id, t.id, t.name
+      SELECT at2.actor_id, t.id, t.name, COALESCE(c.sort_order, 999999) AS category_sort_order
       FROM actor_tags at2
       JOIN actor_tags_master t ON t.id = at2.tag_id
+      LEFT JOIN actor_tag_categories c ON c.id = t.category_id
       WHERE at2.is_rep = 1 AND at2.actor_id IN (${aph})
-      ORDER BY t.name
-    `).all(...actorIds) as Array<{ actor_id: number; id: number; name: string }>
-    const aRepTagMap = new Map<number, Array<{ id: number; name: string }>>()
+      ORDER BY COALESCE(c.sort_order, 999999), t.name
+    `).all(...actorIds) as Array<{ actor_id: number; id: number; name: string; category_sort_order: number }>
+    const aRepTagMap = new Map<number, Array<{ id: number; name: string; category_sort_order: number }>>()
     for (const row of aRepRows) {
       if (!aRepTagMap.has(row.actor_id)) aRepTagMap.set(row.actor_id, [])
       aRepTagMap.get(row.actor_id)!.push({ id: row.id, name: row.name })
@@ -454,13 +460,14 @@ export function registerIpcHandlers(): void {
       const wIds = works.map(w => w.id as number)
       const wph = wIds.map(() => '?').join(',')
       const wRepRows = db().prepare(`
-        SELECT wt.work_id, t.id, t.name
+        SELECT wt.work_id, t.id, t.name, COALESCE(c.sort_order, 999999) AS category_sort_order
         FROM work_tags wt
         JOIN work_tags_master t ON t.id = wt.tag_id
+        LEFT JOIN work_tag_categories c ON c.id = t.category_id
         WHERE wt.is_rep = 1 AND wt.work_id IN (${wph})
-        ORDER BY t.name
-      `).all(...wIds) as Array<{ work_id: number; id: number; name: string }>
-      const wRepMap = new Map<number, Array<{ id: number; name: string }>>()
+        ORDER BY COALESCE(c.sort_order, 999999), t.name
+      `).all(...wIds) as Array<{ work_id: number; id: number; name: string; category_sort_order: number }>
+      const wRepMap = new Map<number, Array<{ id: number; name: string; category_sort_order: number }>>()
       for (const row of wRepRows) {
         if (!wRepMap.has(row.work_id)) wRepMap.set(row.work_id, [])
         wRepMap.get(row.work_id)!.push({ id: row.id, name: row.name })
@@ -482,17 +489,21 @@ export function registerIpcHandlers(): void {
     }
 
     const tags = db().prepare(`
-      SELECT t.* FROM actor_tags_master t
+      SELECT t.id, t.name, t.category_id, c.name AS category_name, c.sort_order AS category_sort_order
+      FROM actor_tags_master t
       JOIN actor_tags at2 ON at2.tag_id = t.id
+      LEFT JOIN actor_tag_categories c ON c.id = t.category_id
       WHERE at2.actor_id = ?
-      ORDER BY t.name
+      ORDER BY COALESCE(c.sort_order, 999999), t.name
     `).all(id)
 
     const rep_tags = db().prepare(`
-      SELECT t.* FROM actor_tags_master t
+      SELECT t.id, t.name, t.category_id, c.name AS category_name, c.sort_order AS category_sort_order
+      FROM actor_tags_master t
       JOIN actor_tags at2 ON at2.tag_id = t.id
+      LEFT JOIN actor_tag_categories c ON c.id = t.category_id
       WHERE at2.actor_id = ? AND at2.is_rep = 1
-      ORDER BY t.name
+      ORDER BY COALESCE(c.sort_order, 999999), t.name
     `).all(id)
 
     const scores = db().prepare('SELECT face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions FROM actor_scores WHERE actor_id = ?').get(id) || {
@@ -990,11 +1001,13 @@ export function registerIpcHandlers(): void {
     const ids = works.map(w => w.id as number)
     const ph = ids.map(() => '?').join(',')
     const repRows = db().prepare(`
-      SELECT wt.work_id, t.id, t.name FROM work_tags wt
+      SELECT wt.work_id, t.id, t.name, COALESCE(c.sort_order, 999999) AS category_sort_order FROM work_tags wt
       JOIN work_tags_master t ON t.id = wt.tag_id
+      LEFT JOIN work_tag_categories c ON c.id = t.category_id
       WHERE wt.is_rep = 1 AND wt.work_id IN (${ph})
-    `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
-    const repMap = new Map<number, Array<{ id: number; name: string }>>()
+      ORDER BY COALESCE(c.sort_order, 999999), t.name
+    `).all(...ids) as Array<{ work_id: number; id: number; name: string; category_sort_order: number }>
+    const repMap = new Map<number, Array<{ id: number; name: string; category_sort_order: number }>>()
     for (const r of repRows) {
       if (!repMap.has(r.work_id)) repMap.set(r.work_id, [])
       repMap.get(r.work_id)!.push({ id: r.id, name: r.name })
