@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, globalShortcut } from 'electron'
 import path from 'path'
 import { initDatabase } from './db'
 import { registerIpcHandlers } from './ipc'
@@ -14,7 +14,8 @@ function createWindow(): void {
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      spellcheck: false
     }
   })
 
@@ -24,11 +25,6 @@ function createWindow(): void {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
-  mainWindow.webContents.on('before-input-event', (_e, input) => {
-    if (input.key === 'F12' && input.type === 'keyDown') {
-      mainWindow?.webContents.toggleDevTools()
-    }
-  })
 }
 
 app.whenReady().then(() => {
@@ -42,6 +38,14 @@ app.whenReady().then(() => {
       createWindow()
     }
   })
+
+  globalShortcut.register('CommandOrControl+Shift+R', () => {
+    mainWindow?.webContents.reload()
+  })
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 app.on('window-all-closed', () => {

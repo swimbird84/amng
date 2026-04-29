@@ -120,7 +120,7 @@ export default function TagCategoryManager({ type, onClose }: Props) {
             placeholder="새 카테고리명 입력..."
             className="flex-1 bg-gray-700 text-white text-sm px-3 py-1.5 rounded"
           />
-          <button onClick={handleAddCategory} className={`${accentBg} text-white text-sm px-3 py-1.5 rounded`}>저장</button>
+          <button onClick={handleAddCategory} className={`${accentBg} text-white text-sm px-3 py-1.5 rounded`}>추가</button>
         </div>
 
         {/* 카테고리 목록 */}
@@ -193,7 +193,7 @@ export default function TagCategoryManager({ type, onClose }: Props) {
                     </div>
                     <div className="border-t border-gray-700" />
                     <div>
-                      <p className="text-xs text-gray-400 mb-1.5">미지정 태그</p>
+                      <p className="text-xs text-gray-400 mb-1.5">미분류 태그</p>
                       <div className="flex flex-wrap gap-1 min-h-[22px]">
                         {unassignedTags.length === 0 && <span className="text-xs text-gray-600">없음</span>}
                         {unassignedTags.map(t => (
@@ -206,6 +206,19 @@ export default function TagCategoryManager({ type, onClose }: Props) {
               </div>
             )
           })}
+          {/* 미분류 태그 현황 */}
+          {allTags.filter(t => t.category_id == null).length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-700">
+              <p className="text-xs text-gray-500 mb-1.5">
+                미분류 태그 현황
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {allTags.filter(t => t.category_id == null).map(t => (
+                  <span key={t.id} className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-400">{t.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

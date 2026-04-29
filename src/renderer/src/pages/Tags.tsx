@@ -208,7 +208,7 @@ function TagPanel({
             type="text"
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="태그 검색..."
+            placeholder="태그 검색"
             className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
           <button
@@ -227,7 +227,7 @@ function TagPanel({
             placeholder="새 태그명 입력..."
             className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
-          <button onClick={handleCreate} className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-500 shrink-0">저장</button>
+          <button onClick={handleCreate} className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-500 shrink-0">추가</button>
         </div>
       </div>
 

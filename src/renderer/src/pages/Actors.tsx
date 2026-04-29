@@ -54,6 +54,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
   const [workSortDir, setWorkSortDir] = useState<'desc' | 'asc'>('desc')
   const [hoverCover, setHoverCover] = useState<string | null>(null)
   const [physScoreMap, setPhysScoreMap] = useState<Map<number, number>>(new Map())
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
 
   const computePhysScores = useCallback(async () => {
     const data = await actorsApi.physicalData() as ActorPhysicalData[]
@@ -234,13 +235,15 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
               <div
                 key={a.id}
                 onClick={() => handleSelect(a.id)}
-                className={`cursor-pointer rounded-lg overflow-hidden border ring-2 ${
+                onMouseMove={(e) => a.comment && setTooltip({ text: a.comment, x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+                className={`relative cursor-pointer rounded-lg border ring-2 ${
                   selected?.id === a.id
                     ? 'border-blue-500 ring-blue-500'
                     : 'border-gray-700 ring-transparent hover:border-gray-500'
                 }`}
               >
-                <div className="relative">
+                <div className="relative rounded-t-lg overflow-hidden">
                   <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" />
                   <button
                     onClick={(e) => handleToggleFavorite(a.id, a.is_favorite, e)}
@@ -302,14 +305,16 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
       {/* 상세 모달 */}
       {selected && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40" onClick={() => setSelected(null)}>
-          <div className="bg-gray-800 rounded-lg w-[500px] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-gray-800 rounded-lg w-[1000px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setSelected(null)}
               className="absolute top-3 right-3 text-gray-400 hover:text-white text-xl leading-none z-10"
             >
               ✕
             </button>
-            <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3">
+
+            {/* 좌측 */}
+            <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3 min-w-0">
               <div className="flex gap-4 items-start">
                 <ImagePreview path={selected.photo_path} alt={selected.name} className="w-28 h-28 rounded flex-shrink-0" />
                 <div className="flex-1 pt-1">
@@ -377,109 +382,148 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
                 </div>
               )}
 
-              {selected.tags && selected.tags.length > 0 && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">태그</p>
-                  <div className="flex flex-wrap gap-1">
-                    {[
-                      ...(selected.tags.filter((t) => selected.rep_tags?.some((r) => r.id === t.id))),
-                      ...(selected.tags.filter((t) => !selected.rep_tags?.some((r) => r.id === t.id))),
-                    ].map((t) => {
-                      const isRep = selected.rep_tags?.some((r) => r.id === t.id)
-                      return (
-                        <span
-                          key={t.id}
-                          onClick={() => handleToggleRepTag(t.id)}
-                          title={isRep ? '대표 태그 해제' : '대표 태그로 설정'}
-                          className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
-                            isRep ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-blue-900/50 text-blue-300 hover:bg-blue-800/60'
-                          }`}
-                        >
-                          {t.name}
-                        </span>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {selected.works && selected.works.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs text-gray-500">출연작 ({selected.works.length})</p>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => {
-                          if (workSort === 'release_date') setWorkSortDir((d) => d === 'desc' ? 'asc' : 'desc')
-                          else setWorkSort('release_date')
-                        }}
-                        className={`text-xs px-1.5 py-0.5 rounded ${workSort === 'release_date' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                      >
-                        발매일{workSort === 'release_date' ? (workSortDir === 'desc' ? '↓' : '↑') : ''}
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (workSort === 'rating') setWorkSortDir((d) => d === 'desc' ? 'asc' : 'desc')
-                          else setWorkSort('rating')
-                        }}
-                        className={`text-xs px-1.5 py-0.5 rounded ${workSort === 'rating' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                      >
-                        평점{workSort === 'rating' ? (workSortDir === 'desc' ? '↓' : '↑') : ''}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    {sortedWorks.map((w) => (
-                      <div key={w.id} className="flex items-stretch gap-1.5">
-                        <div
-                          onClick={() => onNavigateToWork?.(w.id)}
-                          className="flex-1 flex gap-2 items-center bg-gray-700 rounded p-2 cursor-pointer hover:bg-gray-600"
-                        >
-                          <ImagePreview
-                            path={w.cover_path}
-                            alt={w.product_number || '-'}
-                            className="w-16 h-12 rounded flex-shrink-0 object-cover"
-                            onMouseEnter={() => setHoverCover(w.cover_path ?? null)}
-                            onMouseLeave={() => setHoverCover(null)}
-                          />
-                          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                            <div className="flex items-start justify-between gap-1">
-                              <div className="flex flex-wrap gap-0.5 min-w-0">
-                                {w.rep_tags?.map((t) => (
-                                  <span key={t.id} className="bg-blue-900/50 text-blue-300 text-xs px-1.5 py-0.5 rounded">
-                                    {t.name}
-                                  </span>
-                                ))}
-                              </div>
-                              <p className="text-sm font-bold text-white flex-shrink-0">{w.product_number || '-'}</p>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="scale-75 origin-left">
-                                <Rating value={w.rating} readonly />
-                              </div>
-                              <p className="text-xs text-gray-400">{w.release_date || '-'}</p>
-                            </div>
+              {selected.tags && selected.tags.length > 0 && (() => {
+                type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof selected.tags }
+                const catMap = new Map<number | null, Group>()
+                const groups: Group[] = []
+                const sorted = [...selected.tags!].sort((a, b) => {
+                  const ao = a.category_sort_order ?? 999999
+                  const bo = b.category_sort_order ?? 999999
+                  if (ao !== bo) return ao - bo
+                  const ar = selected.rep_tags?.some((r) => r.id === a.id) ? 0 : 1
+                  const br = selected.rep_tags?.some((r) => r.id === b.id) ? 0 : 1
+                  if (ar !== br) return ar - br
+                  return a.name.localeCompare(b.name)
+                })
+                for (const tag of sorted) {
+                  const key = tag.category_id ?? null
+                  if (!catMap.has(key)) {
+                    const g: Group = { catId: key, catName: tag.category_name ?? null, sortOrder: tag.category_sort_order ?? 999999, tags: [] }
+                    catMap.set(key, g)
+                    groups.push(g)
+                  }
+                  catMap.get(key)!.tags.push(tag)
+                }
+                return (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">태그</p>
+                    <div className="space-y-1">
+                      {groups.map((g) => (
+                        <div key={g.catId ?? 'none'}>
+                          <p className="text-xs text-gray-600 mb-0.5">{g.catName ?? '미분류'}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {g.tags.map((t) => {
+                              const isRep = selected.rep_tags?.some((r) => r.id === t.id)
+                              return (
+                                <span
+                                  key={t.id}
+                                  onClick={() => handleToggleRepTag(t.id)}
+                                  title={isRep ? '대표 태그 해제' : '대표 태그로 설정'}
+                                  className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
+                                    isRep ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-blue-600 text-white hover:bg-blue-500'
+                                  }`}
+                                >
+                                  {t.name}
+                                </span>
+                              )
+                            })}
                           </div>
                         </div>
-                        {w.files && w.files.length > 0 && (
-                          <button
-                            onClick={() => {
-                              const f = w.files![0]
-                              if (f.type === 'url') shellApi.openExternal(f.file_path)
-                              else shellApi.openPath(f.file_path)
-                            }}
-                            className="w-7 bg-red-600 hover:bg-red-500 rounded flex items-center justify-center flex-shrink-0"
-                          >
-                            <span className="text-white text-xs">▶</span>
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
+            </div>
+
+            {/* 우측 - 출연작 */}
+            <div className="w-[500px] border-l border-gray-700 flex flex-col">
+              <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3">
+                {selected.works && selected.works.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-gray-500">출연작 ({selected.works.length})</p>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            if (workSort === 'release_date') setWorkSortDir((d) => d === 'desc' ? 'asc' : 'desc')
+                            else setWorkSort('release_date')
+                          }}
+                          className={`text-xs px-1.5 py-0.5 rounded ${workSort === 'release_date' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                        >
+                          발매일{workSort === 'release_date' ? (workSortDir === 'desc' ? '↓' : '↑') : ''}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (workSort === 'rating') setWorkSortDir((d) => d === 'desc' ? 'asc' : 'desc')
+                            else setWorkSort('rating')
+                          }}
+                          className={`text-xs px-1.5 py-0.5 rounded ${workSort === 'rating' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                        >
+                          평점{workSort === 'rating' ? (workSortDir === 'desc' ? '↓' : '↑') : ''}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {sortedWorks.map((w) => (
+                        <div key={w.id} className="flex items-stretch gap-1.5">
+                          <div
+                            onClick={() => onNavigateToWork?.(w.id)}
+                            className="flex-1 flex gap-2 items-center bg-gray-700 rounded p-2 cursor-pointer hover:bg-gray-600"
+                          >
+                            <ImagePreview
+                              path={w.cover_path}
+                              alt={w.product_number || '-'}
+                              className="w-16 h-12 rounded flex-shrink-0 object-cover"
+                              onMouseEnter={() => setHoverCover(w.cover_path ?? null)}
+                              onMouseLeave={() => setHoverCover(null)}
+                            />
+                            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                              <div className="flex items-start justify-between gap-1">
+                                <div className="flex flex-wrap gap-0.5 min-w-0">
+                                  {w.rep_tags?.map((t) => (
+                                    <span key={t.id} className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded">{t.name}</span>
+                                  ))}
+                                </div>
+                                <p className="text-sm font-bold text-white flex-shrink-0">{w.product_number || '-'}</p>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <div className="scale-75 origin-left"><Rating value={w.rating} readonly /></div>
+                                <p className="text-xs text-gray-400">{w.release_date || '-'}</p>
+                              </div>
+                            </div>
+                          </div>
+                          {w.files && w.files.length > 0 && (
+                            <button
+                              onClick={() => {
+                                const f = w.files![0]
+                                if (f.type === 'url') shellApi.openExternal(f.file_path)
+                                else shellApi.openPath(f.file_path)
+                              }}
+                              className="w-7 bg-red-600 hover:bg-red-500 rounded flex items-center justify-center flex-shrink-0"
+                            >
+                              <span className="text-white text-xs">▶</span>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-gray-600 text-sm text-center mt-4">출연작 없음</p>
+                )}
+              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {tooltip && (
+        <div
+          className="fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 whitespace-pre-wrap w-[220px]"
+          style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}
+        >
+          {tooltip.text}
         </div>
       )}
 

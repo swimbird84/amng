@@ -109,7 +109,7 @@ export default function Labels({ onNavigateToWork }: Props) {
               type="text"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="이름 검색..."
+              placeholder="이름 검색"
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
             />
             <button

@@ -88,8 +88,8 @@ export default function SearchBar(props: Props) {
         type="text"
         value={params.keyword}
         onChange={(e) => onChange({ ...params, keyword: e.target.value } as never)}
-        placeholder={type === 'works' ? '품번 검색...' : '이름 검색...'}
-        className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded ${type === 'works' ? 'w-22 shrink-0' : 'flex-1'}`}
+        placeholder={type === 'works' ? '품번 검색' : '이름 검색'}
+        className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded ${type === 'works' ? 'w-20 shrink-0' : 'flex-1'}`}
       />
 
       {type === 'works' && (
@@ -129,7 +129,7 @@ export default function SearchBar(props: Props) {
         >
           태그
           {params.tagIds.length > 0 ? (
-            <span className="text-blue-400 text-xs">{params.tagIds.length}개</span>
+            <span className="text-blue-400 text-xs">{params.tagIds.length}</span>
           ) : (
             <span className="text-gray-500 text-xs">▼</span>
           )}
@@ -146,7 +146,7 @@ export default function SearchBar(props: Props) {
                 type="text"
                 value={tagFilter}
                 onChange={(e) => setTagFilter(e.target.value)}
-                placeholder="태그 검색..."
+                placeholder="태그 검색"
                 className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded"
                 autoFocus
               />

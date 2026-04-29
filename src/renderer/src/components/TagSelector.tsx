@@ -61,28 +61,56 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
         </span>
       </button>
 
-      {/* 선택된 태그 칩 (항상 표시) - 클릭시 대표 태그 토글 */}
-      {selectedTags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-1.5">
-          {selectedTags.map((t) => {
-            const isRep = repTagIds?.includes(t.id)
-            return (
-              <span
-                key={t.id}
-                onClick={() => toggleRep(t.id)}
-                title={onChangeRep ? (isRep ? '대표 태그 해제' : '대표 태그로 설정') : undefined}
-                className={`text-xs px-2 py-0.5 rounded ${onChangeRep ? 'cursor-pointer' : ''} ${
-                  isRep
-                    ? 'bg-green-700 text-green-200'
-                    : 'bg-blue-900/60 text-blue-300'
-                }`}
-              >
-                {t.name}
-              </span>
-            )
-          })}
-        </div>
-      )}
+      {/* 선택된 태그 칩 (항상 표시) - 카테고리별 그룹핑, 클릭시 대표 태그 토글 */}
+      {selectedTags.length > 0 && (() => {
+        type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof selectedTags }
+        const catMap = new Map<number | null, Group>()
+        const groups: Group[] = []
+        const sorted = [...selectedTags].sort((a, b) => {
+          const ao = a.category_sort_order ?? 999999
+          const bo = b.category_sort_order ?? 999999
+          if (ao !== bo) return ao - bo
+          const ar = repTagIds?.includes(a.id) ? 0 : 1
+          const br = repTagIds?.includes(b.id) ? 0 : 1
+          if (ar !== br) return ar - br
+          return a.name.localeCompare(b.name)
+        })
+        for (const tag of sorted) {
+          const key = tag.category_id ?? null
+          if (!catMap.has(key)) {
+            const g: Group = { catId: key, catName: tag.category_name ?? null, sortOrder: tag.category_sort_order ?? 999999, tags: [] }
+            catMap.set(key, g)
+            groups.push(g)
+          }
+          catMap.get(key)!.tags.push(tag)
+        }
+        return (
+          <div className="space-y-1 mb-1.5">
+            {groups.map((g) => (
+              <div key={g.catId ?? 'none'}>
+                <p className="text-xs text-gray-600 mb-0.5">{g.catName ?? '미분류'}</p>
+                <div className="flex flex-wrap gap-1">
+                  {g.tags.map((t) => {
+                    const isRep = repTagIds?.includes(t.id)
+                    return (
+                      <span
+                        key={t.id}
+                        onClick={() => toggleRep(t.id)}
+                        title={onChangeRep ? (isRep ? '대표 태그 해제' : '대표 태그로 설정') : undefined}
+                        className={`text-xs px-2 py-0.5 rounded ${onChangeRep ? 'cursor-pointer' : ''} ${
+                          isRep ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'
+                        }`}
+                      >
+                        {t.name}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* 펼쳐지는 전체 목록 */}
       {open && (
@@ -95,12 +123,12 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
               onChange={(e) => setNewTag(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               placeholder="새 태그 입력 (이미 있으면 선택됨)"
-              className="bg-gray-700 text-white text-sm px-2 py-1 rounded flex-1"
+              className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1"
             />
             <button
               type="button"
               onClick={handleCreate}
-              className="bg-gray-600 hover:bg-gray-500 text-white text-sm px-2 py-1 rounded"
+              className="bg-gray-600 hover:bg-gray-500 text-white text-xs px-2 py-1 rounded"
             >
               추가
             </button>
@@ -140,7 +168,7 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
                             key={tag.id}
                             type="button"
                             onClick={() => toggle(tag.id)}
-                            className={`px-2 py-0.5 rounded text-sm ${
+                            className={`px-2 py-0.5 rounded text-xs ${
                               isRep
                                 ? 'bg-green-600 text-white'
                                 : isSelected

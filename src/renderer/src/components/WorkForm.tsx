@@ -259,20 +259,23 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg w-[600px] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-800 rounded-lg w-[840px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <button
-          onClick={onCancel}
-          className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none"
+          onClick={() => { if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel() }}
+          className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10"
         >
           ✕
         </button>
-        <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
-          <h2 className="text-lg font-bold text-white">
-            {work ? '작품 수정' : '작품 등록'}
-          </h2>
-        </div>
 
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4 space-y-3">
+        {/* 좌측 */}
+        <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
+            <h2 className="text-lg font-bold text-white">
+              {work ? '작품 수정' : '작품 등록'}
+            </h2>
+          </div>
+
+          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4 space-y-3">
           <div>
             <label className="text-sm text-gray-400 block mb-1">재생 경로</label>
             <div className="space-y-1">
@@ -378,7 +381,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm text-gray-400 block mb-1">품번</label>
               <input
@@ -395,7 +398,9 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                 className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
               />
             </div>
-            <div>
+          </div>
+
+          <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <span className="text-sm text-gray-400">레이블</span>
                 <button
@@ -510,33 +515,11 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                   )}
                 </div>
               )}
-            </div>
           </div>
 
           <div>
             <label className="text-sm text-gray-400 block mb-1">별점</label>
             <Rating value={rating} onChange={setRating} />
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">코멘트</label>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              rows={2}
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full resize-none"
-            />
-          </div>
-
-          <div>
-            <TagSelector
-              allTags={allTags}
-              selectedIds={selectedTagIds}
-              onChange={setSelectedTagIds}
-              onCreateTag={handleCreateTag}
-              repTagIds={repTagIds}
-              onChangeRep={setRepTagIds}
-            />
           </div>
 
           <div>
@@ -623,6 +606,31 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
             <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded">
               저장
             </button>
+          </div>
+          </div>
+        </div>
+
+        {/* 우측 - 코멘트 + 태그 */}
+        <div className="w-[330px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4">
+          <div>
+            <label className="text-sm text-gray-400 block mb-1">코멘트</label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={4}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full resize-none"
+            />
+          </div>
+
+          <div>
+            <TagSelector
+              allTags={allTags}
+              selectedIds={selectedTagIds}
+              onChange={setSelectedTagIds}
+              onCreateTag={handleCreateTag}
+              repTagIds={repTagIds}
+              onChangeRep={setRepTagIds}
+            />
           </div>
         </div>
       </div>

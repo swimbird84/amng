@@ -118,7 +118,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg w-[500px] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
         <button
-          onClick={onCancel}
+          onClick={() => { if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel() }}
           className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none"
         >
           ✕
