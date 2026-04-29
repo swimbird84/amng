@@ -610,10 +610,10 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
           </div>
         </div>
 
-        {/* 우측 - 코멘트 + 태그 */}
+        {/* 우측 - 타이틀 + 태그 */}
         <div className="w-[330px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4">
           <div>
-            <label className="text-sm text-gray-400 block mb-1">코멘트</label>
+            <label className="text-sm text-gray-400 block mb-1">타이틀</label>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
