@@ -215,7 +215,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   return (
     <>
     <div className="h-full overflow-y-auto">
-      <div className="p-6 space-y-8">
+      <div className="p-4 space-y-8">
 
         {/* 신작 */}
         <div>
@@ -231,7 +231,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           </div>
           {newWorks.length > 0 ? (
             <div className="grid grid-cols-10 gap-2">
-              {newWorks.slice(0, expandedWorks ? 20 : 10).map((w) => (
+              {newWorks.slice(0, expandedWorks ? undefined : 10).map((w) => (
                 <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} />
               ))}
             </div>
@@ -254,7 +254,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           </div>
           {newActors.length > 0 ? (
             <div className="grid grid-cols-10 gap-2">
-              {newActors.slice(0, expandedActors ? 20 : 10).map((a, i) => (
+              {newActors.slice(0, expandedActors ? undefined : 10).map((a, i) => (
                 <ActorRankCard
                   key={a.id}
                   actor={a}

@@ -106,7 +106,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
   return (
     <>
     <div className="h-full overflow-y-auto">
-      <div className="p-6 space-y-8">
+      <div className="p-4 space-y-8">
 
         {[
           { title: '출연작 랭킹 TOP 10', data: workCountRanking, subtitle: (a: Actor & { work_count?: number }) => `${a.work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWorkCountRanking(l, r) },

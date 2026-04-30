@@ -1,8 +1,18 @@
+export interface Maker {
+  id: number
+  name: string
+  color: string | null
+  studio_count?: number
+}
+
 export interface Studio {
   id: number
   name: string
   color: string | null
   work_count?: number
+  maker_id?: number | null
+  maker_name?: string | null
+  maker_color?: string | null
 }
 
 export interface WorkFile {

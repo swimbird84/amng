@@ -55,6 +55,8 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
   const [hoverCover, setHoverCover] = useState<string | null>(null)
   const [physScoreMap, setPhysScoreMap] = useState<Map<number, number>>(new Map())
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const computePhysScores = useCallback(async () => {
     const data = await actorsApi.physicalData() as ActorPhysicalData[]
@@ -119,6 +121,9 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
   const handleSelect = async (id: number) => {
     const detail = await actorsApi.get(id) as Actor & { works?: Work[]; tags?: Tag[] }
     setSelected(detail)
+    const allFiles = (detail.works ?? []).flatMap((w) => w.files ?? [])
+    const results = await Promise.all(allFiles.map((f) => f.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(f.file_path)))
+    setFileStatuses(Object.fromEntries(allFiles.map((f, i) => [f.id, results[i]])))
   }
 
   const handleEdit = () => {
@@ -244,7 +249,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
                 }`}
               >
                 <div className="relative rounded-t-lg overflow-hidden">
-                  <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" />
+                  <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" version={refreshKey} />
                   <button
                     onClick={(e) => handleToggleFavorite(a.id, a.is_favorite, e)}
                     className="absolute top-1 right-1 text-lg leading-none drop-shadow"
@@ -316,7 +321,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
             {/* 좌측 */}
             <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3 min-w-0">
               <div className="flex gap-4 items-start">
-                <ImagePreview path={selected.photo_path} alt={selected.name} className="w-28 h-28 rounded flex-shrink-0" />
+                <ImagePreview path={selected.photo_path} alt={selected.name} className="w-28 h-28 rounded flex-shrink-0" version={refreshKey} />
                 <div className="flex-1 pt-1">
                   <div className="flex items-center gap-2">
                     <h3 className="text-white font-bold text-lg">{selected.name}</h3>
@@ -372,7 +377,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
               )}
 
               <div className="flex justify-center">
-                <RadarChart scores={selected.scores ?? defaultScores} />
+                <RadarChart scores={selected.scores ?? defaultScores} size={264} />
               </div>
 
               {selected.comment && (
@@ -475,6 +480,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
                               path={w.cover_path}
                               alt={w.product_number || '-'}
                               className="w-16 h-12 rounded flex-shrink-0 object-cover"
+                              version={refreshKey}
                               onMouseEnter={() => setHoverCover(w.cover_path ?? null)}
                               onMouseLeave={() => setHoverCover(null)}
                             />
@@ -493,18 +499,22 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
                               </div>
                             </div>
                           </div>
-                          {w.files && w.files.length > 0 && (
-                            <button
-                              onClick={() => {
-                                const f = w.files![0]
-                                if (f.type === 'url') shellApi.openExternal(f.file_path)
-                                else shellApi.openPath(f.file_path)
-                              }}
-                              className="w-7 bg-red-600 hover:bg-red-500 rounded flex items-center justify-center flex-shrink-0"
-                            >
-                              <span className="text-white text-xs">▶</span>
-                            </button>
-                          )}
+                          {w.files && w.files.length > 0 && (() => {
+                            const firstAvailable = w.files!.find((f) => fileStatuses[f.id])
+                            return (
+                              <button
+                                onClick={() => {
+                                  if (!firstAvailable) return
+                                  if (firstAvailable.type === 'url') shellApi.openExternal(firstAvailable.file_path)
+                                  else shellApi.openPath(firstAvailable.file_path)
+                                }}
+                                disabled={!firstAvailable}
+                                className={`w-7 rounded flex items-center justify-center flex-shrink-0 ${firstAvailable ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
+                              >
+                                <span className="text-white text-xs">▶</span>
+                              </button>
+                            )
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -530,7 +540,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
       {showForm && (
         <ActorForm
           actor={editActor}
-          onSave={() => { setShowForm(false); loadActors(); computePhysScores(); if (selected) handleSelect(selected.id) }}
+          onSave={() => { setShowForm(false); loadActors(); computePhysScores(); setRefreshKey((k) => k + 1); if (selected) handleSelect(selected.id) }}
           onCancel={() => setShowForm(false)}
         />
       )}

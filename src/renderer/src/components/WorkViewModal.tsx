@@ -30,11 +30,9 @@ export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zI
     worksApi.get(workId).then(async (w) => {
       const work = w as Work
       setWork(work)
-      const statuses: Record<number, boolean> = {}
-      for (const f of work.files ?? []) {
-        statuses[f.id] = f.type === 'url' ? true : await shellApi.fileExists(f.file_path)
-      }
-      setFileStatuses(statuses)
+      const files = work.files ?? []
+      const results = await Promise.all(files.map((f) => f.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(f.file_path)))
+      setFileStatuses(Object.fromEntries(files.map((f, i) => [f.id, results[i]])))
     })
   }, [workId])
 
@@ -166,7 +164,7 @@ export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zI
                         fileStatuses[f.id] ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-default'
                       }`}
                     >
-                      {f.type === 'url' ? f.file_path : f.file_path.replace(/^[A-Za-z]:[/\\]/, '')}
+                      {f.type === 'url' ? f.file_path : f.file_path.replace(/\\/g, '/').split('/').slice(3).join('/')}
                     </button>
                     {f.type === 'local' && (
                       <span className={`text-xs flex-shrink-0 ${fileStatuses[f.id] ? 'text-green-400' : 'text-red-400'}`}>

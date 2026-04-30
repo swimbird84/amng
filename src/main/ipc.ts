@@ -782,14 +782,20 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('studios:list', (_e, withCount?: boolean) => {
     if (withCount) {
       return db().prepare(`
-        SELECT s.*, COUNT(w.id) AS work_count
+        SELECT s.*, COUNT(w.id) AS work_count, m.id AS maker_id, m.name AS maker_name, m.color AS maker_color
         FROM studios s
         LEFT JOIN works w ON w.studio_id = s.id
+        LEFT JOIN makers m ON m.id = s.maker_id
         GROUP BY s.id
         ORDER BY s.name
       `).all()
     }
-    return db().prepare('SELECT * FROM studios ORDER BY name').all()
+    return db().prepare(`
+      SELECT s.*, m.id AS maker_id, m.name AS maker_name, m.color AS maker_color
+      FROM studios s
+      LEFT JOIN makers m ON m.id = s.maker_id
+      ORDER BY s.name
+    `).all()
   })
 
   ipcMain.handle('studios:create', (_e, name: string) => {
@@ -814,13 +820,79 @@ export function registerIpcHandlers(): void {
     return true
   })
 
+  // ========== 제작사 CRUD ==========
+
+  ipcMain.handle('makers:list', (_e, withCount?: boolean) => {
+    if (withCount) {
+      return db().prepare(`
+        SELECT m.*, COUNT(s.id) AS studio_count
+        FROM makers m LEFT JOIN studios s ON s.maker_id = m.id
+        GROUP BY m.id ORDER BY m.name
+      `).all()
+    }
+    return db().prepare('SELECT * FROM makers ORDER BY name').all()
+  })
+
+  ipcMain.handle('makers:create', (_e, name: string) => {
+    const result = db().prepare('INSERT OR IGNORE INTO makers (name) VALUES (?)').run(name.trim())
+    if (result.changes > 0) return result.lastInsertRowid
+    const existing = db().prepare('SELECT id FROM makers WHERE name = ?').get(name.trim()) as { id: number } | undefined
+    return existing?.id ?? 0
+  })
+
+  ipcMain.handle('makers:update', (_e, id: number, name: string, color?: string | null) => {
+    if (color !== undefined) {
+      db().prepare('UPDATE makers SET name = ?, color = ? WHERE id = ?').run(name.trim(), color, id)
+    } else {
+      db().prepare('UPDATE makers SET name = ? WHERE id = ?').run(name.trim(), id)
+    }
+    return true
+  })
+
+  ipcMain.handle('makers:delete', (_e, id: number) => {
+    db().prepare('UPDATE studios SET maker_id = NULL WHERE maker_id = ?').run(id)
+    db().prepare('DELETE FROM makers WHERE id = ?').run(id)
+    return true
+  })
+
+  ipcMain.handle('makers:assignStudio', (_e, studioId: number, makerId: number | null) => {
+    db().prepare('UPDATE studios SET maker_id = ? WHERE id = ?').run(makerId, studioId)
+    return true
+  })
+
+  // ========== 레이블 코드 CRUD ==========
+
+  ipcMain.handle('studio-codes:list', (_e, studioId: number) => {
+    return db().prepare('SELECT * FROM studio_codes WHERE studio_id = ? ORDER BY code').all(studioId)
+  })
+
+  ipcMain.handle('studio-codes:create', (_e, studioId: number, code: string) => {
+    const result = db().prepare('INSERT OR IGNORE INTO studio_codes (studio_id, code) VALUES (?, ?)').run(studioId, code.trim().toUpperCase())
+    return result.lastInsertRowid
+  })
+
+  ipcMain.handle('studio-codes:update', (_e, id: number, code: string) => {
+    db().prepare('UPDATE studio_codes SET code = ? WHERE id = ?').run(code.trim().toUpperCase(), id)
+    return true
+  })
+
+  ipcMain.handle('studio-codes:delete', (_e, id: number) => {
+    db().prepare('DELETE FROM studio_codes WHERE id = ?').run(id)
+    return true
+  })
+
+  ipcMain.handle('studio-codes:lookup', (_e, code: string) => {
+    const row = db().prepare('SELECT studio_id FROM studio_codes WHERE code = ?').get(code.trim().toUpperCase()) as { studio_id: number } | undefined
+    return row?.studio_id ?? null
+  })
+
   // ========== 파일/이미지 다이얼로그 ==========
 
   ipcMain.handle('dialog:open-files', async (_e, options?: { filters?: Electron.FileFilter[] }) => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
       filters: options?.filters || [
-        { name: 'Video Files', extensions: ['mp4', 'mkv', 'avi', 'wmv', 'mov', 'flv'] }
+        { name: 'Video Files', extensions: ['mp4', 'mkv', 'avi', 'wmv', 'mov', 'flv', 'm2ts'] }
       ]
     })
     return result.filePaths
@@ -846,7 +918,7 @@ export function registerIpcHandlers(): void {
   // ========== 폴더 스캔 ==========
 
   ipcMain.handle('scan:folder', (_e, folderPath: string) => {
-    const videoExtensions = ['.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv']
+    const videoExtensions = ['.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.m2ts']
     const files: string[] = []
 
     function scanDir(dir: string) {
@@ -888,7 +960,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('shell:fileExists', (_e, filePath: string) => {
-    return fs.existsSync(filePath)
+    return fs.promises.access(filePath).then(() => true).catch(() => false)
   })
 
   ipcMain.handle('shell:trashFolders', async (_e, filePaths: string[]) => {
@@ -940,7 +1012,6 @@ export function registerIpcHandlers(): void {
       WHERE w.release_date IS NOT NULL AND w.release_date != ''
         AND w.release_date >= date('now', '-2 months')
       ORDER BY w.release_date DESC, w.rating DESC, actor_avg_score DESC
-      LIMIT 20
     `).all() as Array<Record<string, unknown>>
     if (works.length === 0) return []
     const ids = works.map(w => w.id as number)
@@ -1045,7 +1116,6 @@ export function registerIpcHandlers(): void {
       WHERE a.debut_date IS NOT NULL AND a.debut_date != ''
         AND a.debut_date >= date('now', '-3 years')
       ORDER BY a.debut_date DESC, avg_score DESC
-      LIMIT 20
     `).all()
   })
 

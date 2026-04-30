@@ -204,6 +204,36 @@ export function initDatabase(): void {
     db.prepare('ALTER TABLE studios ADD COLUMN color TEXT').run()
   }
 
+  // makers 테이블 마이그레이션
+  const makersTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='makers'").get()
+  if (!makersTable) {
+    db.exec(`
+      CREATE TABLE makers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        color TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `)
+  }
+
+  // studios.maker_id 컬럼 마이그레이션
+  if (!studioCols.includes('maker_id')) {
+    db.prepare('ALTER TABLE studios ADD COLUMN maker_id INTEGER REFERENCES makers(id) ON DELETE SET NULL').run()
+  }
+
+  // studio_codes 테이블 마이그레이션
+  const studioCodesTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='studio_codes'").get()
+  if (!studioCodesTable) {
+    db.exec(`
+      CREATE TABLE studio_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        studio_id INTEGER NOT NULL REFERENCES studios(id) ON DELETE CASCADE,
+        code TEXT NOT NULL UNIQUE
+      )
+    `)
+  }
+
   // 대표 태그 is_rep 컬럼 추가 마이그레이션
   const workTagCols = (db.prepare("PRAGMA table_info(work_tags)").all() as { name: string }[]).map(c => c.name)
   if (!workTagCols.includes('is_rep')) {

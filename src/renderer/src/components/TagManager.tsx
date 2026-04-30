@@ -168,7 +168,7 @@ export default function TagCategoryManager({ type, onClose }: Props) {
                     </>
                   ) : (
                     <>
-                      <span className="flex-1 text-white text-sm">{cat.name} <span className="text-gray-400 text-xs">({cat.tag_count})</span></span>
+                      <span onClick={() => handleToggleTags(cat.id)} className="flex-1 text-white text-sm cursor-pointer hover:text-gray-300">{cat.name} <span className="text-gray-400 text-xs">({cat.tag_count})</span></span>
                       <button onClick={() => { setEditingId(cat.id); setEditingName(cat.name); setDeletingId(null); setOpenTagsCatId(null) }} className="text-gray-400 text-xs px-2 py-0.5 rounded border border-gray-600 hover:text-white shrink-0">수정</button>
                       <button onClick={() => { setDeletingId(cat.id); setEditingId(null); setOpenTagsCatId(null) }} className="text-red-400 text-xs px-2 py-0.5 rounded border border-red-800 hover:text-red-300 shrink-0">삭제</button>
                       <button

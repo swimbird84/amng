@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Work, Tag, Actor, Studio } from '../types'
-import { worksApi, workTagsApi, actorsApi, studiosApi, dialogApi, scanApi, shellApi } from '../api'
+import { worksApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi } from '../api'
 import SearchBar, { type WorkSearchParams } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import ImagePreview from '../components/ImagePreview'
@@ -47,6 +47,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     (localStorage.getItem('works:sortDir') as 'asc' | 'desc') || 'desc'
   )
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const loadWorks = useCallback(async () => {
     const params: Record<string, unknown> = {}
@@ -88,11 +89,9 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const handleSelect = async (id: number) => {
     const detail = await worksApi.get(id) as Work & { actors?: Actor[]; tags?: Tag[] }
     setSelected(detail)
-    const statuses: Record<number, boolean> = {}
-    for (const f of detail.files ?? []) {
-      statuses[f.id] = f.type === 'url' ? true : await shellApi.fileExists(f.file_path)
-    }
-    setFileStatuses(statuses)
+    const files = detail.files ?? []
+    const results = await Promise.all(files.map((f) => f.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(f.file_path)))
+    setFileStatuses(Object.fromEntries(files.map((f, i) => [f.id, results[i]])))
   }
 
 
@@ -122,7 +121,9 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
       try {
         const fileName = file.split(/[\\/]/).pop() ?? ''
         const productNumber = fileName.replace(/\.[^.]+$/, '')
-        await worksApi.create({ file_path: file, product_number: productNumber })
+        const match = productNumber.match(/^([A-Za-z]+)-\d/i)
+        const studioId = match ? await studioCodesApi.lookup(match[1]) : null
+        await worksApi.create({ file_path: file, product_number: productNumber, studio_id: studioId })
         added++
       } catch {
         // 무시
@@ -243,7 +244,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                 }`}
               >
                 <div className="relative rounded-t-lg overflow-hidden">
-                  <ImagePreview path={w.cover_path} alt={w.title || '표지'} className="w-full h-40" />
+                  <ImagePreview path={w.cover_path} alt={w.title || '표지'} className="w-full h-40" version={refreshKey} />
                   {w.studio_name && (
                     <span
                       className="absolute top-1 left-1 text-white text-xs px-1.5 py-0.5 rounded leading-tight max-w-[70%] truncate"
@@ -309,7 +310,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
             {/* 좌측 */}
             <div className="flex flex-col flex-1 min-w-0">
               <div className="relative rounded-tl-lg overflow-hidden flex-shrink-0" style={{ aspectRatio: '800 / 540' }}>
-                <ImagePreview path={selected.cover_path} alt="표지" className="w-full h-full" />
+                <ImagePreview path={selected.cover_path} alt="표지" className="w-full h-full" version={refreshKey} />
                 {(() => {
                   const firstAvailable = selected.files?.find((f) => fileStatuses[f.id])
                   return (
@@ -372,8 +373,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                         return (
                           <span
                             key={a.id}
-                            onClick={() => handleToggleRepActor(a.id)}
-                            title={isRep ? '대표 배우 해제' : '대표 배우로 설정'}
+                            onClick={() => onNavigateToActor?.(a.id)}
                             className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
                               isRep
                                 ? 'bg-fuchsia-700 text-fuchsia-200 hover:bg-fuchsia-600'
@@ -432,7 +432,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                             fileStatuses[f.id] ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-default'
                           }`}
                         >
-                          {f.type === 'url' ? f.file_path : f.file_path.replace(/^[A-Za-z]:[/\\]/, '')}
+                          {f.type === 'url' ? f.file_path : f.file_path.replace(/\\/g, '/').split('/').slice(3).join('/')}
                         </button>
                         {f.type === 'local' && (
                           <span className={`text-xs flex-shrink-0 ${fileStatuses[f.id] ? 'text-green-400' : 'text-red-400'}`}>
@@ -545,7 +545,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
       {showForm && (
         <WorkForm
           work={editWork}
-          onSave={() => { setShowForm(false); loadWorks(); if (selected) handleSelect(selected.id) }}
+          onSave={() => { setShowForm(false); loadWorks(); setRefreshKey((k) => k + 1); if (selected) handleSelect(selected.id) }}
           onCancel={() => setShowForm(false)}
         />
       )}

@@ -35,13 +35,9 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
     actorsApi.get(actorId).then(async (a) => {
       const actor = a as Actor
       setActor(actor)
-      const statuses: Record<number, boolean> = {}
-      for (const w of actor.works ?? []) {
-        for (const f of w.files ?? []) {
-          statuses[f.id] = f.type === 'url' ? true : await shellApi.fileExists(f.file_path)
-        }
-      }
-      setFileStatuses(statuses)
+      const allFiles = (actor.works ?? []).flatMap((w) => w.files ?? [])
+      const results = await Promise.all(allFiles.map((f) => f.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(f.file_path)))
+      setFileStatuses(Object.fromEntries(allFiles.map((f, i) => [f.id, results[i]])))
     })
   }, [actorId])
 
@@ -110,7 +106,7 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
 
             {/* 레이더 차트 */}
             <div className="flex justify-center">
-              <RadarChart scores={actor.scores ?? defaultScores} />
+              <RadarChart scores={actor.scores ?? defaultScores} size={264} />
             </div>
 
             {/* 코멘트 */}

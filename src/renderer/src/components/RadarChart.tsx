@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ActorScores } from '../types'
 
 interface Props {
@@ -11,6 +11,7 @@ const KEYS: (keyof ActorScores)[] = ['face', 'bust', 'hip', 'physical', 'skin', 
 
 export default function RadarChart({ scores, size = 220 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -80,7 +81,7 @@ export default function RadarChart({ scores, size = 220 }: Props) {
 
     // 레이블
     ctx.fillStyle = 'rgba(200,200,200,0.85)'
-    ctx.font = `${Math.round(size * 0.062)}px sans-serif`
+    ctx.font = `14px sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     for (let i = 0; i < n; i++) {
@@ -92,5 +93,51 @@ export default function RadarChart({ scores, size = 220 }: Props) {
     }
   }, [scores, size])
 
-  return <canvas ref={canvasRef} width={size} height={size} />
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const mx = e.clientX - rect.left
+    const my = e.clientY - rect.top
+    const cx = size / 2
+    const cy = size / 2
+    const r = size / 2 - 36
+    const n = 10
+    for (let i = 0; i < n; i++) {
+      const angle = (Math.PI * 2 * i) / n - Math.PI / 2
+      // 레이블 근접 체크
+      const lx = cx + (r + 20) * Math.cos(angle)
+      const ly = cy + (r + 20) * Math.sin(angle)
+      if (Math.hypot(mx - lx, my - ly) < 28) {
+        setTooltip({ text: `${LABELS[i]}: ${scores[KEYS[i]] ?? 0}`, x: e.clientX, y: e.clientY })
+        return
+      }
+      // 축 라인 근접 체크 (점-선분 거리)
+      const ex = cx + r * Math.cos(angle)
+      const ey = cy + r * Math.sin(angle)
+      const dx = ex - cx; const dy = ey - cy
+      const len2 = dx * dx + dy * dy
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((mx - cx) * dx + (my - cy) * dy) / len2)) : 0
+      const dist = Math.hypot(mx - (cx + t * dx), my - (cy + t * dy))
+      if (dist < 12) {
+        setTooltip({ text: `${LABELS[i]}: ${scores[KEYS[i]] ?? 0}`, x: e.clientX, y: e.clientY })
+        return
+      }
+    }
+    setTooltip(null)
+  }
+
+  return (
+    <div className="relative inline-block">
+      <canvas ref={canvasRef} width={size} height={size} onMouseMove={handleMouseMove} onMouseLeave={() => setTooltip(null)} />
+      {tooltip && (
+        <div
+          className="fixed pointer-events-none z-[300] bg-gray-900 border border-gray-700 rounded shadow-lg text-sm text-gray-200 px-3 py-1.5"
+          style={{ left: tooltip.x + 12, top: tooltip.y + 12 }}
+        >
+          {tooltip.text}
+        </div>
+      )}
+    </div>
+  )
 }

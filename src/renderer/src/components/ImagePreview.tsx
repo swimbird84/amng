@@ -7,11 +7,12 @@ interface Props {
   alt: string
   className?: string
   style?: React.CSSProperties
+  version?: number
   onMouseEnter?: () => void
   onMouseLeave?: () => void
 }
 
-export default function ImagePreview({ path, alt, className = '', style, onMouseEnter, onMouseLeave }: Props) {
+export default function ImagePreview({ path, alt, className = '', style, version, onMouseEnter, onMouseLeave }: Props) {
   const [src, setSrc] = useState<string | null>(null)
 
   useEffect(() => {
@@ -20,7 +21,7 @@ export default function ImagePreview({ path, alt, className = '', style, onMouse
     } else {
       setSrc(null)
     }
-  }, [path])
+  }, [path, version])
 
   if (!src) {
     return (

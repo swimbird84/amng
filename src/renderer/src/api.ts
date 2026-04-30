@@ -61,6 +61,24 @@ export const studiosApi = {
   delete: (id: number) => api.invoke('studios:delete', id),
 }
 
+// 제작사
+export const makersApi = {
+  list: (withCount?: boolean) => api.invoke('makers:list', withCount),
+  create: (name: string) => api.invoke('makers:create', name) as Promise<number>,
+  update: (id: number, name: string, color?: string | null) => api.invoke('makers:update', id, name, color),
+  delete: (id: number) => api.invoke('makers:delete', id),
+  assignStudio: (studioId: number, makerId: number | null) => api.invoke('makers:assignStudio', studioId, makerId),
+}
+
+// 레이블 코드
+export const studioCodesApi = {
+  list: (studioId: number) => api.invoke('studio-codes:list', studioId) as Promise<{ id: number; studio_id: number; code: string }[]>,
+  create: (studioId: number, code: string) => api.invoke('studio-codes:create', studioId, code) as Promise<number>,
+  update: (id: number, code: string) => api.invoke('studio-codes:update', id, code) as Promise<boolean>,
+  delete: (id: number) => api.invoke('studio-codes:delete', id) as Promise<boolean>,
+  lookup: (code: string) => api.invoke('studio-codes:lookup', code) as Promise<number | null>,
+}
+
 // 다이얼로그
 export const dialogApi = {
   openFiles: () => api.invoke('dialog:open-files'),

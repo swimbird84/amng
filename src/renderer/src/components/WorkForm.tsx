@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import type { Work, Tag, Actor, Studio } from '../types'
-import { worksApi, workTagsApi, actorsApi, studiosApi, dialogApi, imageApi, shellApi } from '../api'
+import type { Work, Tag, Actor, Studio, Maker } from '../types'
+import { worksApi, workTagsApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi } from '../api'
 import Rating from './Rating'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
@@ -31,7 +31,8 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [fileStatuses, setFileStatuses] = useState<Record<string, boolean>>({})
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [allActors, setAllActors] = useState<Actor[]>([])
-  const [allStudios, setAllStudios] = useState<Studio[]>([])
+  const [allStudios, setAllStudios] = useState<(Studio & { maker_name?: string | null })[]>([])
+  const [allMakers, setAllMakers] = useState<Maker[]>([])
   const [studioId, setStudioId] = useState<number | null>(() => {
     if (work?.studio_id != null) return work.studio_id
     const saved = localStorage.getItem('workform:lastStudioId')
@@ -56,7 +57,11 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   const sortedStudios = useMemo(() => [...allStudios].sort((a, b) => {
     const dir = studioSortDir === 'asc' ? 1 : -1
-    if (studioSortBy === 'name') return a.name.localeCompare(b.name, 'en-US') * dir
+    if (studioSortBy === 'name') {
+      const makerCmp = (a.maker_name ?? '').localeCompare(b.maker_name ?? '', 'en-US')
+      if (makerCmp !== 0) return makerCmp * dir
+      return a.name.localeCompare(b.name, 'en-US') * dir
+    }
     return (a.id - b.id) * dir
   }), [allStudios, studioSortBy, studioSortDir])
 
@@ -79,21 +84,15 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   useEffect(() => {
     workTagsApi.list().then((t) => setAllTags(t as Tag[]))
     actorsApi.list().then((a) => setAllActors(a as Actor[]))
-    studiosApi.list().then((s) => setAllStudios(s as Studio[]))
+    studiosApi.list().then((s) => setAllStudios(s as (Studio & { maker_name?: string | null })[]))
+    makersApi.list().then((m) => setAllMakers(m as Maker[]))
   }, [])
 
   useEffect(() => {
     let cancelled = false
     const check = async () => {
-      const statuses: Record<string, boolean> = {}
-      for (const entry of fileEntries) {
-        if (entry.type === 'url') {
-          statuses[entry.path] = true
-        } else {
-          statuses[entry.path] = await shellApi.fileExists(entry.path)
-        }
-      }
-      if (!cancelled) setFileStatuses(statuses)
+      const results = await Promise.all(fileEntries.map((e) => e.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(e.path)))
+      if (!cancelled) setFileStatuses(Object.fromEntries(fileEntries.map((e, i) => [e.path, results[i]])))
     }
     check()
     return () => { cancelled = true }
@@ -102,12 +101,22 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const handleSelectFiles = async () => {
     const paths = await dialogApi.openFiles() as string[]
     if (paths.length > 0) {
-      setFileEntries((prev) => [
-        ...prev,
-        ...paths
+      setFileEntries((prev) => {
+        const isFirst = prev.length === 0
+        const newEntries = paths
           .filter((p) => !prev.some((e) => e.path === p))
           .map((p) => ({ path: p, type: 'local' as const }))
-      ])
+        if (isFirst && newEntries.length > 0 && studioId === null) {
+          const filename = newEntries[0].path.replace(/\\/g, '/').split('/').pop() ?? ''
+          const match = filename.match(/^([A-Za-z]+)-\d/i)
+          if (match) {
+            studioCodesApi.lookup(match[1]).then((sid) => {
+              if (sid !== null) setStudioId(sid)
+            })
+          }
+        }
+        return [...prev, ...newEntries]
+      })
     }
   }
 
@@ -314,7 +323,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                       fileStatuses[entry.path] ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-default'
                     }`}
                   >
-                    {entry.type === 'url' ? entry.path : entry.path.replace(/^[A-Za-z]:[/\\]/, '')}
+                    {entry.type === 'url' ? entry.path : entry.path.replace(/\\/g, '/').split('/').slice(3).join('/')}
                   </button>
                   <button
                     type="button"
@@ -480,7 +489,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                     }}
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full text-left flex items-center justify-between"
                   >
-                    <span className="truncate">{allStudios.find((s) => s.id === studioId)?.name ?? '없음'}</span>
+                    <span className="truncate">{(() => { const s = allStudios.find((s) => s.id === studioId); return s ? (s.maker_name ? `${s.maker_name} ${s.name}` : s.name) : '없음' })()}</span>
                     <span className="text-gray-400 text-xs ml-1">▼</span>
                   </button>
                   {studioDropOpen && studioDropRect && (
@@ -508,7 +517,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                           onClick={() => { setStudioId(s.id); localStorage.setItem('workform:lastStudioId', String(s.id)); setStudioDropOpen(false) }}
                           className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
                         >
-                          {s.name}
+                          {s.maker_name ? `${s.maker_name} ${s.name}` : s.name}
                         </button>
                       ))}
                     </div>
