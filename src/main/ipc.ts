@@ -23,8 +23,9 @@ export function registerIpcHandlers(): void {
     favoriteOnly?: boolean
   }) => {
     let sql = `
-      SELECT DISTINCT w.*, s.name AS studio_name, s.color AS studio_color FROM works w
+      SELECT DISTINCT w.*, s.name AS studio_name, s.color AS studio_color, m.name AS studio_maker_name, m.color AS studio_maker_color FROM works w
       LEFT JOIN studios s ON s.id = w.studio_id
+      LEFT JOIN makers m ON m.id = s.maker_id
     `
     const conditions: string[] = []
     const bindings: unknown[] = []
@@ -117,9 +118,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('works:get', (_e, id: number) => {
     const work = db().prepare(`
-      SELECT w.*, s.name AS studio_name, s.color AS studio_color
+      SELECT w.*, s.name AS studio_name, s.color AS studio_color, m.name AS studio_maker_name, m.color AS studio_maker_color
       FROM works w
       LEFT JOIN studios s ON s.id = w.studio_id
+      LEFT JOIN makers m ON m.id = s.maker_id
       WHERE w.id = ?
     `).get(id)
     if (!work) return null
@@ -551,6 +553,18 @@ export function registerIpcHandlers(): void {
     return actorId
   })
 
+  ipcMain.handle('actors:findOrCreate', (_e, name: string, birthday?: string) => {
+    const existing = db().prepare('SELECT id FROM actors WHERE name = ?').get(name) as { id: number } | undefined
+    if (existing) return existing.id
+    const result = db().prepare('INSERT INTO actors (name, birthday) VALUES (?, ?)').run(name, birthday || null)
+    const actorId = result.lastInsertRowid
+    db().prepare(`
+      INSERT OR REPLACE INTO actor_scores (actor_id, face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions)
+      VALUES (?, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5)
+    `).run(actorId)
+    return actorId
+  })
+
   ipcMain.handle('actors:update', (_e, id: number, data: {
     name?: string
     photo_path?: string
@@ -798,20 +812,28 @@ export function registerIpcHandlers(): void {
     `).all()
   })
 
-  ipcMain.handle('studios:create', (_e, name: string) => {
-    const result = db().prepare('INSERT OR IGNORE INTO studios (name) VALUES (?)').run(name.trim())
-    if (result.changes > 0) return result.lastInsertRowid
-    const existing = db().prepare('SELECT id FROM studios WHERE name = ?').get(name.trim()) as { id: number } | undefined
-    return existing?.id ?? 0
+  ipcMain.handle('studios:create', (_e, name: string, makerId?: number | null, color?: string | null) => {
+    try {
+      const result = db().prepare('INSERT INTO studios (name, maker_id, color) VALUES (?, ?, ?)').run(name.trim(), makerId ?? null, color ?? null)
+      return result.lastInsertRowid
+    } catch {
+      // 미분류 중복 시 기존 ID 반환
+      const existing = db().prepare('SELECT id FROM studios WHERE name = ? AND maker_id IS NULL').get(name.trim()) as { id: number } | undefined
+      return existing?.id ?? 0
+    }
   })
 
   ipcMain.handle('studios:update', (_e, id: number, name: string, color?: string | null) => {
-    if (color !== undefined) {
-      db().prepare('UPDATE studios SET name = ?, color = ? WHERE id = ?').run(name.trim(), color, id)
-    } else {
-      db().prepare('UPDATE studios SET name = ? WHERE id = ?').run(name.trim(), id)
+    try {
+      if (color !== undefined) {
+        db().prepare('UPDATE studios SET name = ?, color = ? WHERE id = ?').run(name.trim(), color, id)
+      } else {
+        db().prepare('UPDATE studios SET name = ? WHERE id = ?').run(name.trim(), id)
+      }
+      return { ok: true }
+    } catch {
+      return { ok: false, error: 'duplicate' }
     }
-    return true
   })
 
   ipcMain.handle('studios:delete', (_e, id: number) => {
@@ -886,6 +908,20 @@ export function registerIpcHandlers(): void {
     return row?.studio_id ?? null
   })
 
+  ipcMain.handle('studio-codes:applyToWorks', (_e, studioId: number, code: string) => {
+    const upper = code.trim().toUpperCase()
+    const works = db().prepare('SELECT id, product_number FROM works WHERE studio_id IS NULL AND product_number IS NOT NULL').all() as { id: number; product_number: string }[]
+    let updated = 0
+    for (const work of works) {
+      const m = work.product_number.match(/^(.+)-\d/)
+      if (m && m[1].toUpperCase() === upper) {
+        db().prepare('UPDATE works SET studio_id = ? WHERE id = ?').run(studioId, work.id)
+        updated++
+      }
+    }
+    return updated
+  })
+
   // ========== 파일/이미지 다이얼로그 ==========
 
   ipcMain.handle('dialog:open-files', async (_e, options?: { filters?: Electron.FileFilter[] }) => {
@@ -919,6 +955,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('scan:folder', (_e, folderPath: string) => {
     const videoExtensions = ['.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.m2ts']
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp']
     const files: string[] = []
 
     function scanDir(dir: string) {
@@ -938,7 +975,11 @@ export function registerIpcHandlers(): void {
     const existingPaths = new Set(
       (db().prepare('SELECT file_path FROM work_files').all() as { file_path: string }[]).map(r => r.file_path)
     )
-    const newFiles = files.filter(f => !existingPaths.has(f))
+    const newFiles = files.filter(f => !existingPaths.has(f)).map(videoPath => {
+      const basePath = videoPath.replace(/\.[^.]+$/, '')
+      const imagePath = imageExtensions.map(ext => basePath + ext).find(p => fs.existsSync(p)) ?? null
+      return { videoPath, imagePath }
+    })
     const duplicates = files.filter(f => existingPaths.has(f))
     return { newFiles, duplicates }
   })
@@ -1062,11 +1103,14 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('dashboard:release-works', (_e, year: string, month: number) => {
     const works = db().prepare(`
-      SELECT * FROM works
-      WHERE release_date IS NOT NULL AND release_date != ''
-      AND strftime('%Y', release_date) = ?
-      AND CAST(strftime('%m', release_date) AS INTEGER) = ?
-      ORDER BY release_date DESC, rating DESC
+      SELECT w.*, s.name AS studio_name, s.color AS studio_color, m.name AS studio_maker_name, m.color AS studio_maker_color
+      FROM works w
+      LEFT JOIN studios s ON s.id = w.studio_id
+      LEFT JOIN makers m ON m.id = s.maker_id
+      WHERE w.release_date IS NOT NULL AND w.release_date != ''
+      AND strftime('%Y', w.release_date) = ?
+      AND CAST(strftime('%m', w.release_date) AS INTEGER) = ?
+      ORDER BY w.release_date DESC, w.rating DESC
     `).all(year, month) as Array<Record<string, unknown>>
     if (works.length === 0) return []
     const ids = works.map(w => w.id as number)

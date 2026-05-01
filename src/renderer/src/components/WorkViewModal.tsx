@@ -84,7 +84,7 @@ export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zI
                     className="inline-block text-white text-sm px-2 py-0.5 rounded"
                     style={{ backgroundColor: studioColor(work.studio_name, work.studio_color) }}
                   >
-                    {work.studio_name}
+                    {work.studio_maker_name && work.studio_maker_name !== work.studio_name ? `${work.studio_maker_name} ${work.studio_name}` : work.studio_name}
                   </span>
                 )}
               </div>

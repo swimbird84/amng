@@ -124,7 +124,11 @@ export default function MakerManager({ onClose }: Props) {
   const handleSelectColor = async (color: string) => {
     if (colorPickerId === null) return
     const maker = makers.find(m => m.id === colorPickerId)
-    if (maker) await makersApi.update(maker.id, maker.name, color)
+    if (maker) {
+      await makersApi.update(maker.id, maker.name, color)
+      const assignedStudios = studios.filter(s => s.maker_id === maker.id)
+      await Promise.all(assignedStudios.map(s => studiosApi.update(s.id, s.name, color)))
+    }
     setColorPickerId(null)
     setColorPickerPos(null)
     loadAll()
@@ -221,7 +225,11 @@ export default function MakerManager({ onClose }: Props) {
                       <div className="flex flex-wrap gap-1 min-h-5">
                         {unassignedStudios.length === 0 && <span className="text-xs text-gray-600">없음</span>}
                         {unassignedStudios.map(s => (
-                          <button key={s.id} onClick={() => makersApi.assignStudio(s.id, maker.id).then(loadAll)}
+                          <button key={s.id} onClick={async () => {
+                            await makersApi.assignStudio(s.id, maker.id)
+                            await studiosApi.update(s.id, s.name, resolvedColor(maker.name, maker.color))
+                            loadAll()
+                          }}
                             className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600">{s.name}</button>
                         ))}
                       </div>

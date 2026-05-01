@@ -17,6 +17,7 @@ export const actorsApi = {
   update: (id: number, data: object) => api.invoke('actors:update', id, data),
   delete: (id: number) => api.invoke('actors:delete', id),
   physicalData: () => api.invoke('actors:physical-data'),
+  findOrCreate: (name: string, birthday?: string) => api.invoke('actors:findOrCreate', name, birthday) as Promise<number>,
 }
 
 // 태그 카테고리
@@ -56,7 +57,7 @@ export const actorTagsApi = {
 // 제작사
 export const studiosApi = {
   list: (withCount?: boolean) => api.invoke('studios:list', withCount),
-  create: (name: string) => api.invoke('studios:create', name),
+  create: (name: string, makerId?: number | null, color?: string | null) => api.invoke('studios:create', name, makerId, color),
   update: (id: number, name: string, color?: string | null) => api.invoke('studios:update', id, name, color),
   delete: (id: number) => api.invoke('studios:delete', id),
 }
@@ -77,6 +78,7 @@ export const studioCodesApi = {
   update: (id: number, code: string) => api.invoke('studio-codes:update', id, code) as Promise<boolean>,
   delete: (id: number) => api.invoke('studio-codes:delete', id) as Promise<boolean>,
   lookup: (code: string) => api.invoke('studio-codes:lookup', code) as Promise<number | null>,
+  applyToWorks: (studioId: number, code: string) => api.invoke('studio-codes:applyToWorks', studioId, code) as Promise<number>,
 }
 
 // 다이얼로그

@@ -36,6 +36,8 @@ export interface Work {
   studio_id: number | null
   studio_name: string | null
   studio_color: string | null
+  studio_maker_name: string | null
+  studio_maker_color: string | null
   created_at: string
   actors?: Actor[]
   tags?: Tag[]

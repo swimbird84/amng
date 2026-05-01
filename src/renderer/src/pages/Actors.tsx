@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Actor, Tag, Work } from '../types'
 import { actorsApi, actorTagsApi, shellApi } from '../api'
 import SearchBar, { type ActorSearchParams } from '../components/SearchBar'
@@ -57,6 +57,11 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [refreshKey, setRefreshKey] = useState(0)
+  const [deleteMode, setDeleteMode] = useState(false)
+  const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const isDragging = useRef(false)
+  const dragAction = useRef<'add' | 'remove'>('add')
 
   const computePhysScores = useCallback(async () => {
     const data = await actorsApi.physicalData() as ActorPhysicalData[]
@@ -98,6 +103,11 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
 
   useEffect(() => { loadActors() }, [loadActors])
   useEffect(() => { loadTags() }, [])
+  useEffect(() => {
+    const onMouseUp = () => { isDragging.current = false }
+    document.addEventListener('mouseup', onMouseUp)
+    return () => document.removeEventListener('mouseup', onMouseUp)
+  }, [])
   useEffect(() => {
     if (!openEditId) return
     actorsApi.get(openEditId).then((a) => {
@@ -171,6 +181,21 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
     loadActors()
   }
 
+  const exitDeleteMode = () => {
+    setDeleteMode(false)
+    setSelectedDeleteIds(new Set())
+    setDeleteConfirm(false)
+  }
+
+  const handleBulkDelete = async () => {
+    for (const id of selectedDeleteIds) {
+      await actorsApi.delete(id)
+    }
+    setSelected(null)
+    exitDeleteMode()
+    loadActors()
+  }
+
   const handleToggleFavorite = async (id: number, current: number, e?: React.MouseEvent) => {
     e?.stopPropagation()
     const next = current ? 0 : 1
@@ -225,11 +250,19 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
                 피지컬 계산기
               </button>
               <button
-                  onClick={() => setFavoriteOnly((v) => !v)}
-                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
+                onClick={() => setFavoriteOnly((v) => !v)}
+                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
               >
                 {favoriteOnly ? '♥' : '♡'}
               </button>
+              {deleteMode ? (
+                <>
+                  <button onClick={() => selectedDeleteIds.size > 0 && setDeleteConfirm(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button>
+                  <button onClick={exitDeleteMode} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm">✕</button>
+                </>
+              ) : (
+                <button onClick={() => setDeleteMode(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button>
+              )}
             </div>
           </div>
         </div>
@@ -239,17 +272,46 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
             {displayActors.map((a) => (
               <div
                 key={a.id}
-                onClick={() => handleSelect(a.id)}
-                onMouseMove={(e) => a.comment && setTooltip({ text: a.comment, x: e.clientX, y: e.clientY })}
+                onMouseDown={(e) => {
+                  if (!deleteMode) return
+                  e.preventDefault()
+                  isDragging.current = true
+                  const willAdd = !selectedDeleteIds.has(a.id)
+                  dragAction.current = willAdd ? 'add' : 'remove'
+                  setSelectedDeleteIds((prev) => {
+                    const next = new Set(prev)
+                    if (willAdd) next.add(a.id); else next.delete(a.id)
+                    return next
+                  })
+                }}
+                onMouseEnter={() => {
+                  if (!deleteMode || !isDragging.current) return
+                  setSelectedDeleteIds((prev) => {
+                    const next = new Set(prev)
+                    if (dragAction.current === 'add') next.add(a.id); else next.delete(a.id)
+                    return next
+                  })
+                }}
+                onClick={() => { if (!deleteMode) handleSelect(a.id) }}
+                onMouseMove={(e) => !deleteMode && a.comment && setTooltip({ text: a.comment, x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setTooltip(null)}
                 className={`relative cursor-pointer rounded-lg border ring-2 ${
-                  selected?.id === a.id
-                    ? 'border-blue-500 ring-blue-500'
-                    : 'border-gray-700 ring-transparent hover:border-gray-500'
+                  deleteMode
+                    ? selectedDeleteIds.has(a.id)
+                      ? 'border-red-500 ring-red-500'
+                      : 'border-gray-700 ring-transparent hover:border-red-400'
+                    : selected?.id === a.id
+                      ? 'border-blue-500 ring-blue-500'
+                      : 'border-gray-700 ring-transparent hover:border-gray-500'
                 }`}
               >
                 <div className="relative rounded-t-lg overflow-hidden">
                   <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" version={refreshKey} />
+                  {deleteMode && selectedDeleteIds.has(a.id) && (
+                    <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none">
+                      <span className="text-white text-4xl font-bold drop-shadow">✓</span>
+                    </div>
+                  )}
                   <button
                     onClick={(e) => handleToggleFavorite(a.id, a.is_favorite, e)}
                     className="absolute top-1 right-1 text-lg leading-none drop-shadow"
@@ -523,6 +585,18 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
                   <p className="text-gray-600 text-sm text-center mt-4">출연작 없음</p>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 flex flex-col gap-4 min-w-[280px]" onClick={(e) => e.stopPropagation()}>
+            <p className="text-white">선택된 {selectedDeleteIds.size}개 배우를 삭제하시겠습니까?</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeleteConfirm(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>
+              <button onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded text-sm">삭제</button>
             </div>
           </div>
         </div>

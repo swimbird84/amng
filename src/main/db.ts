@@ -222,6 +222,29 @@ export function initDatabase(): void {
     db.prepare('ALTER TABLE studios ADD COLUMN maker_id INTEGER REFERENCES makers(id) ON DELETE SET NULL').run()
   }
 
+  // studios.name 유니크 제약 변경: 글로벌 UNIQUE → 부분 인덱스
+  // (미분류: name 단독 유니크, 제작사 있음: (name, maker_id) 유니크)
+  const studioSchemaSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='studios'").get() as { sql: string } | undefined)?.sql ?? ''
+  if (studioSchemaSql.toUpperCase().includes('UNIQUE')) {
+    db.exec(`PRAGMA foreign_keys = OFF`)
+    db.exec(`
+      CREATE TABLE studios_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        color TEXT,
+        maker_id INTEGER REFERENCES makers(id) ON DELETE SET NULL
+      );
+      INSERT INTO studios_new SELECT id, name, color, maker_id FROM studios;
+      DROP TABLE studios;
+      ALTER TABLE studios_new RENAME TO studios;
+    `)
+    db.exec(`PRAGMA foreign_keys = ON`)
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS studios_unique_null_maker ON studios(name) WHERE maker_id IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS studios_unique_with_maker ON studios(name, maker_id) WHERE maker_id IS NOT NULL;
+  `)
+
   // studio_codes 테이블 마이그레이션
   const studioCodesTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='studio_codes'").get()
   if (!studioCodesTable) {

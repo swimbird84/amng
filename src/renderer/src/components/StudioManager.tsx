@@ -42,6 +42,8 @@ export default function StudioManager({ onClose }: Props) {
   const [editingName, setEditingName] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [newName, setNewName] = useState('')
+  const [openAddMakerId, setOpenAddMakerId] = useState<string | null>(null)
+  const [addingName, setAddingName] = useState('')
 
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [codesMap, setCodesMap] = useState<Record<number, StudioCode[]>>({})
@@ -69,14 +71,14 @@ export default function StudioManager({ onClose }: Props) {
 
   // 제작사별 그룹 (정렬 기준: 제작사 이름 or 제작사 작품총합)
   const makerGroups = useMemo(() => {
-    type MakerGroup = { makerId: string; makerName: string; studios: StudioWithCount[]; totalWorks: number }
+    type MakerGroup = { makerId: string; makerName: string; makerColor: string | null; studios: StudioWithCount[]; totalWorks: number }
     const groups: MakerGroup[] = []
     const groupMap = new Map<string, MakerGroup>()
 
     for (const s of studios) {
       const key = s.maker_id != null ? String(s.maker_id) : '__none__'
       if (!groupMap.has(key)) {
-        const g: MakerGroup = { makerId: key, makerName: s.maker_name ?? 'UNDEFINED', studios: [], totalWorks: 0 }
+        const g: MakerGroup = { makerId: key, makerName: s.maker_name ?? 'UNDEFINED', makerColor: s.maker_color ?? null, studios: [], totalWorks: 0 }
         groupMap.set(key, g)
         if (key !== '__none__') groups.push(g)
       }
@@ -97,6 +99,16 @@ export default function StudioManager({ onClose }: Props) {
 
     return groups
   }, [studios, sortBy, sortDir])
+
+  const handleAddToMaker = async (makerId: string, makerColor: string | null) => {
+    const name = addingName.trim()
+    if (!name) return
+    const numId = makerId === '__none__' ? null : parseInt(makerId)
+    await studiosApi.create(name, numId, makerColor)
+    setAddingName('')
+    setOpenAddMakerId(null)
+    load()
+  }
 
   const handleSaveEdit = async (studio: StudioWithCount) => {
     const name = editingName.trim()
@@ -140,8 +152,10 @@ export default function StudioManager({ onClose }: Props) {
     const code = (newCodeMap[studioId] || '').trim()
     if (!code) return
     await studioCodesApi.create(studioId, code)
+    await studioCodesApi.applyToWorks(studioId, code)
     setNewCodeMap((prev) => ({ ...prev, [studioId]: '' }))
     await loadCodes(studioId)
+    loadAll()
   }
 
   const handleUpdateCode = async (id: number, studioId: number) => {
@@ -320,11 +334,36 @@ export default function StudioManager({ onClose }: Props) {
             const isCollapsed = collapsedMakerGroups.has(g.makerId)
             return (
               <div key={g.makerId}>
-                <button onClick={() => toggleMakerGroup(g.makerId)} className="flex items-center gap-2 w-full px-2 py-1.5">
-                  <span className="text-xs text-gray-500">{g.makerName}</span>
-                  <span className="text-xs text-gray-600">({g.studios.length}개 {g.totalWorks}편)</span>
-                  <span className="flex-1 border-t border-gray-700" />
-                </button>
+                <div className="flex items-center gap-2 px-2 py-1.5">
+                  <button onClick={() => toggleMakerGroup(g.makerId)} className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-sm font-bold shrink-0" style={{ color: resolvedColor(g.makerName, g.makerColor) }}>{g.makerName}</span>
+                    <span className="flex-1 border-t border-gray-700" />
+                  </button>
+                  <span className="text-xs text-gray-600 shrink-0">레이블:{g.studios.length}개 총작품:{g.totalWorks}편</span>
+                  <button
+                    onClick={() => { setOpenAddMakerId(openAddMakerId === g.makerId ? null : g.makerId); setAddingName('') }}
+                    className="shrink-0 text-white text-xs px-2 py-0.5 rounded"
+                    style={{ backgroundColor: resolvedColor(g.makerName, g.makerColor) }}
+                  >추가</button>
+                </div>
+                {openAddMakerId === g.makerId && (
+                  <div className="flex gap-1.5 px-2 pb-1.5">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={addingName}
+                      onChange={(e) => setAddingName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddToMaker(g.makerId, g.makerColor); if (e.key === 'Escape') setOpenAddMakerId(null) }}
+                      placeholder="레이블 이름"
+                      className="bg-gray-700 text-white text-sm px-2 py-1 rounded flex-1"
+                    />
+                    <button
+                      onClick={() => handleAddToMaker(g.makerId, g.makerColor)}
+                      className="text-white text-xs px-3 py-1 rounded shrink-0"
+                      style={{ backgroundColor: resolvedColor(g.makerName, g.makerColor) }}
+                    >추가</button>
+                  </div>
+                )}
                 {!isCollapsed && g.studios.map(renderStudioRow)}
               </div>
             )

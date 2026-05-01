@@ -100,23 +100,59 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   const handleSelectFiles = async () => {
     const paths = await dialogApi.openFiles() as string[]
-    if (paths.length > 0) {
-      setFileEntries((prev) => {
-        const isFirst = prev.length === 0
-        const newEntries = paths
-          .filter((p) => !prev.some((e) => e.path === p))
-          .map((p) => ({ path: p, type: 'local' as const }))
-        if (isFirst && newEntries.length > 0 && studioId === null) {
-          const filename = newEntries[0].path.replace(/\\/g, '/').split('/').pop() ?? ''
-          const match = filename.match(/^([A-Za-z]+)-\d/i)
-          if (match) {
-            studioCodesApi.lookup(match[1]).then((sid) => {
+    if (paths.length === 0) return
+
+    const isFirst = fileEntries.length === 0
+    const newPaths = paths.filter(p => !fileEntries.some(e => e.path === p))
+
+    setFileEntries((prev) => {
+      const newEntries = paths
+        .filter((p) => !prev.some((e) => e.path === p))
+        .map((p) => ({ path: p, type: 'local' as const }))
+      if (isFirst && newEntries.length > 0) {
+        const firstPath = newEntries[0].path.replace(/\\/g, '/')
+        const parts = firstPath.split('/')
+        const folder = parts.length >= 2 ? parts[parts.length - 2] : ''
+        const dateMatch = folder.match(/^(\d{4}-\d{2}-\d{2})[\s_]/)
+        if (dateMatch) setReleaseDate(dateMatch[1])
+        if (studioId === null) {
+          const filename = parts[parts.length - 1] ?? ''
+          const codeMatch = filename.match(/^(.+)-\d/)
+          if (codeMatch) {
+            studioCodesApi.lookup(codeMatch[1]).then((sid) => {
               if (sid !== null) setStudioId(sid)
             })
           }
         }
-        return [...prev, ...newEntries]
-      })
+      }
+      return [...prev, ...newEntries]
+    })
+
+    if (isFirst && newPaths.length > 0) {
+      const firstPath = newPaths[0]
+
+      if (!coverPath) {
+        const basePath = firstPath.replace(/\.[^.]+$/, '')
+        for (const ext of ['.jpg', '.jpeg', '.png', '.webp']) {
+          if (await shellApi.fileExists(basePath + ext)) {
+            setCoverPath(basePath + ext)
+            break
+          }
+        }
+      }
+
+      const parts = firstPath.replace(/\\/g, '/').split('/')
+      const parentFolder = parts.length >= 3 ? parts[parts.length - 3] : ''
+      const actorMatch = parentFolder.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
+      if (actorMatch) {
+        const actorName = actorMatch[1]
+        const birthday = actorMatch[2]
+        const actorId = await actorsApi.findOrCreate(actorName, birthday)
+        const updatedActors = await actorsApi.list() as Actor[]
+        setAllActors(updatedActors)
+        setSelectedActorIds((prev) => prev.includes(actorId) ? prev : [...prev, actorId])
+        setRepActorIds((prev) => prev.includes(actorId) ? prev : [...prev, actorId])
+      }
     }
   }
 
@@ -489,7 +525,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                     }}
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full text-left flex items-center justify-between"
                   >
-                    <span className="truncate">{(() => { const s = allStudios.find((s) => s.id === studioId); return s ? (s.maker_name ? `${s.maker_name} ${s.name}` : s.name) : '없음' })()}</span>
+                    <span className="truncate">{(() => { const s = allStudios.find((s) => s.id === studioId); return s ? (s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name) : '없음' })()}</span>
                     <span className="text-gray-400 text-xs ml-1">▼</span>
                   </button>
                   {studioDropOpen && studioDropRect && (
@@ -517,7 +553,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                           onClick={() => { setStudioId(s.id); localStorage.setItem('workform:lastStudioId', String(s.id)); setStudioDropOpen(false) }}
                           className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
                         >
-                          {s.maker_name ? `${s.maker_name} ${s.name}` : s.name}
+                          {s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name}
                         </button>
                       ))}
                     </div>

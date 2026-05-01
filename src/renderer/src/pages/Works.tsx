@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Work, Tag, Actor, Studio } from '../types'
-import { worksApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi } from '../api'
+import { worksApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi } from '../api'
 import SearchBar, { type WorkSearchParams } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import ImagePreview from '../components/ImagePreview'
@@ -48,6 +48,11 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   )
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [deleteMode, setDeleteMode] = useState(false)
+  const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const isDragging = useRef(false)
+  const dragAction = useRef<'add' | 'remove'>('add')
 
   const loadWorks = useCallback(async () => {
     const params: Record<string, unknown> = {}
@@ -71,6 +76,11 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   }
 
   useEffect(() => { loadWorks() }, [loadWorks])
+  useEffect(() => {
+    const onMouseUp = () => { isDragging.current = false }
+    document.addEventListener('mouseup', onMouseUp)
+    return () => document.removeEventListener('mouseup', onMouseUp)
+  }, [])
   useEffect(() => {
     loadTags()
     loadActorList()
@@ -113,17 +123,28 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const handleScan = async () => {
     const folder = await dialogApi.openFolder() as string | null
     if (!folder) return
-    const { newFiles, duplicates } = await scanApi.folder(folder) as { newFiles: string[], duplicates: string[] }
+    const { newFiles, duplicates } = await scanApi.folder(folder) as { newFiles: { videoPath: string, imagePath: string | null }[], duplicates: string[] }
     if (newFiles.length === 0 && duplicates.length === 0) return alert('동영상 파일이 없습니다')
 
     let added = 0
-    for (const file of newFiles) {
+    for (const { videoPath, imagePath } of newFiles) {
       try {
-        const fileName = file.split(/[\\/]/).pop() ?? ''
+        const parts = videoPath.replace(/\\/g, '/').split('/')
+        const fileName = parts[parts.length - 1] ?? ''
+        const folderName = parts.length >= 2 ? parts[parts.length - 2] : ''
+        const parentFolder = parts.length >= 3 ? parts[parts.length - 3] : ''
         const productNumber = fileName.replace(/\.[^.]+$/, '')
-        const match = productNumber.match(/^([A-Za-z]+)-\d/i)
-        const studioId = match ? await studioCodesApi.lookup(match[1]) : null
-        await worksApi.create({ file_path: file, product_number: productNumber, studio_id: studioId })
+        const codeMatch = productNumber.match(/^(.+)-\d/)
+        const studioId = codeMatch ? await studioCodesApi.lookup(codeMatch[1]) : null
+        const dateMatch = folderName.match(/^(\d{4}-\d{2}-\d{2})[\s_]/)
+        const releaseDate = dateMatch ? dateMatch[1] : undefined
+        const actorMatch = parentFolder.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
+        const actorId = actorMatch ? await actorsApi.findOrCreate(actorMatch[1], actorMatch[2]) : null
+        const workId = await worksApi.create({ file_path: videoPath, product_number: productNumber, studio_id: studioId, release_date: releaseDate, actor_ids: actorId ? [actorId] : undefined, rep_actor_ids: actorId ? [actorId] : undefined }) as number
+        if (imagePath) {
+          const newCoverPath = await imageApi.copy(imagePath, 'works', workId) as string
+          await worksApi.update(workId, { cover_path: newCoverPath })
+        }
         added++
       } catch {
         // 무시
@@ -166,6 +187,21 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
       .filter((a) => newRepIds.includes(a.id))
       .map((a) => ({ id: a.id, name: a.name }))
     setSelected({ ...selected, rep_actors: newRepActors })
+    loadWorks()
+  }
+
+  const exitDeleteMode = () => {
+    setDeleteMode(false)
+    setSelectedDeleteIds(new Set())
+    setDeleteConfirm(false)
+  }
+
+  const handleBulkDelete = async () => {
+    for (const id of selectedDeleteIds) {
+      await worksApi.delete(id)
+    }
+    setSelected(null)
+    exitDeleteMode()
     loadWorks()
   }
 
@@ -225,6 +261,14 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
               >
                 {favoriteOnly ? '♥' : '♡'}
               </button>
+              {deleteMode ? (
+                <>
+                  <button onClick={() => selectedDeleteIds.size > 0 && setDeleteConfirm(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button>
+                  <button onClick={exitDeleteMode} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm">✕</button>
+                </>
+              ) : (
+                <button onClick={() => setDeleteMode(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button>
+              )}
             </div>
           </div>
         </div>
@@ -234,24 +278,57 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
             {works.map((w) => (
               <div
                 key={w.id}
-                onClick={() => handleSelect(w.id)}
-                onMouseMove={(e) => w.comment && setTooltip({ text: w.comment, x: e.clientX, y: e.clientY })}
+                onMouseDown={(e) => {
+                  if (!deleteMode) return
+                  e.preventDefault()
+                  isDragging.current = true
+                  const willAdd = !selectedDeleteIds.has(w.id)
+                  dragAction.current = willAdd ? 'add' : 'remove'
+                  setSelectedDeleteIds((prev) => {
+                    const next = new Set(prev)
+                    if (willAdd) next.add(w.id); else next.delete(w.id)
+                    return next
+                  })
+                }}
+                onMouseEnter={() => {
+                  if (!deleteMode || !isDragging.current) return
+                  setSelectedDeleteIds((prev) => {
+                    const next = new Set(prev)
+                    if (dragAction.current === 'add') next.add(w.id); else next.delete(w.id)
+                    return next
+                  })
+                }}
+                onClick={() => { if (!deleteMode) handleSelect(w.id) }}
+                onMouseMove={(e) => !deleteMode && w.comment && setTooltip({ text: w.comment, x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setTooltip(null)}
                 className={`relative cursor-pointer rounded-lg border ring-2 ${
-                  selected?.id === w.id
-                    ? 'border-blue-500 ring-blue-500'
-                    : 'border-gray-700 ring-transparent hover:border-gray-500'
+                  deleteMode
+                    ? selectedDeleteIds.has(w.id)
+                      ? 'border-red-500 ring-red-500'
+                      : 'border-gray-700 ring-transparent hover:border-red-400'
+                    : selected?.id === w.id
+                      ? 'border-blue-500 ring-blue-500'
+                      : 'border-gray-700 ring-transparent hover:border-gray-500'
                 }`}
               >
                 <div className="relative rounded-t-lg overflow-hidden">
                   <ImagePreview path={w.cover_path} alt={w.title || '표지'} className="w-full h-40" version={refreshKey} />
+                  {deleteMode && selectedDeleteIds.has(w.id) && (
+                    <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none">
+                      <span className="text-white text-4xl font-bold drop-shadow">✓</span>
+                    </div>
+                  )}
                   {w.studio_name && (
-                    <span
-                      className="absolute top-1 left-1 text-white text-xs px-1.5 py-0.5 rounded leading-tight max-w-[70%] truncate"
-                      style={{ backgroundColor: studioColor(w.studio_name, w.studio_color) }}
-                    >
-                      {w.studio_name}
-                    </span>
+                    <div className="absolute top-1 left-1 max-w-[70%]" style={{ lineHeight: 0 }}>
+                      <span
+                        className="text-white text-xs px-1.5 rounded"
+                        style={{ backgroundColor: studioColor(w.studio_name, w.studio_color), display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', lineHeight: '1.5', verticalAlign: 'top' } as any}
+                      >
+                        {w.studio_maker_name && w.studio_maker_name !== w.studio_name
+                          ? <><span style={{ whiteSpace: 'nowrap' }}>{w.studio_maker_name}</span>{' '}<span style={{ whiteSpace: 'nowrap' }}>{w.studio_name}</span></>
+                          : w.studio_name}
+                      </span>
+                    </div>
                   )}
                   <button
                     onClick={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
@@ -353,7 +430,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                         className="inline-block text-white text-sm px-2 py-0.5 rounded"
                         style={{ backgroundColor: studioColor(selected.studio_name, selected.studio_color) }}
                       >
-                        {selected.studio_name}
+                        {selected.studio_maker_name && selected.studio_maker_name !== selected.studio_name ? `${selected.studio_maker_name} ${selected.studio_name}` : selected.studio_name}
                       </span>
                     )}
                   </div>
@@ -528,6 +605,18 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                   </div>
                 )
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 flex flex-col gap-4 min-w-[280px]" onClick={(e) => e.stopPropagation()}>
+            <p className="text-white">선택된 {selectedDeleteIds.size}개 작품을 삭제하시겠습니까?</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeleteConfirm(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>
+              <button onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded text-sm">삭제</button>
             </div>
           </div>
         </div>

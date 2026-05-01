@@ -11,10 +11,30 @@ interface Props {
 }
 
 // 작품 카드 (발매일 분포용, 기존 Works.tsx 카드와 동일한 디자인)
+function hashColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return `hsl(${Math.abs(hash) % 360}, 65%, 45%)`
+}
+
 function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & { rep_tags?: { id: number; name: string }[]; rep_actors?: { id: number; name: string }[] }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
     <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
+      <div className="relative">
+        <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
+        {work.studio_name && (
+          <div className="absolute top-1 left-1 max-w-[70%]" style={{ lineHeight: 0 }}>
+            <span
+              className="text-white text-xs px-1.5 rounded"
+              style={{ backgroundColor: work.studio_color || hashColor(work.studio_name), display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', lineHeight: '1.5', verticalAlign: 'top' } as any}
+            >
+              {work.studio_maker_name && work.studio_maker_name !== work.studio_name
+                ? <><span style={{ whiteSpace: 'nowrap' }}>{work.studio_maker_name}</span>{' '}<span style={{ whiteSpace: 'nowrap' }}>{work.studio_name}</span></>
+                : work.studio_name}
+            </span>
+          </div>
+        )}
+      </div>
       <div className="p-2 bg-gray-800">
         <div className="flex items-center justify-between gap-1">
           <p className="text-sm font-bold text-white truncate flex-1">{work.product_number || '-'}</p>
