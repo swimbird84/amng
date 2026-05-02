@@ -70,7 +70,7 @@ function WorkMiniCard({ work, onClick }: { work: Work; onClick: () => void }) {
   )
 }
 
-type SortBy = 'name' | 'count' | 'maker_created' | 'label_created'
+type SortBy = 'name' | 'count' | 'label_count' | 'maker_created' | 'label_created'
 
 interface Props {
   onNavigateToWork: (id: number) => void
@@ -132,12 +132,20 @@ export default function Labels({ onNavigateToWork }: Props) {
     let list = keyword ? studios.filter(s => s.name.toLowerCase().includes(keyword.toLowerCase())) : [...studios]
     if (sortBy === 'name') {
       list.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }) * dir)
+    } else if (sortBy === 'count') {
+      list.sort((a, b) => (a.work_count - b.work_count) * dir)
+    } else if (sortBy === 'label_count') {
+      list.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }))
     } else if (sortBy === 'maker_created') {
       list.sort((a, b) => ((a.maker_created_at ?? '') < (b.maker_created_at ?? '') ? -1 : 1) * dir)
-    } else if (sortBy === 'label_created') {
-      list.sort((a, b) => ((a.created_at ?? '') < (b.created_at ?? '') ? -1 : 1) * dir)
     } else {
-      list.sort((a, b) => (a.work_count - b.work_count) * dir)
+      // label_created: id 기준 (created_at 있으면 우선, 동일하면 id)
+      list.sort((a, b) => {
+        const ca = a.created_at ?? ''
+        const cb = b.created_at ?? ''
+        if (ca !== cb) return (ca < cb ? -1 : 1) * dir
+        return (a.id - b.id) * dir
+      })
     }
     return list
   }, [studios, keyword, sortBy, sortDir])
@@ -148,29 +156,34 @@ export default function Labels({ onNavigateToWork }: Props) {
 
     // Sort makers based on sortBy
     const sortedMakers = [...makers]
+    // Pre-compute totalWorks per maker from studios for count sort
+    const makerTotalWorks = new Map<number, number>()
+    for (const s of studios) {
+      if (s.maker_id != null) {
+        makerTotalWorks.set(s.maker_id, (makerTotalWorks.get(s.maker_id) ?? 0) + s.work_count)
+      }
+    }
+
     if (sortBy === 'name') {
       sortedMakers.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }) * dir)
     } else if (sortBy === 'count') {
+      sortedMakers.sort((a, b) => ((makerTotalWorks.get(a.id) ?? 0) - (makerTotalWorks.get(b.id) ?? 0)) * dir)
+    } else if (sortBy === 'label_count') {
       sortedMakers.sort((a, b) => (a.studio_count - b.studio_count) * dir)
     } else if (sortBy === 'maker_created') {
       sortedMakers.sort((a, b) => ((a.created_at ?? '') < (b.created_at ?? '') ? -1 : 1) * dir)
     } else {
-      // label_created: sort makers by max/min label created_at in their group
-      const makerRepDate = new Map<number, number>()
+      // label_created: 그룹 내 min/max id 기준으로 제작사 순서 결정
+      const makerRepId = new Map<number, number>()
       for (const s of studios) {
-        if (s.maker_id != null && s.created_at) {
-          const ts = new Date(s.created_at).getTime()
-          const cur = makerRepDate.get(s.maker_id)
-          if (cur === undefined || (sortDir === 'desc' ? ts > cur : ts < cur)) {
-            makerRepDate.set(s.maker_id, ts)
+        if (s.maker_id != null) {
+          const cur = makerRepId.get(s.maker_id)
+          if (cur === undefined || (sortDir === 'desc' ? s.id > cur : s.id < cur)) {
+            makerRepId.set(s.maker_id, s.id)
           }
         }
       }
-      sortedMakers.sort((a, b) => {
-        const aVal = makerRepDate.get(a.id) ?? 0
-        const bVal = makerRepDate.get(b.id) ?? 0
-        return (aVal - bVal) * dir
-      })
+      sortedMakers.sort((a, b) => ((makerRepId.get(a.id) ?? 0) - (makerRepId.get(b.id) ?? 0)) * dir)
     }
 
     const groups: Group[] = []
@@ -208,6 +221,7 @@ export default function Labels({ onNavigateToWork }: Props) {
             >
               <option value="name">이름</option>
               <option value="count">작품수</option>
+              <option value="label_count">레이블수</option>
               <option value="maker_created">제작사등록</option>
               <option value="label_created">레이블등록</option>
             </select>

@@ -814,7 +814,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('studios:create', (_e, name: string, makerId?: number | null, color?: string | null) => {
     try {
-      const result = db().prepare('INSERT INTO studios (name, maker_id, color) VALUES (?, ?, ?)').run(name.trim(), makerId ?? null, color ?? null)
+      const result = db().prepare('INSERT INTO studios (name, maker_id, color, created_at) VALUES (?, ?, ?, datetime(\'now\'))').run(name.trim(), makerId ?? null, color ?? null)
       return result.lastInsertRowid
     } catch {
       // 미분류 중복 시 기존 ID 반환

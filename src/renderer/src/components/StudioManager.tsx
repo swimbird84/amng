@@ -24,7 +24,7 @@ interface Props {
   onClose: () => void
 }
 
-type SortBy = 'name' | 'count' | 'maker_created' | 'label_created'
+type SortBy = 'name' | 'count' | 'label_count' | 'maker_created' | 'label_created'
 
 function hashColor(name: string): string {
   let hash = 0
@@ -78,6 +78,15 @@ export default function StudioManager({ onClose }: Props) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('studiomanager:sortDir') as 'asc' | 'desc') || 'desc'
   )
+  const [collapsedMakerIds, setCollapsedMakerIds] = useState<Set<string>>(new Set())
+
+  const toggleCollapse = (makerId: string) => {
+    setCollapsedMakerIds(prev => {
+      const next = new Set(prev)
+      if (next.has(makerId)) next.delete(makerId); else next.add(makerId)
+      return next
+    })
+  }
 
   const load = async () => {
     setStudios(await studiosApi.list(true) as StudioWithCount[])
@@ -125,10 +134,18 @@ export default function StudioManager({ onClose }: Props) {
         g.studios.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }) * dir)
       } else if (sortBy === 'count') {
         g.studios.sort((a, b) => (a.work_count - b.work_count) * dir)
+      } else if (sortBy === 'label_count') {
+        g.studios.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }))
       } else if (sortBy === 'maker_created') {
         g.studios.sort((a, b) => ((a.maker_created_at ?? '') < (b.maker_created_at ?? '') ? -1 : 1) * dir)
       } else {
-        g.studios.sort((a, b) => ((a.created_at ?? '') < (b.created_at ?? '') ? -1 : 1) * dir)
+        // label_created: id 기준 (created_at 있으면 우선, 동일하면 id)
+        g.studios.sort((a, b) => {
+          const ca = a.created_at ?? ''
+          const cb = b.created_at ?? ''
+          if (ca !== cb) return (ca < cb ? -1 : 1) * dir
+          return (a.id - b.id) * dir
+        })
       }
     }
 
@@ -137,15 +154,17 @@ export default function StudioManager({ onClose }: Props) {
       groups.sort((a, b) => a.makerName.localeCompare(b.makerName, 'ko-KR', { sensitivity: 'base' }) * dir)
     } else if (sortBy === 'count') {
       groups.sort((a, b) => (a.totalWorks - b.totalWorks) * dir)
+    } else if (sortBy === 'label_count') {
+      groups.sort((a, b) => (a.studios.length - b.studios.length) * dir)
     } else if (sortBy === 'maker_created') {
       groups.sort((a, b) => ((a.makerCreatedAt ?? '') < (b.makerCreatedAt ?? '') ? -1 : 1) * dir)
     } else {
-      // label_created: sort makers by max/min studio created_at in their group
+      // label_created: 그룹 내 min/max id 기준으로 제작사 순서 결정
       groups.sort((a, b) => {
-        const aTs = a.studios.map(s => s.created_at ? new Date(s.created_at).getTime() : 0)
-        const bTs = b.studios.map(s => s.created_at ? new Date(s.created_at).getTime() : 0)
-        const aVal = sortDir === 'desc' ? Math.max(...aTs) : Math.min(...aTs)
-        const bVal = sortDir === 'desc' ? Math.max(...bTs) : Math.min(...bTs)
+        const aIds = a.studios.map(s => s.id)
+        const bIds = b.studios.map(s => s.id)
+        const aVal = sortDir === 'desc' ? Math.max(...aIds) : Math.min(...aIds)
+        const bVal = sortDir === 'desc' ? Math.max(...bIds) : Math.min(...bIds)
         return (aVal - bVal) * dir
       })
     }
@@ -308,7 +327,7 @@ export default function StudioManager({ onClose }: Props) {
 
   const renderStudioRow = (studio: StudioWithCount) => (
     <div key={studio.id}>
-      <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700/50 ml-4">
+      <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700/50">
         <button
           onClick={(e) => handleOpenLabelColorPicker(e, studio.id)}
           className="shrink-0 w-5 h-5 rounded border-2 border-gray-600 hover:border-gray-400"
@@ -327,7 +346,7 @@ export default function StudioManager({ onClose }: Props) {
             {studio.name}
           </button>
         )}
-        <span className="text-gray-500 text-xs w-10 text-right shrink-0">{studio.work_count}편</span>
+        <span className="text-gray-500 text-xs w-14 text-right shrink-0">작품:{studio.work_count}편</span>
         {deletingId === studio.id ? (
           <>
             <span className="text-red-400 text-xs">삭제?</span>
@@ -348,7 +367,7 @@ export default function StudioManager({ onClose }: Props) {
       </div>
 
       {expandedId === studio.id && (
-        <div className="ml-12 mb-1 space-y-0.5">
+        <div className="ml-8 mb-1 space-y-0.5">
           {(codesMap[studio.id] ?? []).map((sc) => (
             <div key={sc.id} className="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-700/40">
               <span className="text-gray-400 text-xs">└</span>
@@ -406,7 +425,8 @@ export default function StudioManager({ onClose }: Props) {
         <div className="flex gap-1.5 mb-3">
           {([
             { key: 'name' as const, label: '이름' },
-            { key: 'count' as const, label: '작품' },
+            { key: 'count' as const, label: '작품수' },
+            { key: 'label_count' as const, label: '레이블수' },
             { key: 'maker_created' as const, label: '제작사등록' },
             { key: 'label_created' as const, label: '레이블등록' },
           ]).map(({ key, label }) => {
@@ -464,11 +484,16 @@ export default function StudioManager({ onClose }: Props) {
                     </>
                   ) : (
                     <>
-                      <span className="text-sm font-bold shrink-0" style={{ color: isNone ? '#9ca3af' : makerColor }}>
-                        {g.makerName}
-                      </span>
-                      <span className="flex-1 border-t border-gray-700 min-w-0" />
-                      <span className="text-xs text-gray-400 shrink-0">작품:{g.totalWorks}편</span>
+                      <button
+                        onClick={() => toggleCollapse(g.makerId)}
+                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                      >
+                        <span className="text-sm font-bold shrink-0" style={{ color: isNone ? '#9ca3af' : makerColor }}>
+                          {g.makerName}({g.studios.length})
+                        </span>
+                        <span className="flex-1 border-t border-gray-700 min-w-0" />
+                        <span className="text-xs text-gray-400 shrink-0">작품:{g.totalWorks}편</span>
+                      </button>
                       {!isNone && (
                         isDeleting ? (
                           <>
@@ -547,9 +572,11 @@ export default function StudioManager({ onClose }: Props) {
                 )}
 
                 {/* Label rows */}
-                <div className="space-y-0.5">
-                  {g.studios.map(renderStudioRow)}
-                </div>
+                {!collapsedMakerIds.has(g.makerId) && (
+                  <div className="space-y-0.5">
+                    {g.studios.map(renderStudioRow)}
+                  </div>
+                )}
               </div>
             )
           })}
