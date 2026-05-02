@@ -4,7 +4,6 @@ import type { Work } from '../types'
 import { studiosApi, makersApi, worksApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import StudioManager from '../components/StudioManager'
-import MakerManager from '../components/MakerManager'
 
 interface StudioWithCount {
   id: number
@@ -14,6 +13,8 @@ interface StudioWithCount {
   maker_id: number | null
   maker_name: string | null
   maker_color: string | null
+  created_at: string | null
+  maker_created_at: string | null
 }
 
 interface MakerWithCount {
@@ -21,6 +22,7 @@ interface MakerWithCount {
   name: string
   color: string | null
   studio_count: number
+  created_at: string | null
 }
 
 function hashColor(name: string): string {
@@ -68,6 +70,8 @@ function WorkMiniCard({ work, onClick }: { work: Work; onClick: () => void }) {
   )
 }
 
+type SortBy = 'name' | 'count' | 'maker_created' | 'label_created'
+
 interface Props {
   onNavigateToWork: (id: number) => void
 }
@@ -76,8 +80,8 @@ export default function Labels({ onNavigateToWork }: Props) {
   const [studios, setStudios] = useState<StudioWithCount[]>([])
   const [makers, setMakers] = useState<MakerWithCount[]>([])
   const [keyword, setKeyword] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'count' | 'id'>(
-    (localStorage.getItem('labels:sortBy') as 'name' | 'count' | 'id') || 'count'
+  const [sortBy, setSortBy] = useState<SortBy>(
+    (localStorage.getItem('labels:sortBy') as SortBy) || 'count'
   )
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('labels:sortDir') as 'asc' | 'desc') || 'desc'
@@ -88,7 +92,6 @@ export default function Labels({ onNavigateToWork }: Props) {
     (localStorage.getItem('labels:yearSortDir') as 'asc' | 'desc') || 'asc'
   )
   const [showManager, setShowManager] = useState(false)
-  const [showMakerManager, setShowMakerManager] = useState(false)
   const [expandedMakerId, setExpandedMakerId] = useState<string | null>(null)
 
   const loadAll = async () => {
@@ -122,31 +125,64 @@ export default function Labels({ onNavigateToWork }: Props) {
     })
   }
 
+  const dir = sortDir === 'asc' ? 1 : -1
+
   // 필터링 + 정렬된 스튜디오
   const filteredStudios = useMemo(() => {
     let list = keyword ? studios.filter(s => s.name.toLowerCase().includes(keyword.toLowerCase())) : [...studios]
-    const dir = sortDir === 'asc' ? 1 : -1
-    if (sortBy === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'en-US') * dir)
-    else if (sortBy === 'id') list.sort((a, b) => (a.id - b.id) * dir)
-    else list.sort((a, b) => (a.work_count - b.work_count) * dir)
+    if (sortBy === 'name') {
+      list.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }) * dir)
+    } else if (sortBy === 'maker_created') {
+      list.sort((a, b) => ((a.maker_created_at ?? '') < (b.maker_created_at ?? '') ? -1 : 1) * dir)
+    } else if (sortBy === 'label_created') {
+      list.sort((a, b) => ((a.created_at ?? '') < (b.created_at ?? '') ? -1 : 1) * dir)
+    } else {
+      list.sort((a, b) => (a.work_count - b.work_count) * dir)
+    }
     return list
   }, [studios, keyword, sortBy, sortDir])
 
-  // 제작사별 그룹
+  // 제작사별 그룹 (정렬 포함)
   const makerGroups = useMemo(() => {
-    type Group = { makerId: string; makerName: string; makerColor: string | null; studios: StudioWithCount[] }
+    type Group = { makerId: string; makerName: string; makerColor: string | null; makerCreatedAt: string | null; studios: StudioWithCount[] }
+
+    // Sort makers based on sortBy
+    const sortedMakers = [...makers]
+    if (sortBy === 'name') {
+      sortedMakers.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }) * dir)
+    } else if (sortBy === 'count') {
+      sortedMakers.sort((a, b) => (a.studio_count - b.studio_count) * dir)
+    } else if (sortBy === 'maker_created') {
+      sortedMakers.sort((a, b) => ((a.created_at ?? '') < (b.created_at ?? '') ? -1 : 1) * dir)
+    } else {
+      // label_created: sort makers by max/min label created_at in their group
+      const makerRepDate = new Map<number, number>()
+      for (const s of studios) {
+        if (s.maker_id != null && s.created_at) {
+          const ts = new Date(s.created_at).getTime()
+          const cur = makerRepDate.get(s.maker_id)
+          if (cur === undefined || (sortDir === 'desc' ? ts > cur : ts < cur)) {
+            makerRepDate.set(s.maker_id, ts)
+          }
+        }
+      }
+      sortedMakers.sort((a, b) => {
+        const aVal = makerRepDate.get(a.id) ?? 0
+        const bVal = makerRepDate.get(b.id) ?? 0
+        return (aVal - bVal) * dir
+      })
+    }
+
     const groups: Group[] = []
     const groupMap = new Map<string, Group>()
 
-    // 등록된 제작사 순서 기준 (makers 배열 순)
-    for (const maker of makers) {
+    for (const maker of sortedMakers) {
       const key = String(maker.id)
-      const g: Group = { makerId: key, makerName: maker.name, makerColor: maker.color, studios: [] }
+      const g: Group = { makerId: key, makerName: maker.name, makerColor: maker.color, makerCreatedAt: maker.created_at, studios: [] }
       groupMap.set(key, g)
       groups.push(g)
     }
-    // 미분류 그룹
-    const noneGroup: Group = { makerId: '__none__', makerName: 'UNDEFINED', makerColor: null, studios: [] }
+    const noneGroup: Group = { makerId: '__none__', makerName: 'UNDEFINED', makerColor: null, makerCreatedAt: null, studios: [] }
     groupMap.set('__none__', noneGroup)
     groups.push(noneGroup)
 
@@ -156,7 +192,7 @@ export default function Labels({ onNavigateToWork }: Props) {
     }
 
     return groups
-  }, [makers, filteredStudios])
+  }, [makers, filteredStudios, sortBy, sortDir, studios])
 
   const selectedStudio = studios.find(s => s.id === selectedStudioId)
 
@@ -167,12 +203,13 @@ export default function Labels({ onNavigateToWork }: Props) {
           <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
             <select
               value={sortBy}
-              onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('labels:sortBy', v) }}
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
+              onChange={(e) => { const v = e.target.value as SortBy; setSortBy(v); localStorage.setItem('labels:sortBy', v) }}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-32"
             >
               <option value="name">이름</option>
               <option value="count">작품수</option>
-              <option value="id">등록일</option>
+              <option value="maker_created">제작사등록</option>
+              <option value="label_created">레이블등록</option>
             </select>
             <button
               onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('labels:sortDir', next); return next })}
@@ -201,13 +238,7 @@ export default function Labels({ onNavigateToWork }: Props) {
               onClick={() => setShowManager(true)}
               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
             >
-              + 레이블 관리
-            </button>
-            <button
-                onClick={() => setShowMakerManager(true)}
-                className="bg-purple-700 hover:bg-purple-600 text-white px-3 py-1.5 rounded text-sm"
-            >
-              + 제작사 관리
+              + 제작사/레이블 관리
             </button>
           </div>
         </div>
@@ -311,9 +342,6 @@ export default function Labels({ onNavigateToWork }: Props) {
 
       {showManager && (
         <StudioManager onClose={() => { setShowManager(false); loadAll() }} />
-      )}
-      {showMakerManager && (
-        <MakerManager onClose={() => { setShowMakerManager(false); loadAll() }} />
       )}
     </div>
   )

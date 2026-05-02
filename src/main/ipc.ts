@@ -796,7 +796,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('studios:list', (_e, withCount?: boolean) => {
     if (withCount) {
       return db().prepare(`
-        SELECT s.*, COUNT(w.id) AS work_count, m.id AS maker_id, m.name AS maker_name, m.color AS maker_color
+        SELECT s.*, COUNT(w.id) AS work_count, m.id AS maker_id, m.name AS maker_name, m.color AS maker_color, m.created_at AS maker_created_at
         FROM studios s
         LEFT JOIN works w ON w.studio_id = s.id
         LEFT JOIN makers m ON m.id = s.maker_id
@@ -805,7 +805,7 @@ export function registerIpcHandlers(): void {
       `).all()
     }
     return db().prepare(`
-      SELECT s.*, m.id AS maker_id, m.name AS maker_name, m.color AS maker_color
+      SELECT s.*, m.id AS maker_id, m.name AS maker_name, m.color AS maker_color, m.created_at AS maker_created_at
       FROM studios s
       LEFT JOIN makers m ON m.id = s.maker_id
       ORDER BY s.name

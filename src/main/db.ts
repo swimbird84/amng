@@ -245,6 +245,13 @@ export function initDatabase(): void {
     CREATE UNIQUE INDEX IF NOT EXISTS studios_unique_with_maker ON studios(name, maker_id) WHERE maker_id IS NOT NULL;
   `)
 
+  // studios.created_at 컬럼 마이그레이션
+  const studioColsLatest = (db.prepare("PRAGMA table_info(studios)").all() as { name: string }[]).map(c => c.name)
+  if (!studioColsLatest.includes('created_at')) {
+    db.prepare("ALTER TABLE studios ADD COLUMN created_at TEXT").run()
+    db.prepare("UPDATE studios SET created_at = datetime('now') WHERE created_at IS NULL").run()
+  }
+
   // studio_codes 테이블 마이그레이션
   const studioCodesTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='studio_codes'").get()
   if (!studioCodesTable) {

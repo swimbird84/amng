@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { studiosApi, studioCodesApi } from '../api'
+import type React from 'react'
+import { studiosApi, studioCodesApi, makersApi } from '../api'
 
 interface StudioWithCount {
   id: number
@@ -8,6 +9,9 @@ interface StudioWithCount {
   work_count: number
   maker_id: number | null
   maker_name: string | null
+  maker_color: string | null
+  created_at: string | null
+  maker_created_at: string | null
 }
 
 interface StudioCode {
@@ -19,6 +23,8 @@ interface StudioCode {
 interface Props {
   onClose: () => void
 }
+
+type SortBy = 'name' | 'count' | 'maker_created' | 'label_created'
 
 function hashColor(name: string): string {
   let hash = 0
@@ -38,13 +44,10 @@ const COLOR_PALETTE = [
 export default function StudioManager({ onClose }: Props) {
   const [studios, setStudios] = useState<StudioWithCount[]>([])
 
+  // Label-level state
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingName, setEditingName] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [newName, setNewName] = useState('')
-  const [openAddMakerId, setOpenAddMakerId] = useState<string | null>(null)
-  const [addingName, setAddingName] = useState('')
-
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [codesMap, setCodesMap] = useState<Record<number, StudioCode[]>>({})
   const [editingCodeId, setEditingCodeId] = useState<number | null>(null)
@@ -52,16 +55,29 @@ export default function StudioManager({ onClose }: Props) {
   const [deletingCodeId, setDeletingCodeId] = useState<number | null>(null)
   const [newCodeMap, setNewCodeMap] = useState<Record<number, string>>({})
 
-  const [sortBy, setSortBy] = useState<'name' | 'count'>(
-    (localStorage.getItem('studiomanager:sortBy') as 'name' | 'count') || 'count'
+  // Maker-level state
+  const [editingMakerId, setEditingMakerId] = useState<number | null>(null)
+  const [editingMakerName, setEditingMakerName] = useState('')
+  const [deletingMakerId, setDeletingMakerId] = useState<number | null>(null)
+  const [openAssignMakerId, setOpenAssignMakerId] = useState<number | null>(null)
+  const [openAddMakerId, setOpenAddMakerId] = useState<string | null>(null)
+  const [addingName, setAddingName] = useState('')
+  const [newName, setNewName] = useState('')
+
+  // Label color picker
+  const [labelColorPickerId, setLabelColorPickerId] = useState<number | null>(null)
+  const [labelColorPickerPos, setLabelColorPickerPos] = useState<{ top: number; left: number } | null>(null)
+
+  // Maker color picker
+  const [makerColorPickerId, setMakerColorPickerId] = useState<number | null>(null)
+  const [makerColorPickerPos, setMakerColorPickerPos] = useState<{ top: number; left: number } | null>(null)
+
+  const [sortBy, setSortBy] = useState<SortBy>(
+    (localStorage.getItem('studiomanager:sortBy') as SortBy) || 'count'
   )
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('studiomanager:sortDir') as 'asc' | 'desc') || 'desc'
   )
-  const [collapsedMakerGroups, setCollapsedMakerGroups] = useState<Set<string>>(new Set())
-
-  const [colorPickerId, setColorPickerId] = useState<number | null>(null)
-  const [colorPickerPos, setColorPickerPos] = useState<{ top: number; left: number } | null>(null)
 
   const load = async () => {
     setStudios(await studiosApi.list(true) as StudioWithCount[])
@@ -69,16 +85,31 @@ export default function StudioManager({ onClose }: Props) {
 
   useEffect(() => { load() }, [])
 
-  // 제작사별 그룹 (정렬 기준: 제작사 이름 or 제작사 작품총합)
   const makerGroups = useMemo(() => {
-    type MakerGroup = { makerId: string; makerName: string; makerColor: string | null; studios: StudioWithCount[]; totalWorks: number }
+    type MakerGroup = {
+      makerId: string
+      makerNumId: number | null
+      makerName: string
+      makerColor: string | null
+      makerCreatedAt: string | null
+      studios: StudioWithCount[]
+      totalWorks: number
+    }
     const groups: MakerGroup[] = []
     const groupMap = new Map<string, MakerGroup>()
 
     for (const s of studios) {
       const key = s.maker_id != null ? String(s.maker_id) : '__none__'
       if (!groupMap.has(key)) {
-        const g: MakerGroup = { makerId: key, makerName: s.maker_name ?? 'UNDEFINED', makerColor: s.maker_color ?? null, studios: [], totalWorks: 0 }
+        const g: MakerGroup = {
+          makerId: key,
+          makerNumId: s.maker_id,
+          makerName: s.maker_name ?? 'UNDEFINED',
+          makerColor: s.maker_color ?? null,
+          makerCreatedAt: s.maker_created_at ?? null,
+          studios: [],
+          totalWorks: 0,
+        }
         groupMap.set(key, g)
         if (key !== '__none__') groups.push(g)
       }
@@ -86,21 +117,62 @@ export default function StudioManager({ onClose }: Props) {
       groupMap.get(key)!.totalWorks += s.work_count
     }
 
-    // 레이블 내부는 이름순
-    for (const g of groupMap.values()) g.studios.sort((a, b) => a.name.localeCompare(b.name, 'en-US'))
-
     const dir = sortDir === 'asc' ? 1 : -1
-    if (sortBy === 'name') groups.sort((a, b) => a.makerName.localeCompare(b.makerName, 'en-US') * dir)
-    else groups.sort((a, b) => (a.totalWorks - b.totalWorks) * dir)
 
-    // UNDEFINED 항상 맨 아래
+    // Sort internal labels per group
+    for (const g of groupMap.values()) {
+      if (sortBy === 'name') {
+        g.studios.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }) * dir)
+      } else if (sortBy === 'count') {
+        g.studios.sort((a, b) => (a.work_count - b.work_count) * dir)
+      } else if (sortBy === 'maker_created') {
+        g.studios.sort((a, b) => ((a.maker_created_at ?? '') < (b.maker_created_at ?? '') ? -1 : 1) * dir)
+      } else {
+        g.studios.sort((a, b) => ((a.created_at ?? '') < (b.created_at ?? '') ? -1 : 1) * dir)
+      }
+    }
+
+    // Sort maker groups
+    if (sortBy === 'name') {
+      groups.sort((a, b) => a.makerName.localeCompare(b.makerName, 'ko-KR', { sensitivity: 'base' }) * dir)
+    } else if (sortBy === 'count') {
+      groups.sort((a, b) => (a.totalWorks - b.totalWorks) * dir)
+    } else if (sortBy === 'maker_created') {
+      groups.sort((a, b) => ((a.makerCreatedAt ?? '') < (b.makerCreatedAt ?? '') ? -1 : 1) * dir)
+    } else {
+      // label_created: sort makers by max/min studio created_at in their group
+      groups.sort((a, b) => {
+        const aTs = a.studios.map(s => s.created_at ? new Date(s.created_at).getTime() : 0)
+        const bTs = b.studios.map(s => s.created_at ? new Date(s.created_at).getTime() : 0)
+        const aVal = sortDir === 'desc' ? Math.max(...aTs) : Math.min(...aTs)
+        const bVal = sortDir === 'desc' ? Math.max(...bTs) : Math.min(...bTs)
+        return (aVal - bVal) * dir
+      })
+    }
+
+    // UNDEFINED always last
     const noneGroup = groupMap.get('__none__')
     if (noneGroup && noneGroup.studios.length > 0) groups.push(noneGroup)
 
     return groups
   }, [studios, sortBy, sortDir])
 
-  const handleAddToMaker = async (makerId: string, makerColor: string | null) => {
+  const handleSort = (s: SortBy) => {
+    const defaultDir = s === 'name' ? 'asc' : 'desc'
+    if (sortBy === s) {
+      const next = sortDir === 'asc' ? 'desc' : 'asc'
+      setSortDir(next)
+      localStorage.setItem('studiomanager:sortDir', next)
+    } else {
+      setSortBy(s)
+      setSortDir(defaultDir)
+      localStorage.setItem('studiomanager:sortBy', s)
+      localStorage.setItem('studiomanager:sortDir', defaultDir)
+    }
+  }
+
+  // Label operations
+  const handleAddLabel = async (makerId: string, makerColor: string | null) => {
     const name = addingName.trim()
     if (!name) return
     const numId = makerId === '__none__' ? null : parseInt(makerId)
@@ -110,7 +182,7 @@ export default function StudioManager({ onClose }: Props) {
     load()
   }
 
-  const handleSaveEdit = async (studio: StudioWithCount) => {
+  const handleSaveLabelEdit = async (studio: StudioWithCount) => {
     const name = editingName.trim()
     if (!name) return
     await studiosApi.update(studio.id, name, studio.color ?? hashColor(studio.name))
@@ -118,13 +190,13 @@ export default function StudioManager({ onClose }: Props) {
     load()
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDeleteLabel = async (id: number) => {
     await studiosApi.delete(id)
     setDeletingId(null)
     load()
   }
 
-  const handleCreate = async () => {
+  const handleCreateUnassigned = async () => {
     const name = newName.trim()
     if (!name) return
     await studiosApi.create(name)
@@ -132,6 +204,23 @@ export default function StudioManager({ onClose }: Props) {
     load()
   }
 
+  // Maker operations
+  const handleSaveMakerEdit = async (makerNumId: number, makerColor: string | null) => {
+    const name = editingMakerName.trim()
+    if (!name) return
+    await makersApi.update(makerNumId, name, makerColor)
+    setEditingMakerId(null)
+    load()
+  }
+
+  const handleDeleteMaker = async (id: number) => {
+    await makersApi.delete(id)
+    setDeletingMakerId(null)
+    if (openAssignMakerId === id) setOpenAssignMakerId(null)
+    load()
+  }
+
+  // Code operations
   const loadCodes = async (studioId: number) => {
     const codes = await studioCodesApi.list(studioId)
     setCodesMap((prev) => ({ ...prev, [studioId]: codes }))
@@ -155,7 +244,7 @@ export default function StudioManager({ onClose }: Props) {
     await studioCodesApi.applyToWorks(studioId, code)
     setNewCodeMap((prev) => ({ ...prev, [studioId]: '' }))
     await loadCodes(studioId)
-    loadAll()
+    load()
   }
 
   const handleUpdateCode = async (id: number, studioId: number) => {
@@ -172,56 +261,57 @@ export default function StudioManager({ onClose }: Props) {
     await loadCodes(studioId)
   }
 
-  const handleOpenColorPicker = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
-    if (colorPickerId === id) {
-      setColorPickerId(null)
-      setColorPickerPos(null)
-      return
-    }
+  // Color pickers
+  const handleOpenLabelColorPicker = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    if (labelColorPickerId === id) { setLabelColorPickerId(null); setLabelColorPickerPos(null); return }
+    setMakerColorPickerId(null); setMakerColorPickerPos(null)
     const r = e.currentTarget.getBoundingClientRect()
     const panelH = 250
     const top = r.bottom + 4 + panelH > window.innerHeight ? r.top - panelH - 4 : r.bottom + 4
-    setColorPickerId(id)
-    setColorPickerPos({ top, left: r.left })
+    setLabelColorPickerId(id)
+    setLabelColorPickerPos({ top, left: r.left })
   }
 
-  const handleSelectColor = async (color: string) => {
-    if (colorPickerId === null) return
-    const studio = studios.find(s => s.id === colorPickerId)
+  const handleSelectLabelColor = async (color: string) => {
+    if (labelColorPickerId === null) return
+    const studio = studios.find(s => s.id === labelColorPickerId)
     if (studio) await studiosApi.update(studio.id, studio.name, color)
-    setColorPickerId(null)
-    setColorPickerPos(null)
+    setLabelColorPickerId(null); setLabelColorPickerPos(null)
     load()
   }
 
-  const handleStudioSort = (s: 'name' | 'count') => {
-    const defaultDir = s === 'count' ? 'desc' : 'asc'
-    if (sortBy === s) {
-      const next = sortDir === 'asc' ? 'desc' : 'asc'
-      setSortDir(next)
-      localStorage.setItem('studiomanager:sortDir', next)
-    } else {
-      setSortBy(s)
-      setSortDir(defaultDir)
-      localStorage.setItem('studiomanager:sortBy', s)
-      localStorage.setItem('studiomanager:sortDir', defaultDir)
-    }
+  const handleOpenMakerColorPicker = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    if (makerColorPickerId === id) { setMakerColorPickerId(null); setMakerColorPickerPos(null); return }
+    setLabelColorPickerId(null); setLabelColorPickerPos(null)
+    const r = e.currentTarget.getBoundingClientRect()
+    const panelH = 250
+    const top = r.bottom + 4 + panelH > window.innerHeight ? r.top - panelH - 4 : r.bottom + 4
+    setMakerColorPickerId(id)
+    setMakerColorPickerPos({ top, left: r.left })
   }
 
-  const toggleMakerGroup = (key: string) => {
-    setCollapsedMakerGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key); else next.add(key)
-      return next
-    })
+  const handleSelectMakerColor = async (color: string) => {
+    if (makerColorPickerId === null) return
+    const assignedStudios = studios.filter(s => s.maker_id === makerColorPickerId)
+    const maker = assignedStudios[0]
+    if (maker) {
+      await makersApi.update(makerColorPickerId, maker.maker_name!, color)
+      const allSameColor = assignedStudios.length > 0 &&
+        assignedStudios.every(s => s.color === assignedStudios[0].color)
+      if (allSameColor || assignedStudios.length <= 1) {
+        await Promise.all(assignedStudios.map(s => studiosApi.update(s.id, s.name, color)))
+      }
+    }
+    setMakerColorPickerId(null); setMakerColorPickerPos(null)
+    load()
   }
 
   const renderStudioRow = (studio: StudioWithCount) => (
     <div key={studio.id}>
-      <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700/50">
+      <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700/50 ml-4">
         <button
-          onClick={(e) => handleOpenColorPicker(e, studio.id)}
-          className="shrink-0 w-6 h-6 rounded border-2 border-gray-600 hover:border-gray-400"
+          onClick={(e) => handleOpenLabelColorPicker(e, studio.id)}
+          className="shrink-0 w-5 h-5 rounded border-2 border-gray-600 hover:border-gray-400"
           style={{ backgroundColor: resolvedColor(studio.name, studio.color) }}
         />
         {editingId === studio.id ? (
@@ -229,7 +319,7 @@ export default function StudioManager({ onClose }: Props) {
             autoFocus
             value={editingName}
             onChange={(e) => setEditingName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(studio); if (e.key === 'Escape') setEditingId(null) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveLabelEdit(studio); if (e.key === 'Escape') setEditingId(null) }}
             className="bg-gray-700 text-white text-sm px-2 py-0.5 rounded flex-1"
           />
         ) : (
@@ -237,16 +327,16 @@ export default function StudioManager({ onClose }: Props) {
             {studio.name}
           </button>
         )}
-        <span className="text-gray-500 text-xs w-12 text-right">{studio.work_count}편</span>
+        <span className="text-gray-500 text-xs w-10 text-right shrink-0">{studio.work_count}편</span>
         {deletingId === studio.id ? (
           <>
             <span className="text-red-400 text-xs">삭제?</span>
-            <button onClick={() => handleDelete(studio.id)} className="text-red-400 hover:text-red-300 text-xs px-2 py-0.5 rounded border border-red-800">확인</button>
+            <button onClick={() => handleDeleteLabel(studio.id)} className="text-red-400 hover:text-red-300 text-xs px-2 py-0.5 rounded border border-red-800">확인</button>
             <button onClick={() => setDeletingId(null)} className="text-gray-400 hover:text-gray-300 text-xs px-2 py-0.5 rounded border border-gray-600">취소</button>
           </>
         ) : editingId === studio.id ? (
           <>
-            <button onClick={() => handleSaveEdit(studio)} className="text-blue-400 hover:text-blue-300 text-xs px-2 py-0.5 rounded border border-blue-400">저장</button>
+            <button onClick={() => handleSaveLabelEdit(studio)} className="text-blue-400 hover:text-blue-300 text-xs px-2 py-0.5 rounded border border-blue-400">저장</button>
             <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-300 text-xs px-2 py-0.5 rounded border border-gray-600">취소</button>
           </>
         ) : (
@@ -258,7 +348,7 @@ export default function StudioManager({ onClose }: Props) {
       </div>
 
       {expandedId === studio.id && (
-        <div className="ml-8 mb-1 space-y-0.5">
+        <div className="ml-12 mb-1 space-y-0.5">
           {(codesMap[studio.id] ?? []).map((sc) => (
             <div key={sc.id} className="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-700/40">
               <span className="text-gray-400 text-xs">└</span>
@@ -307,18 +397,22 @@ export default function StudioManager({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-[500px] h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-800 rounded-lg p-6 w-[540px] h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-white">레이블 관리</h2>
+          <h2 className="text-lg font-bold text-white">제작사/레이블 관리</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
         </div>
 
         <div className="flex gap-1.5 mb-3">
-          {(['name', 'count'] as const).map((s) => {
-            const label = s === 'name' ? '이름' : '작품'
-            const isActive = sortBy === s
+          {([
+            { key: 'name' as const, label: '이름' },
+            { key: 'count' as const, label: '작품' },
+            { key: 'maker_created' as const, label: '제작사등록' },
+            { key: 'label_created' as const, label: '레이블등록' },
+          ]).map(({ key, label }) => {
+            const isActive = sortBy === key
             return (
-              <button key={s} onClick={() => handleStudioSort(s)}
+              <button key={key} onClick={() => handleSort(key)}
                 className={`px-2.5 py-1 rounded text-xs ${isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
                 {label}{isActive ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
               </button>
@@ -331,40 +425,131 @@ export default function StudioManager({ onClose }: Props) {
             <p className="text-gray-500 text-sm text-center py-4">레이블이 없습니다</p>
           )}
           {makerGroups.map(g => {
-            const isCollapsed = collapsedMakerGroups.has(g.makerId)
+            const isNone = g.makerId === '__none__'
+            const makerColor = resolvedColor(g.makerName, g.makerColor)
+            const assignedStudios = isNone ? [] : studios.filter(s => s.maker_id === g.makerNumId)
+            const unassignedStudios = studios.filter(s => s.maker_id == null)
+            const isAssignOpen = !isNone && openAssignMakerId === g.makerNumId
+            const isEditing = !isNone && editingMakerId === g.makerNumId
+            const isDeleting = !isNone && deletingMakerId === g.makerNumId
+
             return (
               <div key={g.makerId}>
+                {/* Maker row */}
                 <div className="flex items-center gap-2 px-2 py-1.5">
-                  <button onClick={() => toggleMakerGroup(g.makerId)} className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-sm font-bold shrink-0" style={{ color: resolvedColor(g.makerName, g.makerColor) }}>{g.makerName}</span>
-                    <span className="flex-1 border-t border-gray-700" />
-                  </button>
-                  <span className="text-xs text-gray-600 shrink-0">레이블:{g.studios.length}개 총작품:{g.totalWorks}편</span>
-                  <button
-                    onClick={() => { setOpenAddMakerId(openAddMakerId === g.makerId ? null : g.makerId); setAddingName('') }}
-                    className="shrink-0 text-white text-xs px-2 py-0.5 rounded"
-                    style={{ backgroundColor: resolvedColor(g.makerName, g.makerColor) }}
-                  >추가</button>
+                  {!isNone ? (
+                    <button
+                      onClick={(e) => handleOpenMakerColorPicker(e, g.makerNumId!)}
+                      className="shrink-0 w-6 h-6 rounded border-2 border-gray-600 hover:border-gray-400"
+                      style={{ backgroundColor: makerColor }}
+                    />
+                  ) : (
+                    <div className="shrink-0 w-6 h-6" />
+                  )}
+
+                  {isEditing ? (
+                    <>
+                      <input
+                        autoFocus
+                        value={editingMakerName}
+                        onChange={(e) => setEditingMakerName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveMakerEdit(g.makerNumId!, g.makerColor)
+                          if (e.key === 'Escape') setEditingMakerId(null)
+                        }}
+                        className="bg-gray-700 text-white text-sm px-2 py-0.5 rounded flex-1"
+                      />
+                      <button onClick={() => handleSaveMakerEdit(g.makerNumId!, g.makerColor)} className="text-blue-400 hover:text-blue-300 text-xs px-2 py-0.5 rounded border border-blue-400 shrink-0">저장</button>
+                      <button onClick={() => setEditingMakerId(null)} className="text-gray-400 hover:text-gray-300 text-xs px-2 py-0.5 rounded border border-gray-600 shrink-0">취소</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm font-bold shrink-0" style={{ color: isNone ? '#9ca3af' : makerColor }}>
+                        {g.makerName}
+                      </span>
+                      <span className="flex-1 border-t border-gray-700 min-w-0" />
+                      <span className="text-xs text-gray-400 shrink-0">작품:{g.totalWorks}편</span>
+                      {!isNone && (
+                        isDeleting ? (
+                          <>
+                            <span className="text-red-400 text-xs shrink-0">삭제?</span>
+                            <button onClick={() => handleDeleteMaker(g.makerNumId!)} className="text-red-400 hover:text-red-300 text-xs px-2 py-0.5 rounded border border-red-800 shrink-0">확인</button>
+                            <button onClick={() => setDeletingMakerId(null)} className="text-gray-400 hover:text-gray-300 text-xs px-2 py-0.5 rounded border border-gray-600 shrink-0">취소</button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => { setOpenAssignMakerId(isAssignOpen ? null : g.makerNumId!); setOpenAddMakerId(null) }}
+                              className={`text-xs px-2 py-0.5 rounded border shrink-0 ${isAssignOpen ? 'bg-blue-700 text-blue-200 border-blue-700' : 'border-gray-600 text-gray-400 hover:text-white'}`}
+                            >지정</button>
+                            <button
+                              onClick={() => { setOpenAddMakerId(openAddMakerId === g.makerId ? null : g.makerId); setAddingName(''); setOpenAssignMakerId(null) }}
+                              className={`text-xs px-2 py-0.5 rounded border shrink-0 ${openAddMakerId === g.makerId ? 'bg-green-700 text-green-200 border-green-700' : 'border-gray-600 text-gray-400 hover:text-white'}`}
+                            >추가</button>
+                            <button onClick={() => { setEditingMakerId(g.makerNumId!); setEditingMakerName(g.makerName); setDeletingMakerId(null) }} className="text-gray-400 hover:text-white text-xs px-2 py-0.5 rounded border border-gray-600 shrink-0">수정</button>
+                            <button onClick={() => { setDeletingMakerId(g.makerNumId!); setEditingMakerId(null) }} className="text-red-400 hover:text-red-300 text-xs px-2 py-0.5 rounded border border-red-800 shrink-0">삭제</button>
+                          </>
+                        )
+                      )}
+                    </>
+                  )}
                 </div>
+
+                {/* Assign panel (full width, no indent) */}
+                {isAssignOpen && (
+                  <div className="mb-1 bg-gray-900/50 border border-gray-700 rounded p-2 space-y-2">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">지정 레이블</p>
+                      <div className="flex flex-wrap gap-1 min-h-5">
+                        {assignedStudios.length === 0 && <span className="text-xs text-gray-600">없음</span>}
+                        {assignedStudios.map(s => (
+                          <button key={s.id} onClick={() => makersApi.assignStudio(s.id, null).then(load)}
+                            className="text-xs px-2 py-0.5 rounded bg-blue-700 text-blue-200 hover:bg-blue-600">{s.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-700" />
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">미분류 레이블</p>
+                      <div className="flex flex-wrap gap-1 min-h-5">
+                        {unassignedStudios.length === 0 && <span className="text-xs text-gray-600">없음</span>}
+                        {unassignedStudios.map(s => (
+                          <button key={s.id} onClick={async () => {
+                            await makersApi.assignStudio(s.id, g.makerNumId!)
+                            await studiosApi.update(s.id, s.name, resolvedColor(g.makerName, g.makerColor))
+                            load()
+                          }}
+                            className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600">{s.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Add label form */}
                 {openAddMakerId === g.makerId && (
-                  <div className="flex gap-1.5 px-2 pb-1.5">
+                  <div className="flex gap-1.5 px-2 pb-1.5 ml-4">
                     <input
                       autoFocus
                       type="text"
                       value={addingName}
                       onChange={(e) => setAddingName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddToMaker(g.makerId, g.makerColor); if (e.key === 'Escape') setOpenAddMakerId(null) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddLabel(g.makerId, g.makerColor); if (e.key === 'Escape') setOpenAddMakerId(null) }}
                       placeholder="레이블 이름"
                       className="bg-gray-700 text-white text-sm px-2 py-1 rounded flex-1"
                     />
                     <button
-                      onClick={() => handleAddToMaker(g.makerId, g.makerColor)}
+                      onClick={() => handleAddLabel(g.makerId, g.makerColor)}
                       className="text-white text-xs px-3 py-1 rounded shrink-0"
-                      style={{ backgroundColor: resolvedColor(g.makerName, g.makerColor) }}
+                      style={{ backgroundColor: isNone ? '#374151' : makerColor }}
                     >추가</button>
                   </div>
                 )}
-                {!isCollapsed && g.studios.map(renderStudioRow)}
+
+                {/* Label rows */}
+                <div className="space-y-0.5">
+                  {g.studios.map(renderStudioRow)}
+                </div>
               </div>
             )
           })}
@@ -373,25 +558,44 @@ export default function StudioManager({ onClose }: Props) {
         <div className="flex gap-2 mt-4 pt-4 border-t border-gray-700">
           <input type="text" value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            placeholder="레이블 이름"
+            onKeyDown={(e) => e.key === 'Enter' && handleCreateUnassigned()}
+            placeholder="레이블 이름 (미분류)"
             className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
           />
-          <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded">추가</button>
+          <button onClick={handleCreateUnassigned} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded">추가</button>
         </div>
       </div>
 
-      {colorPickerId !== null && colorPickerPos && (
+      {/* Label color picker */}
+      {labelColorPickerId !== null && labelColorPickerPos && (
         <div
           className="fixed z-[200] p-1.5 bg-gray-900 rounded border border-gray-700 shadow-xl"
-          style={{ top: colorPickerPos.top, left: colorPickerPos.left, width: 250, height: 250 }}
+          style={{ top: labelColorPickerPos.top, left: labelColorPickerPos.left, width: 250, height: 250 }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="grid grid-cols-10 gap-px h-full">
             {COLOR_PALETTE.map((color, i) => (
-              <button key={i} onClick={() => handleSelectColor(color)}
+              <button key={i} onClick={() => handleSelectLabelColor(color)}
                 className="rounded-sm hover:scale-110 transition-transform"
-                style={{ backgroundColor: color, outline: studios.find(s => s.id === colorPickerId)?.color === color ? '2px solid white' : 'none' }}
+                style={{ backgroundColor: color, outline: studios.find(s => s.id === labelColorPickerId)?.color === color ? '2px solid white' : 'none' }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Maker color picker */}
+      {makerColorPickerId !== null && makerColorPickerPos && (
+        <div
+          className="fixed z-[200] p-1.5 bg-gray-900 rounded border border-gray-700 shadow-xl"
+          style={{ top: makerColorPickerPos.top, left: makerColorPickerPos.left, width: 250, height: 250 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="grid grid-cols-10 gap-px h-full">
+            {COLOR_PALETTE.map((color, i) => (
+              <button key={i} onClick={() => handleSelectMakerColor(color)}
+                className="rounded-sm hover:scale-110 transition-transform"
+                style={{ backgroundColor: color, outline: studios.find(s => s.maker_id === makerColorPickerId)?.maker_color === color ? '2px solid white' : 'none' }}
               />
             ))}
           </div>
