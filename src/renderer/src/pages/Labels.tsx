@@ -79,7 +79,8 @@ interface Props {
 export default function Labels({ onNavigateToWork }: Props) {
   const [studios, setStudios] = useState<StudioWithCount[]>([])
   const [makers, setMakers] = useState<MakerWithCount[]>([])
-  const [keyword, setKeyword] = useState('')
+  const [makerKeyword, setMakerKeyword] = useState('')
+  const [labelKeyword, setLabelKeyword] = useState('')
   const [sortBy, setSortBy] = useState<SortBy>(
     (localStorage.getItem('labels:sortBy') as SortBy) || 'count'
   )
@@ -129,7 +130,7 @@ export default function Labels({ onNavigateToWork }: Props) {
 
   // 필터링 + 정렬된 스튜디오
   const filteredStudios = useMemo(() => {
-    let list = keyword ? studios.filter(s => s.name.toLowerCase().includes(keyword.toLowerCase())) : [...studios]
+    let list = labelKeyword ? studios.filter(s => s.name.toLowerCase().includes(labelKeyword.toLowerCase())) : [...studios]
     if (sortBy === 'name') {
       list.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' }) * dir)
     } else if (sortBy === 'count') {
@@ -148,14 +149,16 @@ export default function Labels({ onNavigateToWork }: Props) {
       })
     }
     return list
-  }, [studios, keyword, sortBy, sortDir])
+  }, [studios, labelKeyword, sortBy, sortDir])
 
   // 제작사별 그룹 (정렬 포함)
   const makerGroups = useMemo(() => {
     type Group = { makerId: string; makerName: string; makerColor: string | null; makerCreatedAt: string | null; studios: StudioWithCount[] }
 
     // Sort makers based on sortBy
-    const sortedMakers = [...makers]
+    const sortedMakers = makerKeyword
+      ? makers.filter(m => m.name.toLowerCase().includes(makerKeyword.toLowerCase()))
+      : [...makers]
     // Pre-compute totalWorks per maker from studios for count sort
     const makerTotalWorks = new Map<number, number>()
     for (const s of studios) {
@@ -205,7 +208,7 @@ export default function Labels({ onNavigateToWork }: Props) {
     }
 
     return groups
-  }, [makers, filteredStudios, sortBy, sortDir, studios])
+  }, [makers, filteredStudios, sortBy, sortDir, studios, makerKeyword])
 
   const selectedStudio = studios.find(s => s.id === selectedStudioId)
 
@@ -232,17 +235,24 @@ export default function Labels({ onNavigateToWork }: Props) {
               {sortDir === 'asc' ? '↑' : '↓'}
             </button>
           </div>
-          <div className="w-[30rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+          <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
             <input
               type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
+              value={makerKeyword}
+              onChange={(e) => setMakerKeyword(e.target.value)}
+              placeholder="제작사 검색"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-36"
+            />
+            <input
+              type="text"
+              value={labelKeyword}
+              onChange={(e) => setLabelKeyword(e.target.value)}
               placeholder="레이블 검색"
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-36"
             />
             <button
-              onClick={() => setKeyword('')}
-              className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300"
+              onClick={() => { setMakerKeyword(''); setLabelKeyword('') }}
+              className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"
             >
               초기화
             </button>

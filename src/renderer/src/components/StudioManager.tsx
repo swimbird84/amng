@@ -62,6 +62,7 @@ export default function StudioManager({ onClose }: Props) {
   const [openAssignMakerId, setOpenAssignMakerId] = useState<number | null>(null)
   const [openAddMakerId, setOpenAddMakerId] = useState<string | null>(null)
   const [addingName, setAddingName] = useState('')
+  const [newMakerName, setNewMakerName] = useState('')
   const [newName, setNewName] = useState('')
 
   // Label color picker
@@ -215,10 +216,19 @@ export default function StudioManager({ onClose }: Props) {
     load()
   }
 
-  const handleCreateUnassigned = async () => {
-    const name = newName.trim()
-    if (!name) return
-    await studiosApi.create(name)
+  const handleCreate = async () => {
+    const makerName = newMakerName.trim()
+    const labelName = newName.trim()
+    if (!makerName && !labelName) return
+    if (makerName && labelName) {
+      const makerId = await makersApi.create(makerName) as number
+      await studiosApi.create(labelName, makerId, null)
+    } else if (makerName) {
+      await makersApi.create(makerName)
+    } else {
+      await studiosApi.create(labelName)
+    }
+    setNewMakerName('')
     setNewName('')
     load()
   }
@@ -583,13 +593,19 @@ export default function StudioManager({ onClose }: Props) {
         </div>
 
         <div className="flex gap-2 mt-4 pt-4 border-t border-gray-700">
-          <input type="text" value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreateUnassigned()}
-            placeholder="레이블 이름 (미분류)"
+          <input type="text" value={newMakerName}
+            onChange={(e) => setNewMakerName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            placeholder="제작사명"
             className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
           />
-          <button onClick={handleCreateUnassigned} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded">추가</button>
+          <input type="text" value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            placeholder="레이블명"
+            className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+          />
+          <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded shrink-0">추가</button>
         </div>
       </div>
 
