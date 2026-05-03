@@ -27,6 +27,12 @@ export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zI
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  useEffect(() => {
     worksApi.get(workId).then(async (w) => {
       const work = w as Work
       setWork(work)

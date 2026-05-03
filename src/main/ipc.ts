@@ -18,7 +18,7 @@ export function registerIpcHandlers(): void {
     ratingTo?: number
     actorId?: number
     studioId?: number
-    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at'
+    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
   }) => {
@@ -31,19 +31,27 @@ export function registerIpcHandlers(): void {
     const bindings: unknown[] = []
 
     if (params?.actorId) {
-      sql += ` JOIN work_actors wa_filter ON wa_filter.work_id = w.id`
-      conditions.push('wa_filter.actor_id = ?')
-      bindings.push(params.actorId)
+      if (params.actorId === -1) {
+        conditions.push('NOT EXISTS (SELECT 1 FROM work_actors WHERE work_id = w.id)')
+      } else {
+        sql += ` JOIN work_actors wa_filter ON wa_filter.work_id = w.id`
+        conditions.push('wa_filter.actor_id = ?')
+        bindings.push(params.actorId)
+      }
     }
 
     if (params?.tagIds?.length) {
-      const placeholders = params.tagIds.map(() => '?').join(',')
-      sql += ` JOIN work_tags wt ON wt.work_id = w.id`
-      conditions.push(`wt.tag_id IN (${placeholders})`)
-      bindings.push(...params.tagIds)
-      if (params.tagMode === 'and') {
-        conditions.push(`(SELECT COUNT(DISTINCT wt2.tag_id) FROM work_tags wt2 WHERE wt2.work_id = w.id AND wt2.tag_id IN (${placeholders})) = ?`)
-        bindings.push(...params.tagIds, params.tagIds.length)
+      if (params.tagIds[0] === -1) {
+        conditions.push('NOT EXISTS (SELECT 1 FROM work_tags WHERE work_id = w.id)')
+      } else {
+        const placeholders = params.tagIds.map(() => '?').join(',')
+        sql += ` JOIN work_tags wt ON wt.work_id = w.id`
+        conditions.push(`wt.tag_id IN (${placeholders})`)
+        bindings.push(...params.tagIds)
+        if (params.tagMode === 'and') {
+          conditions.push(`(SELECT COUNT(DISTINCT wt2.tag_id) FROM work_tags wt2 WHERE wt2.work_id = w.id AND wt2.tag_id IN (${placeholders})) = ?`)
+          bindings.push(...params.tagIds, params.tagIds.length)
+        }
       }
     }
 
@@ -71,18 +79,34 @@ export function registerIpcHandlers(): void {
       conditions.push('w.is_favorite = 1')
     }
     if (params?.studioId) {
-      conditions.push('w.studio_id = ?')
-      bindings.push(params.studioId)
+      if (params.studioId === -1) {
+        conditions.push('w.studio_id IS NULL')
+      } else {
+        conditions.push('w.studio_id = ?')
+        bindings.push(params.studioId)
+      }
+    }
+
+    if (params?.sortBy === 'title') {
+      if (params.sortDir === 'asc') {
+        conditions.push("(w.comment IS NOT NULL AND TRIM(w.comment) != '')")
+      } else {
+        conditions.push("(w.comment IS NULL OR TRIM(w.comment) = '')")
+      }
     }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
 
-    const validWorkSortCols = ['product_number', 'rating', 'release_date', 'created_at']
-    const sortCol = validWorkSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
     const sortDir = params?.sortDir === 'asc' ? 'ASC' : 'DESC'
-    sql += ` ORDER BY w.${sortCol} ${sortDir}`
+    if (params?.sortBy === 'title') {
+      sql += ' ORDER BY w.created_at DESC'
+    } else {
+      const validWorkSortCols = ['product_number', 'rating', 'release_date', 'created_at']
+      const sortCol = validWorkSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
+      sql += ` ORDER BY w.${sortCol} ${sortDir}`
+    }
 
     const rawList = db().prepare(sql).all(...bindings) as Array<Record<string, unknown>>
     if (rawList.length === 0) return []
@@ -349,13 +373,17 @@ export function registerIpcHandlers(): void {
     const bindings: unknown[] = []
 
     if (params?.tagIds?.length) {
-      const placeholders = params.tagIds.map(() => '?').join(',')
-      sql += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
-      conditions.push(`at2.tag_id IN (${placeholders})`)
-      bindings.push(...params.tagIds)
-      if (params.tagMode === 'and') {
-        conditions.push(`(SELECT COUNT(DISTINCT at3.tag_id) FROM actor_tags at3 WHERE at3.actor_id = a.id AND at3.tag_id IN (${placeholders})) = ?`)
-        bindings.push(...params.tagIds, params.tagIds.length)
+      if (params.tagIds[0] === -1) {
+        conditions.push('NOT EXISTS (SELECT 1 FROM actor_tags WHERE actor_id = a.id)')
+      } else {
+        const placeholders = params.tagIds.map(() => '?').join(',')
+        sql += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
+        conditions.push(`at2.tag_id IN (${placeholders})`)
+        bindings.push(...params.tagIds)
+        if (params.tagMode === 'and') {
+          conditions.push(`(SELECT COUNT(DISTINCT at3.tag_id) FROM actor_tags at3 WHERE at3.actor_id = a.id AND at3.tag_id IN (${placeholders})) = ?`)
+          bindings.push(...params.tagIds, params.tagIds.length)
+        }
       }
     }
 
@@ -855,8 +883,8 @@ export function registerIpcHandlers(): void {
     return db().prepare('SELECT * FROM makers ORDER BY name').all()
   })
 
-  ipcMain.handle('makers:create', (_e, name: string) => {
-    const result = db().prepare('INSERT OR IGNORE INTO makers (name) VALUES (?)').run(name.trim())
+  ipcMain.handle('makers:create', (_e, name: string, color?: string | null) => {
+    const result = db().prepare('INSERT OR IGNORE INTO makers (name, color) VALUES (?, ?)').run(name.trim(), color ?? null)
     if (result.changes > 0) return result.lastInsertRowid
     const existing = db().prepare('SELECT id FROM makers WHERE name = ?').get(name.trim()) as { id: number } | undefined
     return existing?.id ?? 0

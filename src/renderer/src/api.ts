@@ -65,7 +65,7 @@ export const studiosApi = {
 // 제작사
 export const makersApi = {
   list: (withCount?: boolean) => api.invoke('makers:list', withCount),
-  create: (name: string) => api.invoke('makers:create', name) as Promise<number>,
+  create: (name: string, color?: string | null) => api.invoke('makers:create', name, color) as Promise<number>,
   update: (id: number, name: string, color?: string | null) => api.invoke('makers:update', id, name, color),
   delete: (id: number) => api.invoke('makers:delete', id),
   assignStudio: (studioId: number, makerId: number | null) => api.invoke('makers:assignStudio', studioId, makerId),

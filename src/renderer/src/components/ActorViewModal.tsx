@@ -32,6 +32,12 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
   const [workSortDir, setWorkSortDir] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  useEffect(() => {
     actorsApi.get(actorId).then(async (a) => {
       const actor = a as Actor
       setActor(actor)

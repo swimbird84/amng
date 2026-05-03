@@ -2,6 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import type React from 'react'
 import { studiosApi, studioCodesApi, makersApi } from '../api'
 
+interface MakerRow {
+  id: number
+  name: string
+  color: string | null
+  created_at: string | null
+}
+
 interface StudioWithCount {
   id: number
   name: string
@@ -43,6 +50,7 @@ const COLOR_PALETTE = [
 
 export default function StudioManager({ onClose }: Props) {
   const [studios, setStudios] = useState<StudioWithCount[]>([])
+  const [makers, setMakers] = useState<MakerRow[]>([])
 
   // Label-level state
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -80,6 +88,9 @@ export default function StudioManager({ onClose }: Props) {
     (localStorage.getItem('studiomanager:sortDir') as 'asc' | 'desc') || 'desc'
   )
   const [collapsedMakerIds, setCollapsedMakerIds] = useState<Set<string>>(new Set())
+  const [showSearch, setShowSearch] = useState(false)
+  const [makerKeyword, setMakerKeyword] = useState('')
+  const [labelKeyword, setLabelKeyword] = useState('')
 
   const toggleCollapse = (makerId: string) => {
     setCollapsedMakerIds(prev => {
@@ -90,10 +101,21 @@ export default function StudioManager({ onClose }: Props) {
   }
 
   const load = async () => {
-    setStudios(await studiosApi.list(true) as StudioWithCount[])
+    const [s, m] = await Promise.all([
+      studiosApi.list(true) as Promise<StudioWithCount[]>,
+      makersApi.list() as Promise<MakerRow[]>,
+    ])
+    setStudios(s)
+    setMakers(m)
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const makerGroups = useMemo(() => {
     type MakerGroup = {
@@ -107,6 +129,22 @@ export default function StudioManager({ onClose }: Props) {
     }
     const groups: MakerGroup[] = []
     const groupMap = new Map<string, MakerGroup>()
+
+    // 모든 제작사를 먼저 등록 (studios 없는 제작사 포함)
+    for (const m of makers) {
+      const key = String(m.id)
+      const g: MakerGroup = {
+        makerId: key,
+        makerNumId: m.id,
+        makerName: m.name,
+        makerColor: m.color,
+        makerCreatedAt: m.created_at,
+        studios: [],
+        totalWorks: 0,
+      }
+      groupMap.set(key, g)
+      groups.push(g)
+    }
 
     for (const s of studios) {
       const key = s.maker_id != null ? String(s.maker_id) : '__none__'
@@ -175,7 +213,20 @@ export default function StudioManager({ onClose }: Props) {
     if (noneGroup && noneGroup.studios.length > 0) groups.push(noneGroup)
 
     return groups
-  }, [studios, sortBy, sortDir])
+  }, [studios, makers, sortBy, sortDir])
+
+  const filteredGroups = useMemo(() => {
+    if (!makerKeyword && !labelKeyword) return makerGroups
+    return makerGroups
+      .filter(g => !makerKeyword || g.makerName.toLowerCase().includes(makerKeyword.toLowerCase()))
+      .map(g => ({
+        ...g,
+        studios: labelKeyword
+          ? g.studios.filter(s => s.name.toLowerCase().includes(labelKeyword.toLowerCase()))
+          : g.studios,
+      }))
+      .filter(g => g.studios.length > 0)
+  }, [makerGroups, makerKeyword, labelKeyword])
 
   const handleSort = (s: SortBy) => {
     const defaultDir = s === 'name' ? 'asc' : 'desc'
@@ -221,12 +272,13 @@ export default function StudioManager({ onClose }: Props) {
     const labelName = newName.trim()
     if (!makerName && !labelName) return
     if (makerName && labelName) {
-      const makerId = await makersApi.create(makerName) as number
-      await studiosApi.create(labelName, makerId, null)
+      const color = hashColor(makerName)
+      const makerId = await makersApi.create(makerName, color) as number
+      await studiosApi.create(labelName, makerId, color)
     } else if (makerName) {
-      await makersApi.create(makerName)
+      await makersApi.create(makerName, hashColor(makerName))
     } else {
-      await studiosApi.create(labelName)
+      await studiosApi.create(labelName, null, hashColor(labelName))
     }
     setNewMakerName('')
     setNewName('')
@@ -432,7 +484,7 @@ export default function StudioManager({ onClose }: Props) {
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
         </div>
 
-        <div className="flex gap-1.5 mb-3">
+        <div className="flex gap-1.5 mb-3 items-center">
           {([
             { key: 'name' as const, label: '이름' },
             { key: 'count' as const, label: '작품수' },
@@ -448,13 +500,44 @@ export default function StudioManager({ onClose }: Props) {
               </button>
             )
           })}
+          <div className="flex-1" />
+          <button
+            onClick={() => { setShowSearch(v => !v); setMakerKeyword(''); setLabelKeyword('') }}
+            className={`px-2.5 py-1 rounded text-xs ${showSearch ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+          >
+            검색
+          </button>
         </div>
+        {showSearch && (
+          <div className="flex gap-1.5 mb-3">
+            <input
+              type="text"
+              value={makerKeyword}
+              onChange={(e) => setMakerKeyword(e.target.value)}
+              placeholder="제작사 검색"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+            />
+            <input
+              type="text"
+              value={labelKeyword}
+              onChange={(e) => setLabelKeyword(e.target.value)}
+              placeholder="레이블 검색"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+            />
+            <button
+              onClick={() => { setMakerKeyword(''); setLabelKeyword('') }}
+              className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"
+            >
+              초기화
+            </button>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto space-y-1 min-h-0 [scrollbar-gutter:stable]">
           {studios.length === 0 && (
             <p className="text-gray-500 text-sm text-center py-4">레이블이 없습니다</p>
           )}
-          {makerGroups.map(g => {
+          {filteredGroups.map(g => {
             const isNone = g.makerId === '__none__'
             const makerColor = resolvedColor(g.makerName, g.makerColor)
             const assignedStudios = isNone ? [] : studios.filter(s => s.maker_id === g.makerNumId)

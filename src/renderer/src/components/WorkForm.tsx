@@ -67,6 +67,16 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   const handleStudioDropClose = useCallback(() => setStudioDropOpen(false), [])
   useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onCancel])
+
+  useEffect(() => {
     if (!studioDropOpen) return
     const handler = (e: MouseEvent) => {
       const target = e.target as Node

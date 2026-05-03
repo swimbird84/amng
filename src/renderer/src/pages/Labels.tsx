@@ -35,6 +35,7 @@ function resolvedColor(name: string, color?: string | null): string {
   return color || hashColor(name)
 }
 
+
 function ColorButton({ color, isSelected, onClick, title, children }: {
   color: string
   isSelected: boolean
@@ -220,7 +221,7 @@ export default function Labels({ onNavigateToWork }: Props) {
             <select
               value={sortBy}
               onChange={(e) => { const v = e.target.value as SortBy; setSortBy(v); localStorage.setItem('labels:sortBy', v) }}
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-32"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
             >
               <option value="name">이름</option>
               <option value="count">작품수</option>
@@ -235,20 +236,20 @@ export default function Labels({ onNavigateToWork }: Props) {
               {sortDir === 'asc' ? '↑' : '↓'}
             </button>
           </div>
-          <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+          <div className="w-[30rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
             <input
               type="text"
               value={makerKeyword}
               onChange={(e) => setMakerKeyword(e.target.value)}
               placeholder="제작사 검색"
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-36"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
             />
             <input
               type="text"
               value={labelKeyword}
               onChange={(e) => setLabelKeyword(e.target.value)}
               placeholder="레이블 검색"
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-36"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
             />
             <button
               onClick={() => { setMakerKeyword(''); setLabelKeyword('') }}
@@ -270,9 +271,9 @@ export default function Labels({ onNavigateToWork }: Props) {
 
       <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 pb-4 space-y-4">
         {/* 제작사 버튼 전체 */}
-        {makerGroups.some(g => g.studios.length > 0) ? (
+        {makerGroups.some(g => g.makerId === '__none__' ? g.studios.length > 0 : true) ? (
           <div className="grid grid-cols-6 gap-1.5">
-            {makerGroups.filter(g => g.studios.length > 0).map((group) => {
+            {makerGroups.filter(g => g.makerId === '__none__' ? g.studios.length > 0 : true).map((group) => {
               const isExpanded = expandedMakerId === group.makerId
               const isNone = group.makerId === '__none__'
               const makerColor = resolvedColor(group.makerName, group.makerColor)

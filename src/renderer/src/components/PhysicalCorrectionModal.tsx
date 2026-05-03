@@ -22,6 +22,10 @@ export interface PhysicalSettings {
     physical:     { enabled: boolean; dir: 'P' | 'N' }
     skin:         { enabled: boolean; dir: 'P' | 'N' }
     proportions:  { enabled: boolean; dir: 'P' | 'N' }
+    acting:       { enabled: boolean; dir: 'P' | 'N' }
+    sexy:         { enabled: boolean; dir: 'P' | 'N' }
+    charm:        { enabled: boolean; dir: 'P' | 'N' }
+    technique:    { enabled: boolean; dir: 'P' | 'N' }
   }
 }
 
@@ -74,10 +78,14 @@ export const DEFAULT_SETTINGS: PhysicalSettings = {
     physical:    { enabled: true, dir: 'P' },
     skin:        { enabled: true, dir: 'P' },
     proportions: { enabled: true, dir: 'P' },
+    acting:      { enabled: false, dir: 'P' },
+    sexy:        { enabled: false, dir: 'P' },
+    charm:       { enabled: false, dir: 'P' },
+    technique:   { enabled: false, dir: 'P' },
   },
 }
 
-const CUP_ORDER = ['A','B','C','D','E','F','G','H','I','J','K']
+const CUP_ORDER = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z']
 
 export function cupToNum(cup: string): number {
   const idx = CUP_ORDER.indexOf(cup.toUpperCase())
@@ -177,6 +185,10 @@ export function calcPhysicalScore(
     if (sc.physical.enabled)    { let v = actor.physical;    if (sc.physical.dir    === 'N') v = 10 - v; items.push(v) }
     if (sc.skin.enabled)        { let v = actor.skin;        if (sc.skin.dir        === 'N') v = 10 - v; items.push(v) }
     if (sc.proportions.enabled) { let v = actor.proportions; if (sc.proportions.dir === 'N') v = 10 - v; items.push(v) }
+    if (sc.acting.enabled)      { let v = actor.acting;      if (sc.acting.dir      === 'N') v = 10 - v; items.push(v) }
+    if (sc.sexy.enabled)        { let v = actor.sexy;        if (sc.sexy.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.charm.enabled)       { let v = actor.charm;       if (sc.charm.dir       === 'N') v = 10 - v; items.push(v) }
+    if (sc.technique.enabled)   { let v = actor.technique;   if (sc.technique.dir   === 'N') v = 10 - v; items.push(v) }
     if (items.length > 0) scoreScore = items.reduce((a, b) => a + b, 0) / items.length
   }
 
@@ -199,12 +211,16 @@ const PROFILE_ITEMS: { key: keyof PhysicalSettings['profile']; label: string }[]
 ]
 
 const SCORE_ITEMS: { key: keyof PhysicalSettings['score']; label: string }[] = [
-  { key: 'face',        label: '얼굴'  },
+  { key: 'face',        label: '얼굴'   },
   { key: 'bust',        label: '가슴'   },
   { key: 'hip',         label: '엉덩이' },
-  { key: 'physical',    label: '몸매'  },
-  { key: 'skin',        label: '피부'  },
-  { key: 'proportions', label: '비율'  },
+  { key: 'physical',    label: '몸매'   },
+  { key: 'skin',        label: '피부'   },
+  { key: 'proportions', label: '비율'   },
+  { key: 'acting',      label: '연기력' },
+  { key: 'sexy',        label: '섹기'   },
+  { key: 'charm',       label: '매력'   },
+  { key: 'technique',   label: '테크닉' },
 ]
 
 const EDIT_SCORE_FIELDS: { label: string; getValue: (a: ActorPhysicalData) => number; apiKey: keyof ActorScores }[] = [
@@ -223,13 +239,24 @@ const EDIT_SCORE_FIELDS: { label: string; getValue: (a: ActorPhysicalData) => nu
 export default function PhysicalCorrectionModal({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<PhysicalSettings>(loadSettings)
   const [actors, setActors] = useState<ActorPhysicalData[]>([])
-  const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>('desc')
+  const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>(
+    (localStorage.getItem('ratingCalc:rankSortDir') as 'asc' | 'desc') || 'desc'
+  )
+  const [rankBy, setRankBy] = useState<'avg_score' | 'physScore' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'face' | 'score_bust' | 'score_hip' | 'physical' | 'skin' | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions'>(
+    (localStorage.getItem('ratingCalc:rankBy') as 'avg_score' | 'physScore' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'face' | 'score_bust' | 'score_hip' | 'physical' | 'skin' | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions') || 'physScore'
+  )
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editScores, setEditScores] = useState<ActorScores>({ face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 })
 
   useEffect(() => {
     actorsApi.physicalData().then(d => setActors(d as ActorPhysicalData[]))
   }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const startEdit = (a: ActorPhysicalData) => {
     setEditingId(a.id)
@@ -249,11 +276,33 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
   const stats = useMemo(() => computeStats(actors), [actors])
 
   const ranked = useMemo(() => {
+    const avgScore = (a: ActorPhysicalData) =>
+      (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 10
+
+    const getVal = (a: ActorPhysicalData & { physScore: number | null }): number | null => {
+      if (rankBy === 'avg_score') return avgScore(a)
+      if (rankBy === 'physScore') return a.physScore
+      if (rankBy === 'height')    return a.height
+      if (rankBy === 'bust')      return a.bust
+      if (rankBy === 'waist')     return a.waist
+      if (rankBy === 'hip')       return a.hip
+      if (rankBy === 'cup')       return a.cup ? cupToNum(a.cup) : null
+      return a[rankBy as keyof ActorPhysicalData] as number
+    }
+
     return actors
       .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
-      .filter((a): a is typeof a & { physScore: number } => a.physScore !== null)
-      .sort((a, b) => rankSortDir === 'desc' ? b.physScore - a.physScore : a.physScore - b.physScore)
-  }, [actors, settings, stats, rankSortDir])
+      .filter(a => getVal(a) != null)
+      .sort((a, b) => {
+        const av = getVal(a)!
+        const bv = getVal(b)!
+        const primary = rankSortDir === 'desc' ? bv - av : av - bv
+        if (primary !== 0) return primary
+        const secondary = rankSortDir === 'desc' ? avgScore(b) - avgScore(a) : avgScore(a) - avgScore(b)
+        if (secondary !== 0) return secondary
+        return rankSortDir === 'desc' ? b.work_count - a.work_count : a.work_count - b.work_count
+      })
+  }, [actors, settings, stats, rankSortDir, rankBy])
 
   const update = (s: PhysicalSettings) => {
     setSettings(s)
@@ -289,13 +338,15 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-gray-800 rounded-lg w-[820px] h-[95vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 shrink-0">
-          <h2 className="text-white font-bold text-base">피지컬 계산기</h2>
+          <h2 className="text-white font-bold text-base">평점 계산기</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
         </div>
 
         <div className="flex-1 flex gap-4 overflow-hidden p-4">
           {/* 좌측: 설정 패널 */}
           <div className="w-52 flex flex-col gap-3 overflow-y-auto shrink-0">
+
+            <p className="text-sm text-gray-300 font-bold shrink-0">피지컬 계산기</p>
 
             {/* 가중치 */}
             <div className="bg-gray-700 rounded-lg p-3 space-y-2">
@@ -409,10 +460,33 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
           {/* 우측: 실시간 랭킹 미리보기 */}
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center gap-2 mb-2 shrink-0">
-              <p className="text-sm text-gray-300 font-bold">피지컬 점수 랭킹</p>
+              <p className="text-sm text-gray-300 font-bold">점수 랭킹</p>
               <span className="text-xs text-gray-500">{ranked.length}명</span>
+              <select
+                value={rankBy}
+                onChange={e => { const v = e.target.value as typeof rankBy; setRankBy(v); localStorage.setItem('ratingCalc:rankBy', v) }}
+                className="bg-gray-700 text-white text-xs px-1.5 py-0.5 rounded"
+              >
+                <option value="avg_score">평점</option>
+                <option value="physScore">피지컬</option>
+                <option value="height">키</option>
+                <option value="bust">바스트</option>
+                <option value="waist">웨이스트</option>
+                <option value="hip">힙</option>
+                <option value="cup">컵</option>
+                <option value="face">얼굴</option>
+                <option value="score_bust">가슴</option>
+                <option value="score_hip">엉덩이</option>
+                <option value="physical">몸매</option>
+                <option value="skin">피부</option>
+                <option value="acting">연기력</option>
+                <option value="sexy">섹기</option>
+                <option value="charm">매력</option>
+                <option value="technique">테크닉</option>
+                <option value="proportions">비율</option>
+              </select>
               <button
-                onClick={() => setRankSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+                onClick={() => setRankSortDir(d => { const next = d === 'desc' ? 'asc' : 'desc'; localStorage.setItem('ratingCalc:rankSortDir', next); return next })}
                 className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-0.5 rounded"
               >
                 {rankSortDir === 'desc' ? '↓' : '↑'}

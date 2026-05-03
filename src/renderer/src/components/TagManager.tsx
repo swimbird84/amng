@@ -38,6 +38,12 @@ export default function TagCategoryManager({ type, onClose }: Props) {
 
   useEffect(() => { load() }, [type])
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
   const handleAddCategory = async () => {
     const name = newCatName.trim()
     if (!name) return

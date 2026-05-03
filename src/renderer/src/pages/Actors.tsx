@@ -247,7 +247,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
                 onClick={() => setShowPhysical(true)}
                 className="bg-fuchsia-700 hover:bg-fuchsia-600 text-white px-3 py-1.5 rounded text-sm"
               >
-                피지컬 계산기
+                평점 계산기
               </button>
               <button
                 onClick={() => setFavoriteOnly((v) => !v)}

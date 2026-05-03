@@ -23,7 +23,7 @@ interface WorkSearchProps {
   onChange: (params: WorkSearchParams) => void
   tags: Tag[]
   actors: Actor[]
-  studios: { id: number; name: string }[]
+  studios: { id: number; name: string; maker_id?: number | null; maker_name?: string | null }[]
 }
 
 interface ActorSearchProps {
@@ -45,6 +45,19 @@ export default function SearchBar(props: Props) {
   const [tagOpen, setTagOpen] = useState(false)
   const [tagFilter, setTagFilter] = useState('')
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 })
+  const [savedTagIds, setSavedTagIds] = useState<number[] | null>(null)
+
+  const isNoTag = params.tagIds.length === 1 && params.tagIds[0] === -1
+
+  const toggleNoTag = () => {
+    if (isNoTag) {
+      onChange({ ...params, tagIds: savedTagIds ?? [] } as never)
+      setSavedTagIds(null)
+    } else {
+      setSavedTagIds(params.tagIds)
+      onChange({ ...params, tagIds: [-1] } as never)
+    }
+  }
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
 
@@ -89,21 +102,33 @@ export default function SearchBar(props: Props) {
         value={params.keyword}
         onChange={(e) => onChange({ ...params, keyword: e.target.value } as never)}
         placeholder={type === 'works' ? '품번 검색' : '이름 검색'}
-        className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded ${type === 'works' ? 'w-20 shrink-0' : 'flex-1'}`}
+        className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded ${type === 'works' ? 'w-22 shrink-0' : 'flex-1'}`}
       />
 
-      {type === 'works' && (
+      {type === 'works' && (() => {
+        const sorted = [...studios].sort((a, b) => {
+          const ma = a.maker_name ?? ''
+          const mb = b.maker_name ?? ''
+          const mc = ma.localeCompare(mb, 'ko-KR', { sensitivity: 'base' })
+          if (mc !== 0) return mc
+          return a.name.localeCompare(b.name, 'ko-KR', { sensitivity: 'base' })
+        })
+        return (
           <select
-              value={(params as WorkSearchParams).studioId}
-              onChange={(e) => onChange({ ...params, studioId: e.target.value ? Number(e.target.value) : '' } as never)}
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28 shrink-0"
+            value={(params as WorkSearchParams).studioId}
+            onChange={(e) => onChange({ ...params, studioId: e.target.value ? Number(e.target.value) : '' } as never)}
+            className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28 shrink-0"
           >
             <option value="">레이블 전체</option>
-            {studios.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+            <option value="-1">레이블 없음</option>
+            {sorted.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name}
+              </option>
             ))}
           </select>
-      )}
+        )
+      })()}
 
       {type === 'works' && (
         <select
@@ -112,6 +137,7 @@ export default function SearchBar(props: Props) {
           className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-24 shrink-0"
         >
           <option value="">배우 전체</option>
+          <option value="-1">배우 없음</option>
           {actors.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
@@ -128,11 +154,7 @@ export default function SearchBar(props: Props) {
           }`}
         >
           태그
-          {params.tagIds.length > 0 ? (
-            <span className="text-blue-400 text-xs">{params.tagIds.length}</span>
-          ) : (
-            <span className="text-gray-500 text-xs">▼</span>
-          )}
+          <span className="text-gray-500 text-xs">▼</span>
         </button>
 
         {tagOpen && (
@@ -142,15 +164,32 @@ export default function SearchBar(props: Props) {
             style={{ top: dropdownPos.top, left: dropdownPos.left }}
           >
             <div className="p-2 border-b border-gray-700 space-y-1.5">
-              <input
-                type="text"
-                value={tagFilter}
-                onChange={(e) => setTagFilter(e.target.value)}
-                placeholder="태그 검색"
-                className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded"
-                autoFocus
-              />
-              {params.tagIds.length > 1 && (
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  value={tagFilter}
+                  onChange={(e) => setTagFilter(e.target.value)}
+                  placeholder="태그 검색"
+                  className="bg-gray-700 text-white text-xs px-2 py-1 rounded min-w-0"
+                  style={{ flex: '6' }}
+                  autoFocus
+                />
+                <button
+                  onClick={() => { setSavedTagIds(null); onChange({ ...params, tagIds: [] } as never) }}
+                  className="text-xs py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  style={{ flex: '2' }}
+                >
+                  선택초기화
+                </button>
+                <button
+                  onClick={toggleNoTag}
+                  className={`text-xs py-1 rounded ${isNoTag ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  style={{ flex: '2' }}
+                >
+                  태그 없음
+                </button>
+              </div>
+              {params.tagIds.length > 1 && !(isNoTag) && (
                 <div className="flex gap-1">
                   <button
                     onClick={() => onChange({ ...params, tagMode: 'and' } as never)}
@@ -167,7 +206,7 @@ export default function SearchBar(props: Props) {
                 </div>
               )}
             </div>
-            <div className="max-h-[39rem] overflow-y-auto p-2">
+            <div className={`max-h-[39rem] overflow-y-auto p-2 ${isNoTag ? 'opacity-40 pointer-events-none' : ''}`}>
               {filteredTags.length === 0 && (
                 <p className="text-xs text-gray-500 w-full text-center py-2">태그 없음</p>
               )}
@@ -233,16 +272,6 @@ export default function SearchBar(props: Props) {
                 )
               })())}
             </div>
-            {params.tagIds.length > 0 && (
-              <div className="p-2 border-t border-gray-700">
-                <button
-                  onClick={() => onChange({ ...params, tagIds: [] } as never)}
-                  className="w-full text-xs text-gray-400 hover:text-white py-0.5"
-                >
-                  선택 초기화
-                </button>
-              </div>
-            )}
           </div>
         )}
       </div>
