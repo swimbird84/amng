@@ -544,6 +544,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                         <div key={w.id} className="flex items-stretch gap-1.5">
                           <div
                             onClick={() => onNavigateToWork?.(w.id)}
+                            onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
+                            onMouseLeave={() => setTooltip(null)}
                             className="flex-1 flex gap-2 items-center bg-gray-700 rounded p-2 cursor-pointer hover:bg-gray-600"
                           >
                             <ImagePreview

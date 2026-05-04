@@ -232,7 +232,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                 <input
                   type="text"
                   value={cup}
-                  onChange={(e) => setCup(e.target.value)}
+                  onChange={(e) => setCup(e.target.value.toUpperCase())}
                   placeholder="A"
                   className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
                 />

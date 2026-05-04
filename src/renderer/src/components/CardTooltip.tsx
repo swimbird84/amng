@@ -58,6 +58,12 @@ function getDebutAge(birthday: string | null, debutDate: string | null): string 
 }
 
 // ---------- Content components ----------
+function ratingStars(rating: number): string {
+  const full = Math.floor(rating)
+  const half = rating - full >= 0.5
+  return '★'.repeat(full) + (half ? '☆' : '')
+}
+
 function WorkContent({ work }: { work: Work }) {
   const repActors = work.rep_actors ?? []
   const repIds = new Set(repActors.map((a) => a.id))
@@ -67,12 +73,23 @@ function WorkContent({ work }: { work: Work }) {
   const allActors = [...repActors, ...otherActors]
   const hasComment = !!(work.comment && work.comment.trim())
   const hasActors = allActors.length > 0
-  if (!hasComment && !hasActors) return <p className="text-gray-500">-</p>
   return (
-    <div>
-      {hasComment && <p className="whitespace-pre-wrap leading-relaxed">{work.comment}</p>}
-      {hasComment && hasActors && <div className="h-2" />}
-      {hasActors && <p className="text-gray-400 leading-relaxed">{allActors.map((a) => a.name).join(', ')}</p>}
+    <div className="space-y-1.5 text-[13px]">
+      {(work.studio_maker_name || work.studio_name) && (
+        <div>
+          {work.studio_maker_name && <p className="text-gray-300 font-bold">{work.studio_maker_name}</p>}
+          {work.studio_name && <p className="text-gray-300">{work.studio_name}</p>}
+        </div>
+      )}
+      {(work.release_date || work.rating != null) && (
+        <div className="flex items-center justify-between">
+          <span className="text-gray-400">{work.release_date || '-'}</span>
+          <span className="text-yellow-400">{ratingStars(work.rating ?? 0)}</span>
+        </div>
+      )}
+      {work.product_number && <p className="font-bold text-gray-300">{work.product_number}</p>}
+      {hasComment && <p className="whitespace-pre-wrap leading-relaxed text-gray-300">{work.comment}</p>}
+      {hasActors && <p className="font-bold text-gray-300 leading-relaxed">{allActors.map((a) => a.name).join(', ')}</p>}
     </div>
   )
 }
@@ -89,31 +106,35 @@ function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | 
   const hasBody = !!(actor.height || actor.bust || actor.waist || actor.hip || actor.cup)
 
   return (
-    <div className="space-y-0.5 leading-tight">
-      <p className="font-bold text-white text-[11px]">
+    <div className="space-y-1 leading-relaxed">
+      <p className="font-bold text-white text-[13px]">
         {actor.name}{' '}
-        <span className="text-gray-400 font-normal">(총작품 ; {actor.work_count ?? 0}편)</span>
+        <span className="text-gray-400 font-normal">(총작품 : {actor.work_count ?? 0}편)</span>
       </p>
-      <p className="text-[10px]">
-        <span className="text-gray-500">생년월일 </span>
-        {actor.birthday || '-'}
-        {actor.birthday ? ` (${getAge(actor.birthday)})` : ''}
-      </p>
-      <p className="text-[10px]">
-        <span className="text-gray-500">데뷔일   </span>
-        {actor.debut_date || '-'}
-        {actor.debut_date ? ` (${getDebutAge(actor.birthday, actor.debut_date)})` : ''}
-      </p>
-      <p className="text-[10px]">
-        <span className="text-gray-500">신체</span>
-        {physScore !== null ? `(${physScore.toFixed(2)})` : ''}
-      </p>
-      {hasBody && <p className="text-[10px]">{body}</p>}
-      <p className="text-[10px]">
-        <span className="text-gray-500">평점</span>({(actor.avg_score ?? 0).toFixed(2)})
+      <div>
+        <p className="text-[13px]">
+          <span className="text-gray-500">생년월일 </span>
+          {actor.birthday || '-'}
+          {actor.birthday ? ` (${getAge(actor.birthday)})` : ''}
+        </p>
+        <p className="text-[13px]">
+          <span className="text-gray-500">데뷔일   </span>
+          {actor.debut_date || '-'}
+          {actor.debut_date ? ` (${getDebutAge(actor.birthday, actor.debut_date)})` : ''}
+        </p>
+      </div>
+      <div>
+        <p className="text-[13px]">
+          <span className="text-gray-500">신체</span>
+          {physScore !== null ? ` ${physScore.toFixed(2)}` : ''}
+        </p>
+        {hasBody && <p className="text-[13px]">{body}</p>}
+      </div>
+      <p className="text-[13px]">
+        <span className="text-gray-500">평점</span>{` ${(actor.avg_score ?? 0).toFixed(2)}`}
       </p>
       {s && (
-        <div className="grid grid-cols-5 text-center text-[10px] mt-1 leading-tight">
+        <div className="grid grid-cols-5 text-center text-[13px] mt-1 leading-tight">
           {['얼굴', '가슴', '엉덩이', '몸매', '피부'].map((l) => (
             <p key={l} className="text-gray-500">{l}</p>
           ))}
@@ -126,6 +147,12 @@ function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | 
           {[s.acting, s.sexy, s.charm, s.technique, s.proportions].map((v, i) => (
             <p key={i}>{v}</p>
           ))}
+        </div>
+      )}
+      {actor.comment && (
+        <div>
+          <p className="text-[13px]"><span className="text-gray-500">코멘트</span></p>
+          <p className="text-[12px] text-gray-300 whitespace-pre-wrap leading-relaxed">{actor.comment}</p>
         </div>
       )}
     </div>
@@ -174,7 +201,7 @@ export default function CardTooltip({ tooltip }: Props) {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const w = el.offsetWidth || 220
+    const w = el.offsetWidth || 300
     const h = el.offsetHeight || 20
     let left = tooltip.x + 14
     let top = tooltip.y + 14
@@ -190,7 +217,7 @@ export default function CardTooltip({ tooltip }: Props) {
   return (
     <div
       ref={ref}
-      className="fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 w-[220px]"
+      className="fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 w-[300px]"
       style={{ left: tooltip.x + 14, top: tooltip.y + 14, opacity: 0 }}
     >
       {loading ? (
