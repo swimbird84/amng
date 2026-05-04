@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Work } from '../types'
 import { worksApi, shellApi } from '../api'
 import ImagePreview from './ImagePreview'
@@ -25,12 +25,15 @@ function studioColor(name: string, color?: string | null): string {
 export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zIndex = 60 }: Props) {
   const [work, setWork] = useState<Work | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [])
+
 
   useEffect(() => {
     worksApi.get(workId).then(async (w) => {

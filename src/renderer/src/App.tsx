@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { version } from '../../../package.json'
 import Works from './pages/Works'
 import Actors from './pages/Actors'
@@ -28,6 +28,7 @@ function App() {
     setViewStack((s) => [...s, { type: 'work', id }])
   }, [])
 
+
   const handleEditWork = useCallback((id: number) => {
     setViewStack([])
     setTabAndSave('works')
@@ -39,6 +40,15 @@ function App() {
     setTabAndSave('actors')
     setPendingEditActor(id)
   }, [])
+
+  useEffect(() => {
+    if (viewStack.length === 0) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewStack([])
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [viewStack.length])
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white">
@@ -135,6 +145,7 @@ function App() {
         {tab === 'actors' && (
           <Actors
             onNavigateToWork={handleNavigateToWork}
+            onNavigateToActor={handleNavigateToActor}
             openEditId={pendingEditActor}
             onEditHandled={() => setPendingEditActor(null)}
           />

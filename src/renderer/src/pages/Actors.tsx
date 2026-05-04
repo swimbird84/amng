@@ -24,11 +24,12 @@ function getDebutAge(birthday: string | null, debutDate: string | null): string 
 
 interface ActorsProps {
   onNavigateToWork?: (id: number) => void
+  onNavigateToActor?: (id: number) => void
   openEditId?: number | null
   onEditHandled?: () => void
 }
 
-export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: ActorsProps) {
+export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId, onEditHandled }: ActorsProps) {
   const [actors, setActors] = useState<Actor[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [selected, setSelected] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
@@ -108,6 +109,12 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
     document.addEventListener('mouseup', onMouseUp)
     return () => document.removeEventListener('mouseup', onMouseUp)
   }, [])
+  useEffect(() => {
+    if (!selected) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [selected])
   useEffect(() => {
     if (!openEditId) return
     actorsApi.get(openEditId).then((a) => {
@@ -363,7 +370,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
       {hoverCover && (
         <div
           className="fixed z-50 pointer-events-none"
-          style={{ right: 'calc((100vw + 500px) / 2 + 16px)', top: '50%', transform: 'translateY(-50%)', width: 'calc((100vw - 500px) / 2 - 32px)', maxHeight: '80vh' }}
+          style={{ right: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh' }}
         >
           <ImagePreview path={hoverCover} alt="표지 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
         </div>
@@ -620,7 +627,7 @@ export default function Actors({ onNavigateToWork, openEditId, onEditHandled }: 
       )}
 
       {showPhysical && (
-        <PhysicalCorrectionModal onClose={() => setShowPhysical(false)} />
+        <PhysicalCorrectionModal onClose={() => setShowPhysical(false)} onViewActor={onNavigateToActor} />
       )}
     </div>
   )

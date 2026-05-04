@@ -337,6 +337,18 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
   const loadActorTags = () => actorTagsApi.list(true).then((d) => setActorTags(d as TagItem[]))
 
   useEffect(() => { loadWorkTags(); loadActorTags() }, [])
+  useEffect(() => {
+    if (!workTagModal) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setWorkTagModal(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [workTagModal])
+  useEffect(() => {
+    if (!actorTagModal) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setActorTagModal(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [actorTagModal])
 
   const handleWorkTagClick = async (tagId: number, tagName: string) => {
     const works = await worksApi.list({ tagIds: [tagId] }) as Work[]

@@ -62,6 +62,13 @@ export default function Ranking({ onNavigateToActor }: Props) {
   }, [])
 
   useEffect(() => {
+    if (!rankModal) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setRankModal(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [rankModal])
+
+  useEffect(() => {
     dashboardApi.actorScoreRanking(10).then((d) => setScoreRanking(d as Actor[]))
     dashboardApi.actorWorkCountRanking(10).then((d) => setWorkCountRanking(d as Actor[]))
     dashboardApi.actorBustRanking(10).then((d) => setBustRanking(d as Actor[]))

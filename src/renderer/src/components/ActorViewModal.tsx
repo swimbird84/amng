@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import type { Actor } from '../types'
 import { actorsApi, shellApi } from '../api'
 import ImagePreview from './ImagePreview'
@@ -28,14 +28,17 @@ const defaultScores = { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 
 export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, zIndex = 60 }: Props) {
   const [actor, setActor] = useState<Actor | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
   const [workSortDir, setWorkSortDir] = useState<'asc' | 'desc'>('desc')
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
 
   useEffect(() => {
     actorsApi.get(actorId).then(async (a) => {

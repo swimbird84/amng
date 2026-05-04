@@ -159,6 +159,13 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
 
   useEffect(() => {
+    if (!ratingModal) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setRatingModal(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [ratingModal])
+
+  useEffect(() => {
     dashboardApi.newWorks().then((d) => setNewWorks(d as Work[]))
     dashboardApi.newActors().then((d) => setNewActors(d as Actor[]))
     dashboardApi.releaseYears().then((d) => setYears(d as { year: string; count: number }[]))
