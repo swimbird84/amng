@@ -161,7 +161,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   const [debutYears, setDebutYears] = useState<{ year: string; count: number }[]>([])
   const [selectedDebutYear, setSelectedDebutYear] = useState<string | null>(null)
-  const [debutYearActors, setDebutYearActors] = useState<Actor[]>([])
+  const [debutMonthCounts, setDebutMonthCounts] = useState<{ month: number; count: number }[]>([])
+  const [selectedDebutMonth, setSelectedDebutMonth] = useState<number | null>(null)
+  const [debutMonthActors, setDebutMonthActors] = useState<Actor[]>([])
 
   const [ratingDist, setRatingDist] = useState<{ bucket: number; count: number }[]>([])
   const [ratingModal, setRatingModal] = useState<{ bucket: number; works: Work[] } | null>(null)
@@ -372,10 +374,18 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
               <button
                 key={year}
                 onClick={async () => {
-                  if (selectedDebutYear === year) { setSelectedDebutYear(null); setDebutYearActors([]); return }
+                  if (selectedDebutYear === year) {
+                    setSelectedDebutYear(null)
+                    setSelectedDebutMonth(null)
+                    setDebutMonthCounts([])
+                    setDebutMonthActors([])
+                    return
+                  }
                   setSelectedDebutYear(year)
-                  const actors = await dashboardApi.debutYearActors(year) as Actor[]
-                  setDebutYearActors(actors)
+                  setSelectedDebutMonth(null)
+                  setDebutMonthActors([])
+                  const months = await dashboardApi.debutMonths(year) as { month: number; count: number }[]
+                  setDebutMonthCounts(months)
                 }}
                 className={`px-3 py-1 rounded text-sm ${
                   selectedDebutYear === year ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -386,24 +396,68 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             ))}
             {debutYears.length === 0 && <p className="text-gray-500 text-sm">데뷔일 데이터가 없습니다</p>}
           </div>
-          {selectedDebutYear && debutYearActors.length > 0 && (
-            <div>
-              <p className="text-sm text-gray-400 mb-2">{selectedDebutYear}년 데뷔 ({debutYearActors.length}명)</p>
-              <div className="grid grid-cols-10 gap-2">
-                {debutYearActors.map((a, i) => (
-                  <ActorRankCard
-                    key={a.id}
-                    actor={a}
-                    rank={i + 1}
-                    subtitle={(a as any).debut_date || '-'}
-                    showRank={false}
-                    onClick={() => onNavigateToActor(a.id)}
-                    onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
-                    onMouseLeave={() => setTooltip(null)}
-                  />
+          {selectedDebutYear && debutMonthCounts.length > 0 && (
+            <>
+              <div className="grid grid-cols-12 gap-1.5 mb-4">
+                {debutMonthCounts.map(({ month, count }) => (
+                  <button
+                    key={month}
+                    onClick={async () => {
+                      if (!count) return
+                      if (selectedDebutMonth === month) { setSelectedDebutMonth(null); setDebutMonthActors([]); return }
+                      setSelectedDebutMonth(month)
+                      const actors = await dashboardApi.debutMonthActors(selectedDebutYear, month) as Actor[]
+                      setDebutMonthActors(actors)
+                    }}
+                    className={`py-2 rounded text-xs text-center ${
+                      selectedDebutMonth === month
+                        ? 'bg-blue-600 text-white'
+                        : count > 0
+                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                    }`}
+                  >
+                    <div>{month}월</div>
+                    <div className="opacity-70">{count}</div>
+                  </button>
                 ))}
               </div>
-            </div>
+              {selectedDebutMonth !== null && debutMonthActors.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-2">{selectedDebutYear}년 {selectedDebutMonth}월 데뷔 ({debutMonthActors.length}명)</p>
+                  <div className="grid grid-cols-5 gap-3">
+                    {debutMonthActors.map((a) => (
+                      <div
+                        key={a.id}
+                        onClick={() => onNavigateToActor(a.id)}
+                        onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                        onMouseLeave={() => setTooltip(null)}
+                        className="cursor-pointer rounded-lg border border-gray-700 hover:border-gray-500"
+                      >
+                        <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40 rounded-t-lg" />
+                        <div className="p-2 bg-gray-800 rounded-b-lg">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="text-sm font-bold text-white truncate flex-1">{a.name}</p>
+                            <p className="text-sm font-bold text-yellow-400 shrink-0">{((a as any).avg_score ?? 0).toFixed(2)}점</p>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-400">{a.birthday || '-'}</p>
+                            <p className="text-xs text-gray-400">총{(a as any).work_count ?? 0}편</p>
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            {[
+                              a.height ? `${a.height}cm` : '',
+                              (a.bust || a.waist || a.hip) ? `B${a.bust ?? '?'}-W${a.waist ?? '?'}-H${a.hip ?? '?'}` : '',
+                              a.cup ? `${a.cup}컵` : '',
+                            ].filter(Boolean).join(' ') || '-'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 

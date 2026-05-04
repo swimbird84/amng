@@ -132,7 +132,8 @@ export const dashboardApi = {
   actorCupDist: () => api.invoke('dashboard:actor-cup-dist'),
   ratingWorks: (bucket: number) => api.invoke('dashboard:rating-works', bucket),
   debutYears: () => api.invoke('dashboard:debut-years'),
-  debutYearActors: (year: string) => api.invoke('dashboard:debut-year-actors', year),
+  debutMonths: (year: string) => api.invoke('dashboard:debut-months', year),
+  debutMonthActors: (year: string, month: number) => api.invoke('dashboard:debut-month-actors', year, month),
   studioDist: () => api.invoke('dashboard:studio-dist'),
 }
 

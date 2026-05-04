@@ -1212,7 +1212,20 @@ export function registerIpcHandlers(): void {
     `).all()
   })
 
-  ipcMain.handle('dashboard:debut-year-actors', (_e, year: string) => {
+  ipcMain.handle('dashboard:debut-months', (_e, year: string) => {
+    const rows = db().prepare(`
+      SELECT CAST(strftime('%m', debut_date) AS INTEGER) AS month, COUNT(*) AS count
+      FROM actors WHERE debut_date IS NOT NULL AND debut_date != ''
+      AND strftime('%Y', debut_date) = ?
+      GROUP BY month ORDER BY month
+    `).all(year) as Array<{ month: number; count: number }>
+    return Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      count: rows.find(r => r.month === i + 1)?.count ?? 0
+    }))
+  })
+
+  ipcMain.handle('dashboard:debut-month-actors', (_e, year: string, month: number) => {
     return db().prepare(`
       SELECT a.*,
         COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
@@ -1220,8 +1233,9 @@ export function registerIpcHandlers(): void {
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.debut_date IS NOT NULL AND a.debut_date != ''
         AND strftime('%Y', a.debut_date) = ?
+        AND CAST(strftime('%m', a.debut_date) AS INTEGER) = ?
       ORDER BY a.debut_date ASC, avg_score DESC
-    `).all(year)
+    `).all(year, month)
   })
 
   ipcMain.handle('dashboard:actor-score-ranking', (_e, limit?: number, reverse?: boolean) => {
