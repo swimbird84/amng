@@ -1200,8 +1200,28 @@ export function registerIpcHandlers(): void {
         COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.birthday IS NOT NULL AND a.birthday != ''
-      ORDER BY age ASC, avg_score DESC
+      ORDER BY a.birthday DESC, a.debut_date DESC
     `).all()
+  })
+
+  ipcMain.handle('dashboard:debut-years', () => {
+    return db().prepare(`
+      SELECT strftime('%Y', debut_date) AS year, COUNT(*) AS count
+      FROM actors WHERE debut_date IS NOT NULL AND debut_date != ''
+      GROUP BY year ORDER BY year DESC
+    `).all()
+  })
+
+  ipcMain.handle('dashboard:debut-year-actors', (_e, year: string) => {
+    return db().prepare(`
+      SELECT a.*,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
+      FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
+      WHERE a.debut_date IS NOT NULL AND a.debut_date != ''
+        AND strftime('%Y', a.debut_date) = ?
+      ORDER BY a.debut_date ASC, avg_score DESC
+    `).all(year)
   })
 
   ipcMain.handle('dashboard:actor-score-ranking', (_e, limit?: number, reverse?: boolean) => {

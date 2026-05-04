@@ -159,6 +159,10 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [selectedCup, setSelectedCup] = useState<string | null>(null)
   const [selectedScoreBucket, setSelectedScoreBucket] = useState<{ base: number; half: 'early' | 'late' } | null>(null)
 
+  const [debutYears, setDebutYears] = useState<{ year: string; count: number }[]>([])
+  const [selectedDebutYear, setSelectedDebutYear] = useState<string | null>(null)
+  const [debutYearActors, setDebutYearActors] = useState<Actor[]>([])
+
   const [ratingDist, setRatingDist] = useState<{ bucket: number; count: number }[]>([])
   const [ratingModal, setRatingModal] = useState<{ bucket: number; works: Work[] } | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
@@ -178,6 +182,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.actorScoreDist().then((d) => setScoreDist(d as (Actor & { avg_score: number; work_count: number })[]))
     dashboardApi.actorCupDist().then((d) => setCupDist(d as (Actor & { avg_score: number; work_count: number })[]))
     dashboardApi.ratingDist().then((d) => setRatingDist(d as { bucket: number; count: number }[]))
+    dashboardApi.debutYears().then((d) => setDebutYears(d as { year: string; count: number }[]))
   }, [])
 
 
@@ -356,6 +361,49 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                 </div>
               )}
             </>
+          )}
+        </div>
+
+        {/* 데뷔일 분포 */}
+        <div>
+          <SectionTitle>데뷔일 분포</SectionTitle>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {debutYears.map(({ year, count }) => (
+              <button
+                key={year}
+                onClick={async () => {
+                  if (selectedDebutYear === year) { setSelectedDebutYear(null); setDebutYearActors([]); return }
+                  setSelectedDebutYear(year)
+                  const actors = await dashboardApi.debutYearActors(year) as Actor[]
+                  setDebutYearActors(actors)
+                }}
+                className={`px-3 py-1 rounded text-sm ${
+                  selectedDebutYear === year ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                {year} <span className="text-xs opacity-70">({count})</span>
+              </button>
+            ))}
+            {debutYears.length === 0 && <p className="text-gray-500 text-sm">데뷔일 데이터가 없습니다</p>}
+          </div>
+          {selectedDebutYear && debutYearActors.length > 0 && (
+            <div>
+              <p className="text-sm text-gray-400 mb-2">{selectedDebutYear}년 데뷔 ({debutYearActors.length}명)</p>
+              <div className="grid grid-cols-10 gap-2">
+                {debutYearActors.map((a, i) => (
+                  <ActorRankCard
+                    key={a.id}
+                    actor={a}
+                    rank={i + 1}
+                    subtitle={(a as any).debut_date || '-'}
+                    showRank={false}
+                    onClick={() => onNavigateToActor(a.id)}
+                    onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setTooltip(null)}
+                  />
+                ))}
+              </div>
+            </div>
           )}
         </div>
 
