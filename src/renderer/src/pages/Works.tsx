@@ -5,6 +5,7 @@ import SearchBar, { type WorkSearchParams } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
+import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
 function hashColor(name: string): string {
   let hash = 0
@@ -46,7 +47,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('works:sortDir') as 'asc' | 'desc') || 'desc'
   )
-  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
@@ -306,7 +307,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                   })
                 }}
                 onClick={() => { if (!deleteMode) handleSelect(w.id) }}
-                onMouseMove={(e) => !deleteMode && w.comment && setTooltip({ text: w.comment, x: e.clientX, y: e.clientY })}
+                onMouseMove={(e) => !deleteMode && setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setTooltip(null)}
                 className={`relative cursor-pointer rounded-lg border ring-2 ${
                   deleteMode
@@ -629,14 +630,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
         </div>
       )}
 
-      {tooltip && (
-        <div
-          className="fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 whitespace-pre-wrap w-[220px]"
-          style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}
-        >
-          {tooltip.text}
-        </div>
-      )}
+      {tooltip && <CardTooltip tooltip={tooltip} />}
 
       {showForm && (
         <WorkForm

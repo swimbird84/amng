@@ -1,6 +1,6 @@
 {
   "name": "amng",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "동영상 파일 관리 프로그램",
   "main": "./out/main/index.js",
   "scripts": {

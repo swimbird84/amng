@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import type React from 'react'
 import type { Work, Actor } from '../types'
 import { workTagsApi, actorTagsApi, worksApi, actorsApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
@@ -6,6 +7,7 @@ import Rating from '../components/Rating'
 import WorkViewModal from '../components/WorkViewModal'
 import ActorViewModal from '../components/ActorViewModal'
 import TagCategoryManager from '../components/TagManager'
+import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
 interface Props {
   onNavigateToWork: (id: number) => void
@@ -27,9 +29,9 @@ interface TagItem {
 
 type SortBy = 'name' | 'total_count' | 'created_at'
 
-function WorkCard({ work, onClick }: { work: Work & { rep_tags?: { id: number; name: string }[] }; onClick: () => void }) {
+function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & { rep_tags?: { id: number; name: string }[] }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
       <div className="p-2 bg-gray-800">
         <div className="flex items-center justify-between gap-1">
@@ -42,12 +44,12 @@ function WorkCard({ work, onClick }: { work: Work & { rep_tags?: { id: number; n
   )
 }
 
-function ActorListCard({ actor, onClick }: { actor: Actor & { avg_score?: number; work_count?: number }; onClick: () => void }) {
+function ActorListCard({ actor, onClick, onMouseMove, onMouseLeave }: { actor: Actor & { avg_score?: number; work_count?: number }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   const age = actor.birthday
     ? `${Math.floor((Date.now() - new Date(actor.birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000))}세`
     : '-'
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-40" />
       <div className="p-2 bg-gray-800">
         <div className="flex items-center justify-between gap-1">
@@ -332,6 +334,7 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
   const [actorTagModal, setActorTagModal] = useState<{ tagName: string; actors: Actor[] } | null>(null)
   const [viewWorkId, setViewWorkId] = useState<number | null>(null)
   const [viewActorId, setViewActorId] = useState<number | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   const loadWorkTags = () => workTagsApi.list(true).then((d) => setWorkTags(d as TagItem[]))
   const loadActorTags = () => actorTagsApi.list(true).then((d) => setActorTags(d as TagItem[]))
@@ -398,7 +401,7 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
               {workTagModal.works.length > 0 ? (
                 <div className="grid grid-cols-5 gap-3">
                   {workTagModal.works.map((w) => (
-                    <WorkCard key={w.id} work={w} onClick={() => setViewWorkId(w.id)} />
+                    <WorkCard key={w.id} work={w} onClick={() => setViewWorkId(w.id)} onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                   ))}
                 </div>
               ) : (
@@ -422,7 +425,7 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
               {actorTagModal.actors.length > 0 ? (
                 <div className="grid grid-cols-5 gap-3">
                   {actorTagModal.actors.map((a) => (
-                    <ActorListCard key={a.id} actor={a} onClick={() => setViewActorId(a.id)} />
+                    <ActorListCard key={a.id} actor={a} onClick={() => setViewActorId(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                   ))}
                 </div>
               ) : (
@@ -433,6 +436,7 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
         </div>
       )}
 
+      {tooltip && <CardTooltip tooltip={tooltip} />}
       {viewWorkId !== null && (
         <>
           <div className="fixed inset-0 bg-black/60" style={{ zIndex: 69 }} onClick={() => setViewWorkId(null)} />

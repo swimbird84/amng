@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { actorsApi } from '../api'
 import ImagePreview from './ImagePreview'
 import type { ActorScores } from '../types'
+import CardTooltip, { type TooltipState } from './CardTooltip'
 
 export interface PhysicalSettings {
   profileWeight: number
@@ -236,7 +237,7 @@ const EDIT_SCORE_FIELDS: { label: string; getValue: (a: ActorPhysicalData) => nu
   { label: '비율',   getValue: a => a.proportions, apiKey: 'proportions' },
 ]
 
-export default function PhysicalCorrectionModal({ onClose }: { onClose: () => void }) {
+export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onClose: () => void; onViewActor?: (id: number) => void }) {
   const [settings, setSettings] = useState<PhysicalSettings>(loadSettings)
   const [actors, setActors] = useState<ActorPhysicalData[]>([])
   const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>(
@@ -247,6 +248,7 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
   )
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editScores, setEditScores] = useState<ActorScores>({ face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 })
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   useEffect(() => {
     actorsApi.physicalData().then(d => setActors(d as ActorPhysicalData[]))
@@ -504,9 +506,11 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
                 ].filter(Boolean).join('  ')
                 const isEditing = editingId === a.id
                 return (
-                  <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
+                  <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2" onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
                     <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? i + 1 : ranked.length - i}</span>
-                    <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" />
+                    <div onClick={() => onViewActor?.(a.id)} className={onViewActor ? 'cursor-pointer' : ''}>
+                      <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" />
+                    </div>
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
                       <div className="flex items-center justify-between gap-1">
                         <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
@@ -561,6 +565,7 @@ export default function PhysicalCorrectionModal({ onClose }: { onClose: () => vo
           </div>
         </div>
       </div>
+      {tooltip && <CardTooltip tooltip={tooltip} />}
     </div>
   )
 }

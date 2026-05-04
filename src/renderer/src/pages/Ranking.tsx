@@ -1,22 +1,25 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import type { Actor } from '../types'
 import { actorsApi, dashboardApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
+import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
 interface Props {
   onNavigateToActor: (id: number) => void
 }
 
-function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick }: {
+function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick, onMouseMove, onMouseLeave }: {
   actor: Actor & { avg_score?: number; work_count?: number }
   rank: number
   subtitle: string
   showRank?: boolean
   onClick: () => void
+  onMouseMove?: (e: React.MouseEvent) => void
+  onMouseLeave?: () => void
 }) {
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <div className="relative">
         {showRank && <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-sm px-1.5 py-0.5 rounded z-10 leading-tight font-bold">{rank}</span>}
         <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
@@ -44,6 +47,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
   const [reversedData, setReversedData] = useState<Record<string, Actor[]>>({})
 
   const [rankModal, setRankModal] = useState<{ title: string; actors: Actor[]; subtitle: (a: Actor) => string; reversed: boolean } | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   const computePhysicalRanking = useCallback(async () => {
     const data = await actorsApi.physicalData() as ActorPhysicalData[]
@@ -161,6 +165,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
                       rank={rank}
                       subtitle={subtitle(a as any)}
                       onClick={() => onNavigateToActor(a.id)}
+                      onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                      onMouseLeave={() => setTooltip(null)}
                     />
                   )
                 })}
@@ -197,6 +203,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
                     rank={rank}
                     subtitle={rankModal.subtitle(a)}
                     onClick={() => onNavigateToActor(a.id)}
+                    onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setTooltip(null)}
                   />
                 )
               })}
@@ -205,6 +213,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
         </div>
       </div>
     )}
+    {tooltip && <CardTooltip tooltip={tooltip} />}
     </>
   )
 }

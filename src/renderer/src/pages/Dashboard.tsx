@@ -4,6 +4,7 @@ import type { Work, Actor } from '../types'
 import { dashboardApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
+import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
 interface Props {
   onNavigateToWork: (id: number) => void
@@ -61,9 +62,9 @@ function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & {
 }
 
 // 작품 미니 카드 (신작용, 절반 크기)
-function WorkMiniCard({ work, onClick }: { work: Work; onClick: () => void }) {
+function WorkMiniCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-20" />
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{work.product_number || '-'}</p>
@@ -74,15 +75,17 @@ function WorkMiniCard({ work, onClick }: { work: Work; onClick: () => void }) {
 }
 
 // 배우 미니 카드 (랭킹용, 절반 크기)
-function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick }: {
+function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick, onMouseMove, onMouseLeave }: {
   actor: Actor & { avg_score?: number; work_count?: number }
   rank: number
   subtitle: string
   showRank?: boolean
   onClick: () => void
+  onMouseMove?: (e: React.MouseEvent) => void
+  onMouseLeave?: () => void
 }) {
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <div className="relative">
         {showRank && <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-sm px-1.5 py-0.5 rounded z-10 leading-tight font-bold">{rank}</span>}
         <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
@@ -96,14 +99,16 @@ function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick }: {
 }
 
 // 배우 컵 분포 카드
-function ActorCupCard({ actor, onClick }: {
+function ActorCupCard({ actor, onClick, onMouseMove, onMouseLeave }: {
   actor: Actor & { avg_score?: number; ratio_score?: number }
   onClick: () => void
+  onMouseMove?: (e: React.MouseEvent) => void
+  onMouseLeave?: () => void
 }) {
   const parts = [actor.bust ? `B${actor.bust}` : null, actor.waist ? `W${actor.waist}` : null].filter(Boolean)
   const bw = parts.join('-')
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{actor.name}</p>
@@ -117,9 +122,9 @@ function ActorCupCard({ actor, onClick }: {
 }
 
 // 나이대별 배우 아이템 (작은 썸네일 + 이름 + 평점)
-function ActorAgeItem({ actor, onClick }: { actor: Actor & { avg_score?: number }; onClick: () => void }) {
+function ActorAgeItem({ actor, onClick, onMouseMove, onMouseLeave }: { actor: Actor & { avg_score?: number }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} className="cursor-pointer flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
       <ImagePreview path={actor.photo_path} alt={actor.name} className="w-12 h-12 rounded object-cover" />
       <p className="text-xs text-white truncate w-full text-center">{actor.name}</p>
       <p className="text-xs text-yellow-400">{(actor.avg_score ?? 0).toFixed(2)}</p>
@@ -156,7 +161,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   const [ratingDist, setRatingDist] = useState<{ bucket: number; count: number }[]>([])
   const [ratingModal, setRatingModal] = useState<{ bucket: number; works: Work[] } | null>(null)
-  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   useEffect(() => {
     if (!ratingModal) return
@@ -259,7 +264,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           {newWorks.length > 0 ? (
             <div className="grid grid-cols-10 gap-2">
               {newWorks.slice(0, expandedWorks ? undefined : 10).map((w) => (
-                <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} />
+                <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
               ))}
             </div>
           ) : (
@@ -289,6 +294,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                   subtitle={a.debut_date || '-'}
                   showRank={false}
                   onClick={() => onNavigateToActor(a.id)}
+                  onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
                 />
               ))}
             </div>
@@ -340,7 +347,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                   {monthWorks.length > 0 ? (
                     <div className="grid grid-cols-5 gap-3">
                       {monthWorks.map((w) => (
-                        <WorkCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => w.comment ? setTooltip({ text: w.comment, x: e.clientX, y: e.clientY }) : undefined} onMouseLeave={() => setTooltip(null)} />
+                        <WorkCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                       ))}
                     </div>
                   ) : (
@@ -431,7 +438,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                       {actors.length > 0 ? (
                         <div className="grid grid-cols-10 gap-2">
                           {actors.map((a, i) => (
-                            <ActorRankCard key={a.id} actor={a} rank={i + 1} subtitle={`${(a.avg_score ?? 0).toFixed(2)}점`} showRank={false} onClick={() => onNavigateToActor(a.id)} />
+                            <ActorRankCard key={a.id} actor={a} rank={i + 1} subtitle={`${(a.avg_score ?? 0).toFixed(2)}점`} showRank={false} onClick={() => onNavigateToActor(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                           ))}
                         </div>
                       ) : (
@@ -500,7 +507,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                           {actors.length > 0 ? (
                             <div className="grid grid-cols-10 gap-2">
                               {actors.map((a, i) => (
-                                <ActorRankCard key={a.id} actor={a} rank={i + 1} subtitle={`${(a.avg_score ?? 0).toFixed(2)}점`} showRank={false} onClick={() => onNavigateToActor(a.id)} />
+                                <ActorRankCard key={a.id} actor={a} rank={i + 1} subtitle={`${(a.avg_score ?? 0).toFixed(2)}점`} showRank={false} onClick={() => onNavigateToActor(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                               ))}
                             </div>
                           ) : (
@@ -544,7 +551,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                 <div className="border border-gray-700 rounded-lg p-4">
                   <div className="grid grid-cols-10 gap-2">
                     {cupDist.filter((a) => a.cup === selectedCup).map((a) => (
-                      <ActorCupCard key={a.id} actor={a} onClick={() => onNavigateToActor(a.id)} />
+                      <ActorCupCard key={a.id} actor={a} onClick={() => onNavigateToActor(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                     ))}
                   </div>
                 </div>
@@ -572,7 +579,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             {ratingModal.works.length > 0 ? (
               <div className="grid grid-cols-10 gap-2">
                 {ratingModal.works.map((w) => (
-                  <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} />
+                  <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                 ))}
               </div>
             ) : (
@@ -582,14 +589,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         </div>
       </div>
     )}
-    {tooltip && (
-      <div
-        className="fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 whitespace-pre-wrap w-[220px]"
-        style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}
-      >
-        {tooltip.text}
-      </div>
-    )}
+    {tooltip && <CardTooltip tooltip={tooltip} />}
     </>
   )
 }

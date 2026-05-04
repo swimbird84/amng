@@ -7,6 +7,7 @@ import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import RadarChart from '../components/RadarChart'
 import PhysicalCorrectionModal, { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
+import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
 function getAge(birthday: string | null): string {
   if (!birthday) return '-'
@@ -55,7 +56,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   const [workSortDir, setWorkSortDir] = useState<'desc' | 'asc'>('desc')
   const [hoverCover, setHoverCover] = useState<string | null>(null)
   const [physScoreMap, setPhysScoreMap] = useState<Map<number, number>>(new Map())
-  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [refreshKey, setRefreshKey] = useState(0)
   const [deleteMode, setDeleteMode] = useState(false)
@@ -300,7 +301,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                   })
                 }}
                 onClick={() => { if (!deleteMode) handleSelect(a.id) }}
-                onMouseMove={(e) => !deleteMode && a.comment && setTooltip({ text: a.comment, x: e.clientX, y: e.clientY })}
+                onMouseMove={(e) => !deleteMode && setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setTooltip(null)}
                 className={`relative cursor-pointer rounded-lg border ring-2 ${
                   deleteMode
@@ -609,14 +610,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
         </div>
       )}
 
-      {tooltip && (
-        <div
-          className="fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 whitespace-pre-wrap w-[220px]"
-          style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}
-        >
-          {tooltip.text}
-        </div>
-      )}
+      {tooltip && <CardTooltip tooltip={tooltip} />}
 
       {showForm && (
         <ActorForm

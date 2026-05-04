@@ -4,6 +4,7 @@ import { actorsApi, shellApi } from '../api'
 import ImagePreview from './ImagePreview'
 import Rating from './Rating'
 import RadarChart from './RadarChart'
+import CardTooltip, { type TooltipState } from './CardTooltip'
 
 interface Props {
   actorId: number
@@ -38,6 +39,7 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
   }, [])
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
   const [workSortDir, setWorkSortDir] = useState<'asc' | 'desc'>('desc')
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
 
   useEffect(() => {
@@ -214,6 +216,8 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
                       <div key={w.id} className="flex items-stretch gap-1.5">
                         <div
                           onClick={() => onViewWork(w.id)}
+                          onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
+                          onMouseLeave={() => setTooltip(null)}
                           className="flex-1 flex gap-2 items-center bg-gray-700 rounded p-2 cursor-pointer hover:bg-gray-600"
                         >
                           <ImagePreview path={w.cover_path} alt={w.product_number || '-'} className="w-16 h-12 rounded flex-shrink-0 object-cover" />
@@ -257,6 +261,7 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
         </div>
 
       </div>
+      {tooltip && <CardTooltip tooltip={tooltip} />}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import type { Work } from '../types'
 import { studiosApi, makersApi, worksApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import StudioManager from '../components/StudioManager'
+import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
 interface StudioWithCount {
   id: number
@@ -73,9 +74,9 @@ function ColorButton({ color, isSelected, onClick, title, children }: {
   )
 }
 
-function WorkMiniCard({ work, onClick }: { work: Work; onClick: () => void }) {
+function WorkMiniCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-20" />
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{work.product_number || '-'}</p>
@@ -110,6 +111,7 @@ export default function Labels({ onNavigateToWork }: Props) {
   const [showManager, setShowManager] = useState(false)
   const [expandedMakerId, setExpandedMakerId] = useState<string | null>(null)
   const [workCountBucket, setWorkCountBucket] = useState<string | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   const loadAll = async () => {
     const [s, m] = await Promise.all([
@@ -414,7 +416,7 @@ export default function Labels({ onNavigateToWork }: Props) {
                     </div>
                     <div className="grid grid-cols-10 gap-2">
                       {works.map((w) => (
-                        <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} />
+                        <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                       ))}
                     </div>
                   </div>
@@ -428,6 +430,7 @@ export default function Labels({ onNavigateToWork }: Props) {
       {showManager && (
         <StudioManager onClose={() => { setShowManager(false); loadAll() }} />
       )}
+      {tooltip && <CardTooltip tooltip={tooltip} />}
     </div>
   )
 }
