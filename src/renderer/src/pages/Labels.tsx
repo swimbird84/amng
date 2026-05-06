@@ -95,8 +95,8 @@ interface Props {
 export default function Labels({ onNavigateToWork }: Props) {
   const [studios, setStudios] = useState<StudioWithCount[]>([])
   const [makers, setMakers] = useState<MakerWithCount[]>([])
-  const [makerKeyword, setMakerKeyword] = useState('')
-  const [labelKeyword, setLabelKeyword] = useState('')
+  const [makerKeyword, setMakerKeyword] = useState(() => localStorage.getItem('labels:makerKeyword') ?? '')
+  const [labelKeyword, setLabelKeyword] = useState(() => localStorage.getItem('labels:labelKeyword') ?? '')
   const [sortBy, setSortBy] = useState<SortBy>(
     (localStorage.getItem('labels:sortBy') as SortBy) || 'count'
   )
@@ -110,7 +110,9 @@ export default function Labels({ onNavigateToWork }: Props) {
   )
   const [showManager, setShowManager] = useState(false)
   const [expandedMakerId, setExpandedMakerId] = useState<string | null>(null)
-  const [workCountBucket, setWorkCountBucket] = useState<string | null>(null)
+  const [workCountBucket, setWorkCountBucket] = useState<string | null>(() => localStorage.getItem('labels:workCountBucket'))
+  const [labelCountBucket, setLabelCountBucket] = useState<string | null>(() => localStorage.getItem('labels:labelCountBucket'))
+  const [bucketMode, setBucketMode] = useState<'work' | 'label'>(() => (localStorage.getItem('labels:bucketMode') as 'work' | 'label') || 'work')
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   const loadAll = async () => {
@@ -157,13 +159,48 @@ export default function Labels({ onNavigateToWork }: Props) {
   }, [studios])
 
   const buckets = useMemo(() => {
-    const bucketMap = new Map<string, number>()
+    type BucketData = { makerCount: number; labelCount: number; workCount: number }
+    const bucketMap = new Map<string, BucketData>()
+    const studiosByMaker = new Map<number, StudioWithCount[]>()
+    for (const s of studios) {
+      if (s.maker_id != null) {
+        if (!studiosByMaker.has(s.maker_id)) studiosByMaker.set(s.maker_id, [])
+        studiosByMaker.get(s.maker_id)!.push(s)
+      }
+    }
     for (const maker of makers) {
       const total = makerTotalWorks.get(maker.id) ?? 0
       const bucket = getMakerBucket(total)
-      bucketMap.set(bucket, (bucketMap.get(bucket) ?? 0) + 1)
+      const makerStudios = studiosByMaker.get(maker.id) ?? []
+      const existing = bucketMap.get(bucket) ?? { makerCount: 0, labelCount: 0, workCount: 0 }
+      bucketMap.set(bucket, {
+        makerCount: existing.makerCount + 1,
+        labelCount: existing.labelCount + makerStudios.length,
+        workCount: existing.workCount + total,
+      })
     }
-    return Array.from(bucketMap.entries()).sort((a, b) => bucketHigh(b[0]) - bucketHigh(a[0]))
+    return Array.from(bucketMap.entries())
+      .sort((a, b) => bucketHigh(b[0]) - bucketHigh(a[0]))
+      .map(([bucket, data]) => ({ bucket, ...data }))
+  }, [makers, makerTotalWorks, studios])
+
+  const labelBuckets = useMemo(() => {
+    type BucketData = { makerCount: number; labelCount: number; workCount: number }
+    const bucketMap = new Map<string, BucketData>()
+    for (const maker of makers) {
+      const labelCount = maker.studio_count
+      const bucket = String(labelCount)
+      const total = makerTotalWorks.get(maker.id) ?? 0
+      const existing = bucketMap.get(bucket) ?? { makerCount: 0, labelCount: 0, workCount: 0 }
+      bucketMap.set(bucket, {
+        makerCount: existing.makerCount + 1,
+        labelCount: existing.labelCount + labelCount,
+        workCount: existing.workCount + total,
+      })
+    }
+    return Array.from(bucketMap.entries())
+      .sort((a, b) => Number(b[0]) - Number(a[0]))
+      .map(([bucket, data]) => ({ bucket, ...data }))
   }, [makers, makerTotalWorks])
 
   // 필터링 + 정렬된 스튜디오
@@ -197,8 +234,11 @@ export default function Labels({ onNavigateToWork }: Props) {
       ? makers.filter(m => m.name.toLowerCase().includes(makerKeyword.toLowerCase()))
       : [...makers]
 
-    if (workCountBucket !== null) {
+    if (bucketMode === 'work' && workCountBucket !== null) {
       sortedMakers = sortedMakers.filter(m => getMakerBucket(makerTotalWorks.get(m.id) ?? 0) === workCountBucket)
+    }
+    if (bucketMode === 'label' && labelCountBucket !== null) {
+      sortedMakers = sortedMakers.filter(m => String(m.studio_count) === labelCountBucket)
     }
 
     if (sortBy === 'name') {
@@ -242,9 +282,17 @@ export default function Labels({ onNavigateToWork }: Props) {
     }
 
     return groups
-  }, [makers, filteredStudios, sortBy, sortDir, studios, makerKeyword, workCountBucket, makerTotalWorks])
+  }, [makers, filteredStudios, sortBy, sortDir, studios, makerKeyword, workCountBucket, labelCountBucket, bucketMode, makerTotalWorks])
 
   const selectedStudio = studios.find(s => s.id === selectedStudioId)
+
+  const filteredWorkCount = useMemo(() => {
+    if (expandedMakerId) {
+      const group = makerGroups.find(g => g.makerId === expandedMakerId)
+      return group?.studios.reduce((acc, s) => acc + s.work_count, 0) ?? 0
+    }
+    return makerGroups.reduce((acc, g) => acc + g.studios.reduce((a, s) => a + s.work_count, 0), 0)
+  }, [makerGroups, expandedMakerId])
 
   return (
     <div className="h-full flex flex-col">
@@ -273,27 +321,30 @@ export default function Labels({ onNavigateToWork }: Props) {
             <input
               type="text"
               value={makerKeyword}
-              onChange={(e) => setMakerKeyword(e.target.value)}
+              onChange={(e) => { setMakerKeyword(e.target.value); localStorage.setItem('labels:makerKeyword', e.target.value) }}
               placeholder="제작사 검색"
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
             />
-            <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 text-left">
-              결과 : {makerGroups.filter(g => g.makerId === '__none__' ? g.studios.length > 0 : true).length}
+            <div className="w-20 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 text-left">
+              결과:{makerGroups.filter(g => g.makerId === '__none__' ? g.studios.length > 0 : true).length}
             </div>
             <input
               type="text"
               value={labelKeyword}
-              onChange={(e) => setLabelKeyword(e.target.value)}
+              onChange={(e) => { setLabelKeyword(e.target.value); localStorage.setItem('labels:labelKeyword', e.target.value) }}
               placeholder="레이블 검색"
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
             />
-            <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 text-left">
-              결과 : {expandedMakerId
+            <div className="w-20 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 text-left">
+              결과:{expandedMakerId
                 ? (makerGroups.find(g => g.makerId === expandedMakerId)?.studios.length ?? 0)
                 : makerGroups.reduce((acc, g) => acc + g.studios.length, 0)}
             </div>
+            <div className="w-20 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 text-left">
+              작품:{filteredWorkCount}
+            </div>
             <button
-              onClick={() => { setMakerKeyword(''); setLabelKeyword('') }}
+              onClick={() => { setMakerKeyword(''); setLabelKeyword(''); localStorage.removeItem('labels:makerKeyword'); localStorage.removeItem('labels:labelKeyword') }}
               className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"
             >
               초기화
@@ -311,32 +362,79 @@ export default function Labels({ onNavigateToWork }: Props) {
       </div>
 
       <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 pb-4 space-y-4">
-        {/* 작품 수 버킷 필터 */}
-        {buckets.length > 0 && (
-          <div className="grid grid-cols-6 gap-1.5">
-            <button
-              onClick={() => { setWorkCountBucket(null); setExpandedMakerId(null); setSelectedStudioId(null); setStudioWorks([]) }}
-              className={`text-xs px-2 py-1.5 rounded text-center ${workCountBucket === null ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >
-              <p>전체보기</p>
-              <p className={workCountBucket === null ? 'text-blue-200' : 'text-gray-500'}>총 {makers.length}사</p>
-            </button>
-            {buckets.map(([bucket, count]) => (
+        {/* 버킷 모드 토글 + 버킷 필터 */}
+        {(buckets.length > 0 || labelBuckets.length > 0) && (
+          <div className="space-y-1.5">
+            <div className="flex gap-1.5">
               <button
-                key={bucket}
-                onClick={() => {
-                  const next = workCountBucket === bucket ? null : bucket
-                  setWorkCountBucket(next)
-                  setExpandedMakerId(null)
-                  setSelectedStudioId(null)
-                  setStudioWorks([])
-                }}
-                className={`text-xs px-2 py-1.5 rounded text-center ${workCountBucket === bucket ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                onClick={() => { setBucketMode('work'); localStorage.setItem('labels:bucketMode', 'work'); setLabelCountBucket(null); localStorage.removeItem('labels:labelCountBucket'); setExpandedMakerId(null); setSelectedStudioId(null); setStudioWorks([]) }}
+                className={`text-xs px-3 py-1 rounded ${bucketMode === 'work' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
               >
-                <p>{bucket}편</p>
-                <p className={workCountBucket === bucket ? 'text-blue-200' : 'text-gray-500'}>총 {count}사</p>
+                작품
               </button>
-            ))}
+              <button
+                onClick={() => { setBucketMode('label'); localStorage.setItem('labels:bucketMode', 'label'); setWorkCountBucket(null); localStorage.removeItem('labels:workCountBucket'); setExpandedMakerId(null); setSelectedStudioId(null); setStudioWorks([]) }}
+                className={`text-xs px-3 py-1 rounded ${bucketMode === 'label' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >
+                레이블
+              </button>
+            </div>
+            {bucketMode === 'work' && (
+              <div className="grid grid-cols-6 gap-1.5">
+                <button
+                  onClick={() => { setWorkCountBucket(null); localStorage.removeItem('labels:workCountBucket'); setExpandedMakerId(null); setSelectedStudioId(null); setStudioWorks([]) }}
+                  className={`text-xs px-2 py-1.5 rounded text-center ${workCountBucket === null ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  <p>전체보기</p>
+                  <p className={workCountBucket === null ? 'text-blue-200' : 'text-gray-500'}>제작사:{makers.length} 레이블:{studios.length} 작품:{studios.reduce((a, s) => a + s.work_count, 0)}</p>
+                </button>
+                {buckets.map(({ bucket, makerCount, labelCount, workCount }) => (
+                  <button
+                    key={bucket}
+                    onClick={() => {
+                      const next = workCountBucket === bucket ? null : bucket
+                      setWorkCountBucket(next)
+                      next ? localStorage.setItem('labels:workCountBucket', next) : localStorage.removeItem('labels:workCountBucket')
+                      setExpandedMakerId(null)
+                      setSelectedStudioId(null)
+                      setStudioWorks([])
+                    }}
+                    className={`text-xs px-2 py-1.5 rounded text-center ${workCountBucket === bucket ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >
+                    <p>{bucket}편</p>
+                    <p className={workCountBucket === bucket ? 'text-blue-200' : 'text-gray-500'}>제작사:{makerCount} 레이블:{labelCount} 작품:{workCount}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            {bucketMode === 'label' && (
+              <div className="grid grid-cols-6 gap-1.5">
+                <button
+                  onClick={() => { setLabelCountBucket(null); localStorage.removeItem('labels:labelCountBucket'); setExpandedMakerId(null); setSelectedStudioId(null); setStudioWorks([]) }}
+                  className={`text-xs px-2 py-1.5 rounded text-center ${labelCountBucket === null ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  <p>전체보기</p>
+                  <p className={labelCountBucket === null ? 'text-blue-200' : 'text-gray-500'}>제작사:{makers.length} 레이블:{studios.length} 작품:{studios.reduce((a, s) => a + s.work_count, 0)}</p>
+                </button>
+                {labelBuckets.map(({ bucket, makerCount, labelCount, workCount }) => (
+                  <button
+                    key={bucket}
+                    onClick={() => {
+                      const next = labelCountBucket === bucket ? null : bucket
+                      setLabelCountBucket(next)
+                      next ? localStorage.setItem('labels:labelCountBucket', next) : localStorage.removeItem('labels:labelCountBucket')
+                      setExpandedMakerId(null)
+                      setSelectedStudioId(null)
+                      setStudioWorks([])
+                    }}
+                    className={`text-xs px-2 py-1.5 rounded text-center ${labelCountBucket === bucket ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >
+                    <p>{bucket} 레이블</p>
+                    <p className={labelCountBucket === bucket ? 'text-blue-200' : 'text-gray-500'}>제작사:{makerCount} 레이블:{labelCount} 작품:{workCount}</p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -357,7 +455,7 @@ export default function Labels({ onNavigateToWork }: Props) {
                   title={group.makerName}
                 >
                   <p className="text-xs font-bold truncate">{group.makerName}</p>
-                  <p className="text-xs">레이블:{group.studios.length}개 작품:{totalWorks}편</p>
+                  <p className="text-xs">레이블:{group.studios.length} 작품:{totalWorks}</p>
                 </ColorButton>
               )
             })}
@@ -381,7 +479,7 @@ export default function Labels({ onNavigateToWork }: Props) {
                   title={s.name}
                 >
                   <p className="text-xs font-bold truncate">{s.name}</p>
-                  <p className="text-xs">{s.work_count}편</p>
+                  <p className="text-xs">작품:{s.work_count}</p>
                 </ColorButton>
               ))}
             </div>
