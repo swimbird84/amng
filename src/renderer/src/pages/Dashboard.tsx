@@ -432,25 +432,39 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                         onClick={() => onNavigateToActor(a.id)}
                         onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
                         onMouseLeave={() => setTooltip(null)}
-                        className="cursor-pointer rounded-lg border border-gray-700 hover:border-gray-500"
+                        className="cursor-pointer rounded-lg border border-gray-700 ring-2 ring-transparent hover:border-gray-500"
                       >
-                        <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40 rounded-t-lg" />
-                        <div className="p-2 bg-gray-800 rounded-b-lg">
+                        <div className="relative rounded-t-lg overflow-hidden">
+                          <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" />
+                        </div>
+                        <div className="p-2 bg-gray-800">
                           <div className="flex items-center justify-between gap-1">
                             <p className="text-sm font-bold text-white truncate flex-1">{a.name}</p>
                             <p className="text-sm font-bold text-yellow-400 shrink-0">{((a as any).avg_score ?? 0).toFixed(2)}점</p>
                           </div>
                           <div className="flex items-center justify-between">
-                            <p className="text-xs text-gray-400">{a.birthday || '-'}</p>
+                            <p className="text-xs text-gray-400">{a.birthday || '-'} ({a.birthday ? `${Math.floor((Date.now() - new Date(a.birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000))}세` : '-'})</p>
                             <p className="text-xs text-gray-400">총{(a as any).work_count ?? 0}편</p>
                           </div>
-                          <p className="text-xs text-gray-400">
-                            {[
-                              a.height ? `${a.height}cm` : '',
-                              (a.bust || a.waist || a.hip) ? `B${a.bust ?? '?'}-W${a.waist ?? '?'}-H${a.hip ?? '?'}` : '',
-                              a.cup ? `${a.cup}컵` : '',
-                            ].filter(Boolean).join(' ') || '-'}
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-400">
+                              {[
+                                a.height ? `${a.height}cm` : '',
+                                (a.bust || a.waist || a.hip) ? `B${a.bust ?? '?'}-W${a.waist ?? '?'}-H${a.hip ?? '?'}` : '',
+                                a.cup ? `${a.cup}컵` : '',
+                              ].filter(Boolean).join(' ') || '-'}
+                            </p>
+                            {(a as any).ratio_score != null && (
+                              <p className="text-xs text-blue-400 shrink-0">{(a as any).ratio_score.toFixed(2)}점</p>
+                            )}
+                          </div>
+                          {(a as any).rep_tags?.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-0.5">
+                              {(a as any).rep_tags.map((t: { id: number; name: string }) => (
+                                <span key={t.id} className="bg-blue-900/50 text-blue-300 text-xs px-1.5 py-0.5 rounded">{t.name}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}

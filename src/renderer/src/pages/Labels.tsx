@@ -269,7 +269,7 @@ export default function Labels({ onNavigateToWork }: Props) {
               {sortDir === 'asc' ? '↑' : '↓'}
             </button>
           </div>
-          <div className="w-[30rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+          <div className="w-[38rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
             <input
               type="text"
               value={makerKeyword}
@@ -277,6 +277,9 @@ export default function Labels({ onNavigateToWork }: Props) {
               placeholder="제작사 검색"
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
             />
+            <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 text-left">
+              결과 : {makerGroups.filter(g => g.makerId === '__none__' ? g.studios.length > 0 : true).length}
+            </div>
             <input
               type="text"
               value={labelKeyword}
@@ -284,6 +287,11 @@ export default function Labels({ onNavigateToWork }: Props) {
               placeholder="레이블 검색"
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
             />
+            <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 text-left">
+              결과 : {expandedMakerId
+                ? (makerGroups.find(g => g.makerId === expandedMakerId)?.studios.length ?? 0)
+                : makerGroups.reduce((acc, g) => acc + g.studios.length, 0)}
+            </div>
             <button
               onClick={() => { setMakerKeyword(''); setLabelKeyword('') }}
               className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"

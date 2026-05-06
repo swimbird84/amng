@@ -24,6 +24,7 @@ interface WorkSearchProps {
   tags: Tag[]
   actors: Actor[]
   studios: { id: number; name: string; maker_id?: number | null; maker_name?: string | null }[]
+  resultCount?: number
 }
 
 interface ActorSearchProps {
@@ -31,6 +32,7 @@ interface ActorSearchProps {
   params: ActorSearchParams
   onChange: (params: ActorSearchParams) => void
   tags: Tag[]
+  resultCount?: number
 }
 
 type Props = WorkSearchProps | ActorSearchProps
@@ -38,7 +40,7 @@ type Props = WorkSearchProps | ActorSearchProps
 export type { WorkSearchParams, ActorSearchParams, TagMode }
 
 export default function SearchBar(props: Props) {
-  const { type, params, onChange, tags } = props
+  const { type, params, onChange, tags, resultCount } = props
   const actors = type === 'works' ? (props as WorkSearchProps).actors : []
   const studios = type === 'works' ? (props as WorkSearchProps).studios : []
 
@@ -102,7 +104,7 @@ export default function SearchBar(props: Props) {
         value={params.keyword}
         onChange={(e) => onChange({ ...params, keyword: e.target.value } as never)}
         placeholder={type === 'works' ? '품번 검색' : '이름 검색'}
-        className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded ${type === 'works' ? 'w-22 shrink-0' : 'flex-1'}`}
+        className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded ${type === 'works' ? 'w-24 shrink-0' : 'flex-1'}`}
       />
 
       {type === 'works' && (() => {
@@ -275,7 +277,11 @@ export default function SearchBar(props: Props) {
           </div>
         )}
       </div>
-
+      {resultCount !== undefined && (
+          <div className="w-28 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 text-left">
+            결과 : {resultCount}
+          </div>
+      )}
       <button
         onClick={() => {
           if (type === 'works') {

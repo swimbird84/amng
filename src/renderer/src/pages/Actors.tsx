@@ -241,8 +241,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                 {sortDir === 'asc' ? '↑' : '↓'}
               </button>
             </div>
-            <div className="w-[30rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
-              <SearchBar type="actors" params={search} onChange={setSearch} tags={tags} />
+            <div className="w-[38rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+              <SearchBar type="actors" params={search} onChange={setSearch} tags={tags} resultCount={displayActors.length} />
             </div>
             <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <button

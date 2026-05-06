@@ -33,11 +33,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [allActors, setAllActors] = useState<Actor[]>([])
   const [allStudios, setAllStudios] = useState<(Studio & { maker_name?: string | null })[]>([])
   const [allMakers, setAllMakers] = useState<Maker[]>([])
-  const [studioId, setStudioId] = useState<number | null>(() => {
-    if (work?.studio_id != null) return work.studio_id
-    const saved = localStorage.getItem('workform:lastStudioId')
-    return saved ? Number(saved) : null
-  })
+  const [studioId, setStudioId] = useState<number | null>(work?.studio_id ?? null)
   const [actorOpen, setActorOpen] = useState(false)
   const [newActor, setNewActor] = useState('')
   const [urlInputOpen, setUrlInputOpen] = useState(false)
@@ -551,7 +547,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                     >
                       <button
                         type="button"
-                        onClick={() => { setStudioId(null); localStorage.removeItem('workform:lastStudioId'); setStudioDropOpen(false) }}
+                        onClick={() => { setStudioId(null); setStudioDropOpen(false) }}
                         className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === null ? 'text-white font-bold' : 'text-gray-300'}`}
                       >
                         없음
@@ -560,7 +556,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                         <button
                           key={s.id}
                           type="button"
-                          onClick={() => { setStudioId(s.id); localStorage.setItem('workform:lastStudioId', String(s.id)); setStudioDropOpen(false) }}
+                          onClick={() => { setStudioId(s.id); setStudioDropOpen(false) }}
                           className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
                         >
                           {s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name}
