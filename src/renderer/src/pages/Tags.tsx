@@ -182,7 +182,6 @@ function TagPanel({
     const name = inlineName.trim()
     if (!name) return
     await onCreateInCategory(name, catId)
-    setAddingCategoryKey(null)
     setInlineName('')
     onRefresh()
   }

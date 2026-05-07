@@ -55,7 +55,6 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
     if (tagId && !selectedIds.includes(tagId)) {
       onChange([...selectedIds, tagId])
     }
-    setAddingCatKey(null)
     setInlineCatName('')
   }
 
