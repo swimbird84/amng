@@ -177,7 +177,7 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
                       {onCreateTagInCategory && (
                         <button
                           type="button"
-                          onClick={() => { setAddingCatKey(String(g.catId)); setInlineCatName('') }}
+                          onClick={() => { setAddingCatKey(addingCatKey === String(g.catId) ? null : String(g.catId)); setInlineCatName('') }}
                           className="text-xs text-gray-600 hover:text-white px-1 rounded hover:bg-gray-700"
                         >
                           추가

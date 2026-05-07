@@ -261,18 +261,18 @@ function TagPanel({
             <div key={key}>
               {/* 카테고리 헤더 */}
               <div className="flex items-center gap-2 w-full mb-1.5">
-                <button type="button" onClick={() => toggleCollapse(key)} className="flex items-center gap-1.5">
+                <button type="button" onClick={() => toggleCollapse(key)} className="flex items-center gap-1.5 shrink-0">
                   <span className="text-gray-300 text-xs font-bold">{label}</span>
                   <span className="text-gray-600 text-xs">({count})</span>
                 </button>
-                <span className="flex-1 border-t border-gray-700" />
                 <button
                   type="button"
-                  onClick={() => { setAddingCategoryKey(key); setInlineName('') }}
+                  onClick={() => { setAddingCategoryKey(addingCategoryKey === key ? null : key); setInlineName('') }}
                   className="text-xs text-gray-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-gray-700 shrink-0"
                 >
                   추가
                 </button>
+                <span className="flex-1 border-t border-gray-700" />
               </div>
               {addingCategoryKey === key && (
                 <div className="flex gap-1 mb-2">
@@ -286,7 +286,6 @@ function TagPanel({
                     className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                   <button type="button" onClick={() => handleCreateInCategory(group.catId)} className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1 rounded">추가</button>
-                  <button type="button" onClick={() => setAddingCategoryKey(null)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded">취소</button>
                 </div>
               )}
 
