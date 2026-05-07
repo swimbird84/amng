@@ -307,9 +307,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                   })
                 }}
                 onClick={() => { if (!deleteMode) handleSelect(w.id) }}
-                onMouseMove={(e) => !deleteMode && setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
-                onMouseLeave={() => setTooltip(null)}
-                className={`relative cursor-pointer rounded-lg border ring-2 ${
+                className={`relative cursor-pointer rounded-lg border ring-2 flex flex-col ${
                   deleteMode
                     ? selectedDeleteIds.has(w.id)
                       ? 'border-red-500 ring-red-500'
@@ -319,7 +317,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                       : 'border-gray-700 ring-transparent hover:border-gray-500'
                 }`}
               >
-                <div className="relative rounded-t-lg overflow-hidden">
+                <div className="relative rounded-t-lg overflow-hidden" onMouseMove={(e) => !deleteMode && setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
                   <ImagePreview path={w.cover_path} alt={w.title || '표지'} className="w-full h-40" version={refreshKey} />
                   {deleteMode && selectedDeleteIds.has(w.id) && (
                     <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none">
@@ -345,7 +343,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                     {w.is_favorite ? '♥' : '♡'}
                   </button>
                 </div>
-                <div className="p-2 bg-gray-800">
+                <div className="p-2 bg-gray-800 flex-1">
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-sm font-bold text-white truncate flex-1">{w.product_number || '-'}</p>
                     <div className="flex-shrink-0">

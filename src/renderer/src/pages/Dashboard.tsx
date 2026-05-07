@@ -20,8 +20,8 @@ function hashColor(name: string): string {
 
 function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & { rep_tags?: { id: number; name: string }[]; rep_actors?: { id: number; name: string }[] }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <div className="relative">
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500 flex flex-col">
+      <div className="relative" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
         <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
         {work.studio_name && (
           <div className="absolute top-1 left-1 max-w-[70%]" style={{ lineHeight: 0 }}>
@@ -36,7 +36,7 @@ function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & {
           </div>
         )}
       </div>
-      <div className="p-2 bg-gray-800">
+      <div className="p-2 bg-gray-800 flex-1">
         <div className="flex items-center justify-between gap-1">
           <p className="text-sm font-bold text-white truncate flex-1">{work.product_number || '-'}</p>
           <div className="flex-shrink-0"><Rating value={work.rating} readonly small /></div>
@@ -64,8 +64,10 @@ function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & {
 // 작품 미니 카드 (신작용, 절반 크기)
 function WorkMiniCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-20" />
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+        <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-20" />
+      </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{work.product_number || '-'}</p>
         <p className="text-xs text-gray-500 truncate">{work.release_date || '-'}</p>
@@ -85,8 +87,8 @@ function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick, onMous
   onMouseLeave?: () => void
 }) {
   return (
-    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <div className="relative">
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <div className="relative" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
         {showRank && <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-sm px-1.5 py-0.5 rounded z-10 leading-tight font-bold">{rank}</span>}
         <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
       </div>
@@ -108,8 +110,10 @@ function ActorCupCard({ actor, onClick, onMouseMove, onMouseLeave }: {
   const parts = [actor.bust ? `B${actor.bust}` : null, actor.waist ? `W${actor.waist}` : null].filter(Boolean)
   const bw = parts.join('-')
   return (
-    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
+      </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{actor.name}</p>
         <div className="flex items-center justify-between">
@@ -124,8 +128,10 @@ function ActorCupCard({ actor, onClick, onMouseMove, onMouseLeave }: {
 // 나이대별 배우 아이템 (작은 썸네일 + 이름 + 평점)
 function ActorAgeItem({ actor, onClick, onMouseMove, onMouseLeave }: { actor: Actor & { avg_score?: number }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
-      <ImagePreview path={actor.photo_path} alt={actor.name} className="w-12 h-12 rounded object-cover" />
+    <div onClick={onClick} className="cursor-pointer flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
+      <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-12 h-12 rounded object-cover" />
+      </div>
       <p className="text-xs text-white truncate w-full text-center">{actor.name}</p>
       <p className="text-xs text-yellow-400">{(actor.avg_score ?? 0).toFixed(2)}</p>
     </div>
@@ -432,12 +438,12 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                         onClick={() => onNavigateToActor(a.id)}
                         onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
                         onMouseLeave={() => setTooltip(null)}
-                        className="cursor-pointer rounded-lg border border-gray-700 ring-2 ring-transparent hover:border-gray-500"
+                        className="cursor-pointer rounded-lg border border-gray-700 ring-2 ring-transparent hover:border-gray-500 flex flex-col"
                       >
                         <div className="relative rounded-t-lg overflow-hidden">
                           <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" />
                         </div>
-                        <div className="p-2 bg-gray-800">
+                        <div className="p-2 bg-gray-800 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <p className="text-sm font-bold text-white truncate flex-1">{a.name}</p>
                             <p className="text-sm font-bold text-yellow-400 shrink-0">{((a as any).avg_score ?? 0).toFixed(2)}점</p>

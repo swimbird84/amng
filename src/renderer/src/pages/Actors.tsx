@@ -301,9 +301,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                   })
                 }}
                 onClick={() => { if (!deleteMode) handleSelect(a.id) }}
-                onMouseMove={(e) => !deleteMode && setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
-                onMouseLeave={() => setTooltip(null)}
-                className={`relative cursor-pointer rounded-lg border ring-2 ${
+                className={`relative cursor-pointer rounded-lg border ring-2 flex flex-col ${
                   deleteMode
                     ? selectedDeleteIds.has(a.id)
                       ? 'border-red-500 ring-red-500'
@@ -313,7 +311,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                       : 'border-gray-700 ring-transparent hover:border-gray-500'
                 }`}
               >
-                <div className="relative rounded-t-lg overflow-hidden">
+                <div className="relative rounded-t-lg overflow-hidden" onMouseMove={(e) => !deleteMode && setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
                   <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" version={refreshKey} />
                   {deleteMode && selectedDeleteIds.has(a.id) && (
                     <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none">
@@ -327,7 +325,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                     {a.is_favorite ? '♥' : '♡'}
                   </button>
                 </div>
-                <div className="p-2 bg-gray-800">
+                <div className="p-2 bg-gray-800 flex-1">
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-sm font-bold text-white truncate flex-1">{a.name}</p>
                     <p className="text-sm font-bold text-yellow-400 flex-shrink-0">{(a.avg_score ?? 0).toFixed(2)}점</p>
@@ -544,8 +542,6 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                         <div key={w.id} className="flex items-stretch gap-1.5">
                           <div
                             onClick={() => onNavigateToWork?.(w.id)}
-                            onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
-                            onMouseLeave={() => setTooltip(null)}
                             className="flex-1 flex gap-2 items-center bg-gray-700 rounded p-2 cursor-pointer hover:bg-gray-600"
                           >
                             <ImagePreview
@@ -553,8 +549,9 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                               alt={w.product_number || '-'}
                               className="w-16 h-12 rounded flex-shrink-0 object-cover"
                               version={refreshKey}
+                              onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
+                              onMouseLeave={() => { setTooltip(null); setHoverCover(null) }}
                               onMouseEnter={() => setHoverCover(w.cover_path ?? null)}
-                              onMouseLeave={() => setHoverCover(null)}
                             />
                             <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                               <div className="flex items-start justify-between gap-1">
