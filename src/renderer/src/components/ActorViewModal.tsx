@@ -216,11 +216,14 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
                       <div key={w.id} className="flex items-stretch gap-1.5">
                         <div
                           onClick={() => onViewWork(w.id)}
-                          onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
-                          onMouseLeave={() => setTooltip(null)}
                           className="flex-1 flex gap-2 items-center bg-gray-700 rounded p-2 cursor-pointer hover:bg-gray-600"
                         >
-                          <ImagePreview path={w.cover_path} alt={w.product_number || '-'} className="w-16 h-12 rounded flex-shrink-0 object-cover" />
+                          <div
+                            onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
+                            onMouseLeave={() => setTooltip(null)}
+                          >
+                            <ImagePreview path={w.cover_path} alt={w.product_number || '-'} className="w-16 h-12 rounded flex-shrink-0 object-cover" />
+                          </div>
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                             <div className="flex items-start justify-between gap-1">
                               <div className="flex flex-wrap gap-0.5 min-w-0">
