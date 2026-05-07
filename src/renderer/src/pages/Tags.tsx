@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import type React from 'react'
 import type { Work, Actor } from '../types'
-import { workTagsApi, actorTagsApi, worksApi, actorsApi } from '../api'
+import { workTagsApi, actorTagsApi, workTagCategoriesApi, actorTagCategoriesApi, worksApi, actorsApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import WorkViewModal from '../components/WorkViewModal'
@@ -85,6 +85,7 @@ function TagPanel({
   onUpdate: (id: number, name: string) => Promise<void>
   onDelete: (id: number) => Promise<void>
   onTagClick: (id: number, name: string) => void
+  onCreateInCategory: (name: string, categoryId: number | null) => Promise<void>
 }) {
   const title = type === 'works' ? '작품 태그' : '배우 태그'
   const [search, setSearch] = useState(() => localStorage.getItem(`tags:${title}:search`) ?? '')
@@ -96,6 +97,8 @@ function TagPanel({
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const [addingCategoryKey, setAddingCategoryKey] = useState<string | null>(null)
+  const [inlineName, setInlineName] = useState('')
 
   const handleSearchChange = (v: string) => { setSearch(v); localStorage.setItem(`tags:${title}:search`, v) }
   const handleSortByChange = (s: SortBy) => { setSortBy(s); localStorage.setItem(`tags:${title}:sortBy`, s) }
@@ -174,6 +177,15 @@ function TagPanel({
     onRefresh()
   }
 
+  const handleCreateInCategory = async (catId: number | null) => {
+    const name = inlineName.trim()
+    if (!name) return
+    await onCreateInCategory(name, catId)
+    setAddingCategoryKey(null)
+    setInlineName('')
+    onRefresh()
+  }
+
   const accentBtn = type === 'works' ? 'bg-green-700 hover:bg-green-600 text-white' : 'bg-purple-700 hover:bg-purple-600 text-white'
 
   return (
@@ -248,15 +260,35 @@ function TagPanel({
           return (
             <div key={key}>
               {/* 카테고리 헤더 */}
-              <button
-                type="button"
-                onClick={() => toggleCollapse(key)}
-                className="flex items-center gap-2 w-full mb-1.5 group"
-              >
-                <span className="text-gray-300 text-xs font-bold">{label}</span>
-                <span className="text-gray-600 text-xs">({count})</span>
-                <span className="flex-1 border-t border-gray-700 ml-1" />
-              </button>
+              <div className="flex items-center gap-2 w-full mb-1.5">
+                <button type="button" onClick={() => toggleCollapse(key)} className="flex items-center gap-1.5">
+                  <span className="text-gray-300 text-xs font-bold">{label}</span>
+                  <span className="text-gray-600 text-xs">({count})</span>
+                </button>
+                <span className="flex-1 border-t border-gray-700" />
+                <button
+                  type="button"
+                  onClick={() => { setAddingCategoryKey(key); setInlineName('') }}
+                  className="text-xs text-gray-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-gray-700 shrink-0"
+                >
+                  추가
+                </button>
+              </div>
+              {addingCategoryKey === key && (
+                <div className="flex gap-1 mb-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={inlineName}
+                    onChange={(e) => setInlineName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateInCategory(group.catId); if (e.key === 'Escape') setAddingCategoryKey(null) }}
+                    placeholder="태그명 입력"
+                    className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button type="button" onClick={() => handleCreateInCategory(group.catId)} className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1 rounded">추가</button>
+                  <button type="button" onClick={() => setAddingCategoryKey(null)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded">취소</button>
+                </div>
+              )}
 
               {/* 태그 칩 */}
               {!isCollapsed && (
@@ -378,6 +410,10 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
             onUpdate={(id, name) => workTagsApi.update(id, name).then(() => {})}
             onDelete={(id) => workTagsApi.delete(id).then(() => {})}
             onTagClick={handleWorkTagClick}
+            onCreateInCategory={async (name, catId) => {
+              const id = await workTagsApi.create(name) as number
+              if (catId !== null) await workTagCategoriesApi.setTagCategory(id, catId)
+            }}
           />
           <TagPanel
             type="actors"
@@ -387,6 +423,10 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
             onUpdate={(id, name) => actorTagsApi.update(id, name).then(() => {})}
             onDelete={(id) => actorTagsApi.delete(id).then(() => {})}
             onTagClick={handleActorTagClick}
+            onCreateInCategory={async (name, catId) => {
+              const id = await actorTagsApi.create(name) as number
+              if (catId !== null) await actorTagCategoriesApi.setTagCategory(id, catId)
+            }}
           />
         </div>
       </div>

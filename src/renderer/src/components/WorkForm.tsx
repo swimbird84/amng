@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type { Work, Tag, Actor, Studio, Maker } from '../types'
-import { worksApi, workTagsApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi } from '../api'
+import { worksApi, workTagsApi, workTagCategoriesApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi } from '../api'
 import Rating from './Rating'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
@@ -260,6 +260,14 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   const handleCreateTag = async (name: string): Promise<number> => {
     const id = await workTagsApi.create(name) as number
+    const tags = await workTagsApi.list() as Tag[]
+    setAllTags(tags)
+    return id
+  }
+
+  const handleCreateTagInCategory = async (name: string, categoryId: number | null): Promise<number> => {
+    const id = await workTagsApi.create(name) as number
+    if (categoryId !== null) await workTagCategoriesApi.setTagCategory(id, categoryId)
     const tags = await workTagsApi.list() as Tag[]
     setAllTags(tags)
     return id
@@ -679,6 +687,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
               selectedIds={selectedTagIds}
               onChange={setSelectedTagIds}
               onCreateTag={handleCreateTag}
+              onCreateTagInCategory={handleCreateTagInCategory}
               repTagIds={repTagIds}
               onChangeRep={setRepTagIds}
             />

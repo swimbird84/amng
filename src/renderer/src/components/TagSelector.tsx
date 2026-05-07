@@ -8,11 +8,14 @@ interface Props {
   onCreateTag: (name: string) => Promise<number>
   repTagIds?: number[]
   onChangeRep?: (ids: number[]) => void
+  onCreateTagInCategory?: (name: string, categoryId: number | null) => Promise<number>
 }
 
-export default function TagSelector({ allTags, selectedIds, onChange, onCreateTag, repTagIds, onChangeRep }: Props) {
+export default function TagSelector({ allTags, selectedIds, onChange, onCreateTag, repTagIds, onChangeRep, onCreateTagInCategory }: Props) {
   const [open, setOpen] = useState(false)
   const [newTag, setNewTag] = useState('')
+  const [addingCatKey, setAddingCatKey] = useState<string | null>(null)
+  const [inlineCatName, setInlineCatName] = useState('')
 
   const toggle = (id: number) => {
     if (selectedIds.includes(id)) {
@@ -43,6 +46,17 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
       onChange([...selectedIds, tagId])
     }
     setNewTag('')
+  }
+
+  const handleCreateInCategory = async (catId: number | null) => {
+    const name = inlineCatName.trim()
+    if (!name || !onCreateTagInCategory) return
+    const tagId = await onCreateTagInCategory(name, catId)
+    if (tagId && !selectedIds.includes(tagId)) {
+      onChange([...selectedIds, tagId])
+    }
+    setAddingCatKey(null)
+    setInlineCatName('')
   }
 
   const selectedTags = allTags.filter((t) => selectedIds.includes(t.id))
@@ -158,7 +172,32 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
               <div className="space-y-2">
                 {groups.map((g) => (
                   <div key={g.catId ?? 'none'}>
-                    <p className="text-xs text-gray-500 mb-1">{g.catName ?? '미분류'}</p>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-xs text-gray-500">{g.catName ?? '미분류'}</span>
+                      {onCreateTagInCategory && (
+                        <button
+                          type="button"
+                          onClick={() => { setAddingCatKey(String(g.catId)); setInlineCatName('') }}
+                          className="text-xs text-gray-600 hover:text-white px-1 rounded hover:bg-gray-700"
+                        >
+                          추가
+                        </button>
+                      )}
+                    </div>
+                    {addingCatKey === String(g.catId) && (
+                      <div className="flex gap-1 mb-1.5">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={inlineCatName}
+                          onChange={(e) => setInlineCatName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleCreateInCategory(g.catId); if (e.key === 'Escape') setAddingCatKey(null) }}
+                          placeholder="태그명 입력"
+                          className="bg-gray-600 text-white text-xs px-2 py-1 rounded flex-1 focus:outline-none"
+                        />
+                        <button type="button" onClick={() => handleCreateInCategory(g.catId)} className="bg-gray-500 hover:bg-gray-400 text-white text-xs px-2 py-1 rounded">추가</button>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-1.5">
                       {g.tags.map((tag) => {
                         const isSelected = selectedIds.includes(tag.id)

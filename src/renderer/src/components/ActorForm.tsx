@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Actor, Tag, ActorScores } from '../types'
-import { actorsApi, actorTagsApi, dialogApi, imageApi } from '../api'
+import { actorsApi, actorTagsApi, actorTagCategoriesApi, dialogApi, imageApi } from '../api'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
 import DateInput from './DateInput'
@@ -119,6 +119,14 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
 
   const handleCreateTag = async (name: string): Promise<number> => {
     const id = await actorTagsApi.create(name) as number
+    const tags = await actorTagsApi.list() as Tag[]
+    setAllTags(tags)
+    return id
+  }
+
+  const handleCreateTagInCategory = async (name: string, categoryId: number | null): Promise<number> => {
+    const id = await actorTagsApi.create(name) as number
+    if (categoryId !== null) await actorTagCategoriesApi.setTagCategory(id, categoryId)
     const tags = await actorTagsApi.list() as Tag[]
     setAllTags(tags)
     return id
@@ -277,6 +285,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
               selectedIds={selectedTagIds}
               onChange={setSelectedTagIds}
               onCreateTag={handleCreateTag}
+              onCreateTagInCategory={handleCreateTagInCategory}
               repTagIds={repTagIds}
               onChangeRep={setRepTagIds}
             />
