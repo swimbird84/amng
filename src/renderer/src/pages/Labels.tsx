@@ -76,8 +76,10 @@ function ColorButton({ color, isSelected, onClick, title, children }: {
 
 function WorkMiniCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-20" />
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+        <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-20" />
+      </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{work.product_number || '-'}</p>
         <p className="text-xs text-gray-500 truncate">{work.release_date || '-'}</p>

@@ -436,11 +436,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                       <div
                         key={a.id}
                         onClick={() => onNavigateToActor(a.id)}
-                        onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
-                        onMouseLeave={() => setTooltip(null)}
                         className="cursor-pointer rounded-lg border border-gray-700 ring-2 ring-transparent hover:border-gray-500 flex flex-col"
                       >
-                        <div className="relative rounded-t-lg overflow-hidden">
+                        <div className="relative rounded-t-lg overflow-hidden" onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
                           <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" />
                         </div>
                         <div className="p-2 bg-gray-800 flex-1">

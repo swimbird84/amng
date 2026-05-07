@@ -31,8 +31,10 @@ type SortBy = 'name' | 'total_count' | 'created_at'
 
 function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & { rep_tags?: { id: number; name: string }[] }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
   return (
-    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+        <ImagePreview path={work.cover_path} alt={work.title || '표지'} className="w-full h-40" />
+      </div>
       <div className="p-2 bg-gray-800">
         <div className="flex items-center justify-between gap-1">
           <p className="text-sm font-bold text-white truncate flex-1">{work.product_number || '-'}</p>
@@ -49,8 +51,10 @@ function ActorListCard({ actor, onClick, onMouseMove, onMouseLeave }: { actor: A
     ? `${Math.floor((Date.now() - new Date(actor.birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000))}세`
     : '-'
   return (
-    <div onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
-      <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-40" />
+    <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
+      <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-40" />
+      </div>
       <div className="p-2 bg-gray-800">
         <div className="flex items-center justify-between gap-1">
           <p className="text-sm font-bold text-white truncate flex-1">{actor.name}</p>
