@@ -77,6 +77,7 @@ function TagPanel({
   onUpdate,
   onDelete,
   onTagClick,
+  onCreateInCategory,
 }: {
   type: 'works' | 'actors'
   tags: TagItem[]
