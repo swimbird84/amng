@@ -254,7 +254,6 @@ function TagPanel({
                 className="flex items-center gap-2 w-full mb-1.5 group"
               >
                 <span className="text-gray-300 text-xs font-bold">{label}</span>
-                <span className="text-gray-400 text-xs font-bold">{isCollapsed ? '+' : '−'}</span>
                 <span className="text-gray-600 text-xs">({count})</span>
                 <span className="flex-1 border-t border-gray-700 ml-1" />
               </button>
