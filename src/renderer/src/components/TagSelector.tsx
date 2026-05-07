@@ -53,12 +53,9 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 mb-1.5 cursor-pointer"
+        className="flex items-center mb-1.5 cursor-pointer"
       >
         <span className="text-sm text-gray-400 hover:text-gray-200">태그</span>
-        <span className="text-white font-black text-base leading-none hover:text-gray-300">
-          {open ? '−' : '+'}
-        </span>
       </button>
 
       {/* 선택된 태그 칩 (항상 표시) - 카테고리별 그룹핑, 클릭시 대표 태그 토글 */}
