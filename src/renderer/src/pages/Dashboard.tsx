@@ -580,13 +580,13 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           {scoreDist.length > 0 ? (
             <>
               <div className="grid grid-cols-10 gap-1.5 mb-4">
-                {Array.from({ length: 10 }, (_, i) => i).flatMap((base) =>
+                {Array.from({ length: 13 }, (_, i) => i).flatMap((base) =>
                   (['early', 'late'] as const).map((half) => {
                     const actors = scoreDist.filter((a) =>
                       half === 'early'
                         ? a.avg_score >= base && a.avg_score < base + 0.5
-                        : base === 9
-                          ? a.avg_score >= base + 0.5 && a.avg_score <= 10
+                        : base === 12
+                          ? a.avg_score >= base + 0.5 && a.avg_score <= 13
                           : a.avg_score >= base + 0.5 && a.avg_score < base + 1
                     )
                     if (actors.length === 0) return null
@@ -607,9 +607,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
               {selectedScoreBucket !== null && (() => {
                 const { base, half } = selectedScoreBucket
                 const lo = half === 'early' ? base : base + 0.5
-                const isNineLate = base === 9 && half === 'late'
-                const steps = isNineLate
-                  ? [9.5, 9.6, 9.7, 9.8, 9.9, 10.0]
+                const isTwelveLate = base === 12 && half === 'late'
+                const steps = isTwelveLate
+                  ? [12.5, 12.6, 12.7, 12.8, 12.9, 13.0]
                   : Array.from({ length: 5 }, (_, i) => Math.round((lo + i * 0.1) * 10) / 10)
                 return (
                   <div className="space-y-4 border border-gray-700 rounded-lg p-4">
