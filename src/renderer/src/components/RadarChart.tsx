@@ -51,7 +51,7 @@ export default function RadarChart({ scores, size = 220 }: Props) {
       ctx.stroke()
     }
 
-    // 데이터 영역
+    // 데이터 영역 (11점 이상이면 score/10 비율이 1을 초과 → 자연스럽게 경계 밖으로)
     ctx.beginPath()
     for (let i = 0; i < n; i++) {
       const angle = (Math.PI * 2 * i) / n - Math.PI / 2

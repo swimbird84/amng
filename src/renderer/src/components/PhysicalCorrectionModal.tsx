@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { actorsApi } from '../api'
 import ImagePreview from './ImagePreview'
+
+const SCORE_GRADE_LIMITS: Record<number, number> = { 11: 5, 12: 3, 13: 1 }
+const SCORE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 import type { ActorScores } from '../types'
 import CardTooltip, { type TooltipState } from './CardTooltip'
 
@@ -267,6 +270,20 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
 
   const cancelEdit = () => setEditingId(null)
 
+  const handleEditScoreChange = async (key: keyof ActorScores, value: number, editingActorId: number) => {
+    if (value >= 11) {
+      const counts = await actorsApi.scoreGradeCounts(editingActorId)
+      const itemCounts = counts[key]
+      const limit = SCORE_GRADE_LIMITS[value]
+      if ((itemCounts?.[value]?.count ?? 0) >= limit) {
+        const label = EDIT_SCORE_FIELDS.find(f => f.apiKey === key)?.label ?? key
+        alert(`[${label}] ${value}점 정원이 가득 찼습니다 (한도: ${limit}명)\n현재 ${value}점 배우: ${itemCounts?.[value]?.names || '-'}`)
+        return
+      }
+    }
+    setEditScores(prev => ({ ...prev, [key]: value }))
+  }
+
   const saveEdit = async (id: number) => {
     await actorsApi.update(id, { scores: editScores })
     const data = await actorsApi.physicalData()
@@ -506,14 +523,16 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                 ].filter(Boolean).join('  ')
                 const isEditing = editingId === a.id
                 return (
-                  <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2" onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
+                  <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
                     <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? i + 1 : ranked.length - i}</span>
-                    <div onClick={() => onViewActor?.(a.id)} className={onViewActor ? 'cursor-pointer' : ''}>
+                    <div onClick={() => onViewActor?.(a.id)} className={onViewActor ? 'cursor-pointer' : ''} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
                       <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
                       <div className="flex items-center justify-between gap-1">
-                        <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
+                        </div>
                         {isEditing ? (
                           <div className="flex gap-1 shrink-0">
                             <button onClick={() => saveEdit(a.id)} className="bg-green-600 hover:bg-green-500 text-white text-xs px-2 py-0.5 rounded">저장</button>
@@ -537,13 +556,14 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                           <div className="flex gap-0.5">
                             {isEditing ? (
                               EDIT_SCORE_FIELDS.map(({ label, apiKey }) => (
-                                <input
+                                <select
                                   key={label}
-                                  type="number" min={0} max={10} step={1}
                                   value={editScores[apiKey]}
-                                  onChange={e => setEditScores(prev => ({ ...prev, [apiKey]: Math.max(0, Math.min(10, parseFloat(e.target.value) || 0)) }))}
-                                  className="w-9 text-center bg-gray-600 text-white text-xs leading-tight rounded px-0 py-0.5 [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
-                                />
+                                  onChange={e => handleEditScoreChange(apiKey, Number(e.target.value), a.id)}
+                                  className="w-9 text-center bg-gray-600 text-white text-xs leading-tight rounded px-0 py-0.5"
+                                >
+                                  {SCORE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
                               ))
                             ) : (
                               EDIT_SCORE_FIELDS.map(({ label, getValue }) => (

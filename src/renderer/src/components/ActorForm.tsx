@@ -5,6 +5,7 @@ import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
 import DateInput from './DateInput'
 
+const SCORE_GRADE_LIMITS: Record<number, number> = { 11: 5, 12: 3, 13: 1 }
 interface Props {
   actor?: Actor & { tags?: Tag[] }
   onSave: () => void
@@ -24,7 +25,7 @@ const SCORE_FIELDS: { key: keyof ActorScores; label: string }[] = [
   { key: 'proportions', label: '비율' },
 ]
 
-const SCORE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+const SCORE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
 export default function ActorForm({ actor, onSave, onCancel }: Props) {
   const [name, setName] = useState(actor?.name || '')
@@ -63,7 +64,17 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     if (path) setPhotoPath(path)
   }
 
-  const handleScoreChange = (key: keyof ActorScores, value: number) => {
+  const handleScoreChange = async (key: keyof ActorScores, value: number) => {
+    if (value >= 11) {
+      const counts = await actorsApi.scoreGradeCounts(actor?.id)
+      const itemCounts = counts[key]
+      const limit = SCORE_GRADE_LIMITS[value]
+      if ((itemCounts?.[value]?.count ?? 0) >= limit) {
+        const label = SCORE_FIELDS.find(f => f.key === key)?.label ?? key
+        alert(`[${label}] ${value}점 정원이 가득 찼습니다 (한도: ${limit}명)\n현재 ${value}점 배우: ${itemCounts?.[value]?.names || '-'}`)
+        return
+      }
+    }
     setScores((prev) => ({ ...prev, [key]: value }))
   }
 

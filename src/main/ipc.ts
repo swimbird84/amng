@@ -661,6 +661,33 @@ export function registerIpcHandlers(): void {
     return true
   })
 
+  ipcMain.handle('actors:scoreGradeCounts', (_e, excludeId?: number) => {
+    const rows = db().prepare(`
+      SELECT a.name, s.face, s.bust, s.hip, s.physical, s.skin, s.acting, s.sexy, s.charm, s.technique, s.proportions
+      FROM actor_scores s
+      JOIN actors a ON a.id = s.actor_id
+      WHERE (s.face >= 11 OR s.bust >= 11 OR s.hip >= 11 OR s.physical >= 11 OR s.skin >= 11
+             OR s.acting >= 11 OR s.sexy >= 11 OR s.charm >= 11 OR s.technique >= 11 OR s.proportions >= 11)
+        AND (${excludeId != null ? 's.actor_id != ?' : '1=1'})
+    `).all(...(excludeId != null ? [excludeId] : [])) as Array<Record<string, number | string>>
+
+    const SCORE_KEYS = ['face', 'bust', 'hip', 'physical', 'skin', 'acting', 'sexy', 'charm', 'technique', 'proportions']
+    const result: Record<string, Record<number, { count: number; names: string }>> = {}
+    for (const key of SCORE_KEYS) {
+      result[key] = { 11: { count: 0, names: '' }, 12: { count: 0, names: '' }, 13: { count: 0, names: '' } }
+    }
+    for (const row of rows) {
+      for (const key of SCORE_KEYS) {
+        const score = row[key] as number
+        if (score >= 11 && score <= 13) {
+          result[key][score].count++
+          result[key][score].names = result[key][score].names ? `${result[key][score].names}, ${row.name}` : row.name as string
+        }
+      }
+    }
+    return result
+  })
+
   // ========== 태그 CRUD ==========
 
   // ========== 작품 태그 카테고리 ==========
@@ -1081,7 +1108,7 @@ export function registerIpcHandlers(): void {
         ), 0) AS actor_avg_score
       FROM works w
       WHERE w.release_date IS NOT NULL AND w.release_date != ''
-        AND w.release_date >= date('now', '-2 months')
+        AND w.release_date >= date('now', '-1 months')
       ORDER BY w.release_date DESC, w.rating DESC, actor_avg_score DESC
     `).all() as Array<Record<string, unknown>>
     if (works.length === 0) return []

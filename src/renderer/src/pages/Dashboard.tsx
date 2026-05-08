@@ -266,7 +266,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         <div>
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-white font-bold text-base">신작</h2>
-            <span className="text-xs text-gray-500">({today} 기준 2개월)</span>
+            <span className="text-xs text-gray-500">({today} 기준 1개월)</span>
             <button
               onClick={() => setExpandedWorks((v) => !v)}
               className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"

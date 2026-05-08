@@ -18,6 +18,7 @@ export const actorsApi = {
   delete: (id: number) => api.invoke('actors:delete', id),
   physicalData: () => api.invoke('actors:physical-data'),
   findOrCreate: (name: string, birthday?: string) => api.invoke('actors:findOrCreate', name, birthday) as Promise<number>,
+  scoreGradeCounts: (excludeId?: number) => api.invoke('actors:scoreGradeCounts', excludeId) as Promise<Record<string, Record<number, { count: number; names: string }>>>,
 }
 
 // 태그 카테고리
