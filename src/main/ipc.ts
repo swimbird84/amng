@@ -1010,24 +1010,25 @@ export function registerIpcHandlers(): void {
 
   // ========== 폴더 스캔 ==========
 
-  ipcMain.handle('scan:folder', (_e, folderPath: string) => {
+  ipcMain.handle('scan:folder', async (e, folderPath: string) => {
     const videoExtensions = ['.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.m2ts']
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp']
     const files: string[] = []
 
-    function scanDir(dir: string) {
-      const entries = fs.readdirSync(dir, { withFileTypes: true })
+    async function scanDir(dir: string) {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true })
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name)
         if (entry.isDirectory()) {
-          scanDir(fullPath)
+          await scanDir(fullPath)
         } else if (videoExtensions.includes(path.extname(entry.name).toLowerCase())) {
           files.push(fullPath)
+          e.sender.send('scan:progress', files.length)
         }
       }
     }
 
-    scanDir(folderPath)
+    await scanDir(folderPath)
 
     const existingPaths = new Set(
       (db().prepare('SELECT file_path FROM work_files').all() as { file_path: string }[]).map(r => r.file_path)

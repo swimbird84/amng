@@ -1,14 +1,35 @@
 import { app, BrowserWindow, Menu, globalShortcut } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { initDatabase } from './db'
 import { registerIpcHandlers } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
 
+function getWindowStatePath(): string {
+  return path.join(app.getPath('userData'), 'window-state.json')
+}
+
+function loadWindowPosition(): { x: number; y: number } | undefined {
+  try {
+    const data = JSON.parse(fs.readFileSync(getWindowStatePath(), 'utf-8'))
+    if (typeof data.x === 'number' && typeof data.y === 'number') return data
+  } catch { /* 무시 */ }
+  return undefined
+}
+
+function saveWindowPosition(): void {
+  if (!mainWindow) return
+  const [x, y] = mainWindow.getPosition()
+  fs.writeFileSync(getWindowStatePath(), JSON.stringify({ x, y }))
+}
+
 function createWindow(): void {
+  const savedPos = loadWindowPosition()
   mainWindow = new BrowserWindow({
     width: 1300,
     height: 870,
+    ...(savedPos ?? {}),
     resizable: false,
     fullscreenable: false,
     webPreferences: {
@@ -18,6 +39,8 @@ function createWindow(): void {
       spellcheck: false
     }
   })
+
+  mainWindow.on('moved', saveWindowPosition)
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])

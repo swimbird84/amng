@@ -52,7 +52,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const [scanProgress, setScanProgress] = useState<{ phase: 'scanning' | 'registering'; current: number; total: number; fileName: string } | null>(null)
+  const [scanProgress, setScanProgress] = useState<{ phase: 'scanning' | 'registering' | 'done'; current: number; total: number; fileName: string; result?: { added: number; duplicates: number } } | null>(null)
   const isDragging = useRef(false)
   const dragAction = useRef<'add' | 'remove'>('add')
 
@@ -133,7 +133,11 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     if (!folder) return
 
     setScanProgress({ phase: 'scanning', current: 0, total: 0, fileName: '' })
+    const progressHandler = scanApi.onProgress((count: number) => {
+      setScanProgress({ phase: 'scanning', current: count, total: 0, fileName: '' })
+    })
     const { newFiles, duplicates } = await scanApi.folder(folder) as { newFiles: { videoPath: string, imagePath: string | null }[], duplicates: string[] }
+    scanApi.offProgress(progressHandler)
 
     if (newFiles.length === 0 && duplicates.length === 0) {
       setScanProgress(null)
@@ -167,9 +171,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
       }
     }
 
-    setScanProgress(null)
-    const dupMsg = duplicates.length > 0 ? ` (${duplicates.length}개는 이미 등록된 파일)` : ''
-    alert(`${added}개 파일 등록 완료${dupMsg}`)
+    setScanProgress({ phase: 'done', current: 0, total: 0, fileName: '', result: { added, duplicates: duplicates.length } })
     loadWorks()
   }
 
@@ -239,7 +241,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
           <div className="bg-gray-800 rounded-xl p-8 w-[480px] flex flex-col gap-4">
             <div className="text-white font-semibold text-lg">
-              {scanProgress.phase === 'scanning' ? '폴더 스캔 중...' : '파일 등록 중...'}
+              {scanProgress.phase === 'scanning' ? '폴더 스캔 중...' : scanProgress.phase === 'registering' ? '파일 등록 중...' : '등록 완료'}
             </div>
             {scanProgress.phase === 'registering' && (
               <>
@@ -256,7 +258,25 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
               </>
             )}
             {scanProgress.phase === 'scanning' && (
-              <div className="text-sm text-gray-400">파일 목록을 읽는 중입니다...</div>
+              <div className="text-sm text-gray-400">
+                {scanProgress.current > 0 ? `${scanProgress.current}개 발견 중...` : '파일 목록을 읽는 중입니다...'}
+              </div>
+            )}
+            {scanProgress.phase === 'done' && scanProgress.result && (
+              <>
+                <div className="text-gray-300">
+                  <span className="text-white font-medium">{scanProgress.result.added}개</span> 작품이 등록되었습니다.
+                  {scanProgress.result.duplicates > 0 && (
+                    <span className="text-gray-400 text-sm ml-2">({scanProgress.result.duplicates}개는 이미 등록된 파일)</span>
+                  )}
+                </div>
+                <button
+                  className="mt-2 self-end px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium"
+                  onClick={() => setScanProgress(null)}
+                >
+                  확인
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -92,6 +92,8 @@ export const dialogApi = {
 // 스캔
 export const scanApi = {
   folder: (path: string) => api.invoke('scan:folder', path),
+  onProgress: (cb: (count: number) => void) => (window.api as any).onScanProgress(cb),
+  offProgress: (handler: unknown) => (window.api as any).offScanProgress(handler),
 }
 
 // 작품 파일
