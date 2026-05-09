@@ -22,7 +22,7 @@ function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick, onMous
     <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <div className="relative" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
         {showRank && <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-sm px-1.5 py-0.5 rounded z-10 leading-tight font-bold">{rank}</span>}
-        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
+        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" objectPosition="center 10%" />
       </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{actor.name}</p>

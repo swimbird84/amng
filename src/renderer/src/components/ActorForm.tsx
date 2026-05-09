@@ -39,7 +39,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   const [cup, setCup] = useState(actor?.cup || '')
   const [comment, setComment] = useState(actor?.comment || '')
   const [scores, setScores] = useState<ActorScores>(
-    actor?.scores ? { ...actor.scores, charm: actor.scores.charm ?? 5, technique: actor.scores.technique ?? 5, proportions: actor.scores.proportions ?? 5 } : { face: 5, bust: 5, hip: 5, physical: 5, skin: 5, acting: 5, sexy: 5, charm: 5, technique: 5, proportions: 5 }
+    actor?.scores ? { ...actor.scores, charm: actor.scores.charm ?? 0, technique: actor.scores.technique ?? 0, proportions: actor.scores.proportions ?? 0 } : { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
   )
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(actor?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(actor?.rep_tags?.map((t) => t.id) || [])

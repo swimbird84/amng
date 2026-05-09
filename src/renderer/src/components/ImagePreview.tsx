@@ -7,12 +7,13 @@ interface Props {
   alt: string
   className?: string
   style?: React.CSSProperties
+  objectPosition?: string
   version?: number
   onMouseEnter?: () => void
   onMouseLeave?: () => void
 }
 
-export default function ImagePreview({ path, alt, className = '', style, version, onMouseEnter, onMouseLeave }: Props) {
+export default function ImagePreview({ path, alt, className = '', style, objectPosition, version, onMouseEnter, onMouseLeave }: Props) {
   const [src, setSrc] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -43,5 +44,5 @@ export default function ImagePreview({ path, alt, className = '', style, version
     )
   }
 
-  return <img src={src} alt={alt} className={`object-cover ${className}`} style={style} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} />
+  return <img src={src} alt={alt} className={`object-cover ${className}`} style={{ objectPosition, ...style }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} />
 }

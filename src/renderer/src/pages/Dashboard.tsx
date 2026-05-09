@@ -90,7 +90,7 @@ function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick, onMous
     <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <div className="relative" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
         {showRank && <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-sm px-1.5 py-0.5 rounded z-10 leading-tight font-bold">{rank}</span>}
-        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
+        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" objectPosition="center 10%" />
       </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{actor.name}</p>
@@ -112,7 +112,7 @@ function ActorCupCard({ actor, onClick, onMouseMove, onMouseLeave }: {
   return (
     <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
-        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" />
+        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" objectPosition="center 10%" />
       </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{actor.name}</p>
@@ -130,13 +130,28 @@ function ActorAgeItem({ actor, onClick, onMouseMove, onMouseLeave }: { actor: Ac
   return (
     <div onClick={onClick} className="cursor-pointer flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
       <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
-        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-12 h-12 rounded object-cover" />
+        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-12 h-12 rounded object-cover" objectPosition="center 10%" />
       </div>
       <p className="text-xs text-white truncate w-full text-center">{actor.name}</p>
       <p className="text-xs text-yellow-400">{(actor.avg_score ?? 0).toFixed(2)}</p>
     </div>
   )
 }
+
+function formatDebutAge(birthday: string, debutDate: string): string {
+  const b = new Date(birthday)
+  const d = new Date(debutDate)
+  let years = d.getFullYear() - b.getFullYear()
+  let months = d.getMonth() - b.getMonth()
+  let days = d.getDate() - b.getDate()
+  if (days < 0) {
+    months--
+    days += new Date(d.getFullYear(), d.getMonth(), 0).getDate()
+  }
+  if (months < 0) { years--; months += 12 }
+  return `${years}세 ${months}개월 ${days}일`
+}
+
 
 // 섹션 타이틀
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -159,6 +174,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   const [ageDist, setAgeDist] = useState<(Actor & { age: number; avg_score: number })[]>([])
   const [selectedGroup, setSelectedGroup] = useState<{ decade: number; phase: 'early' | 'mid' | 'late' } | null>(null)
+
+  const [debutAgeDist, setDebutAgeDist] = useState<(Actor & { debut_age: number; avg_score: number })[]>([])
+  const [selectedDebutAge, setSelectedDebutAge] = useState<number | null>(null)
 
   const [scoreDist, setScoreDist] = useState<(Actor & { avg_score: number; work_count: number })[]>([])
   const [cupDist, setCupDist] = useState<(Actor & { avg_score: number; work_count: number; ratio_score?: number })[]>([])
@@ -187,6 +205,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.newActors().then((d) => setNewActors(d as Actor[]))
     dashboardApi.releaseYears().then((d) => setYears(d as { year: string; count: number }[]))
     dashboardApi.ageDist().then((d) => setAgeDist(d as (Actor & { age: number; avg_score: number })[]))
+    dashboardApi.debutAgeDist().then((d) => setDebutAgeDist(d as (Actor & { debut_age: number; avg_score: number })[]))
     dashboardApi.actorScoreDist().then((d) => setScoreDist(d as (Actor & { avg_score: number; work_count: number })[]))
     dashboardApi.actorCupDist().then((d) => setCupDist(d as (Actor & { avg_score: number; work_count: number })[]))
     dashboardApi.ratingDist().then((d) => setRatingDist(d as { bucket: number; count: number }[]))
@@ -252,6 +271,21 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     }
     return Array.from(byAge.entries()).sort(([a], [b]) => a - b)
   }, [ageDist, selectedGroup])
+
+  const debutAgeList = useMemo(() => {
+    const ages = new Set<number>()
+    for (const actor of debutAgeDist) ages.add(actor.debut_age)
+    return Array.from(ages).sort((a, b) => a - b)
+  }, [debutAgeDist])
+
+  const selectedDebutActors = useMemo(() =>
+    selectedDebutAge === null ? [] : debutAgeDist
+      .filter(a => a.debut_age === selectedDebutAge)
+      .sort((a, b) =>
+        (new Date(a.debut_date!).getTime() - new Date(a.birthday!).getTime()) -
+        (new Date(b.debut_date!).getTime() - new Date(b.birthday!).getTime())
+      )
+  , [debutAgeDist, selectedDebutAge])
 
   const ratingBuckets = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
   const ratingCountMap = new Map(ratingDist.map((r) => [r.bucket, r.count]))
@@ -320,7 +354,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 발매일 분포 */}
         <div>
           <SectionTitle>발매일 분포</SectionTitle>
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="grid grid-cols-13 gap-2 mb-4">
             {years.map(({ year, count }) => (
               <button
                 key={year}
@@ -375,7 +409,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 데뷔일 분포 */}
         <div>
           <SectionTitle>데뷔일 분포</SectionTitle>
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="grid grid-cols-13 gap-2 mb-4">
             {debutYears.map(({ year, count }) => (
               <button
                 key={year}
@@ -439,7 +473,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                         className="cursor-pointer rounded-lg border border-gray-700 ring-2 ring-transparent hover:border-gray-500 flex flex-col"
                       >
                         <div className="relative rounded-t-lg overflow-hidden" onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
-                          <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" />
+                          <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" objectPosition="center 10%" />
                         </div>
                         <div className="p-2 bg-gray-800 flex-1">
                           <div className="flex items-center justify-between gap-1">
@@ -571,6 +605,51 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             </>
           ) : (
             <p className="text-gray-500 text-sm">생년월일이 등록된 배우가 없습니다</p>
+          )}
+        </div>
+
+        {/* 데뷔 나이별 분포 */}
+        <div>
+          <SectionTitle>데뷔 나이별 분포</SectionTitle>
+          {debutAgeList.length > 0 ? (
+            <>
+              <div className="grid grid-cols-10 gap-1.5 mb-4">
+                {debutAgeList.map((age) => {
+                  const count = debutAgeDist.filter((a) => a.debut_age === age).length
+                  const isSelected = selectedDebutAge === age
+                  return (
+                    <button
+                      key={age}
+                      onClick={() => setSelectedDebutAge(isSelected ? null : age)}
+                      className={`py-1.5 px-3 rounded text-center ${isSelected ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      <p className="text-xs font-bold">{age}세</p>
+                      <p className="text-xs">{count}명</p>
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedDebutAge !== null && selectedDebutActors.length > 0 && (
+                <div className="border border-gray-700 rounded-lg p-4">
+                  <div className="grid grid-cols-10 gap-2">
+                    {selectedDebutActors.map((a) => (
+                      <ActorRankCard
+                        key={a.id}
+                        actor={a}
+                        rank={0}
+                        showRank={false}
+                        subtitle={a.birthday && a.debut_date ? formatDebutAge(a.birthday, a.debut_date) : `${a.debut_age}세`}
+                        onClick={() => onNavigateToActor(a.id)}
+                        onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                        onMouseLeave={() => setTooltip(null)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-gray-500 text-sm">생년월일과 데뷔일이 모두 등록된 배우가 없습니다</p>
           )}
         </div>
 

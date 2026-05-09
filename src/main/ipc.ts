@@ -590,7 +590,7 @@ export function registerIpcHandlers(): void {
     const actorId = result.lastInsertRowid
     db().prepare(`
       INSERT OR REPLACE INTO actor_scores (actor_id, face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions)
-      VALUES (?, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5)
+      VALUES (?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     `).run(actorId)
     return actorId
   })
@@ -1228,6 +1228,18 @@ export function registerIpcHandlers(): void {
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.birthday IS NOT NULL AND a.birthday != ''
       ORDER BY a.birthday DESC, a.debut_date DESC
+    `).all()
+  })
+
+  ipcMain.handle('dashboard:debut-age-dist', () => {
+    return db().prepare(`
+      SELECT a.*,
+        CAST((julianday(a.debut_date) - julianday(a.birthday)) / 365.25 AS INTEGER) AS debut_age,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score
+      FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
+      WHERE a.birthday IS NOT NULL AND a.birthday != ''
+        AND a.debut_date IS NOT NULL AND a.debut_date != ''
+      ORDER BY debut_age ASC
     `).all()
   })
 

@@ -312,7 +312,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                 }`}
               >
                 <div className="relative rounded-t-lg overflow-hidden" onMouseMove={(e) => !deleteMode && setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
-                  <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" version={refreshKey} />
+                  <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" objectPosition="center 10%" version={refreshKey} />
                   {deleteMode && selectedDeleteIds.has(a.id) && (
                     <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none">
                       <span className="text-white text-4xl font-bold drop-shadow">✓</span>

@@ -307,7 +307,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         if (repActorIds.length === 0) setRepActorIds([existing.id])
       }
     } else {
-      const id = await actorsApi.create({ name, scores: { face: 5, bust: 5, hip: 5, physical: 5, skin: 5, acting: 5, sexy: 5, charm: 5, technique: 5, proportions: 5 } }) as number
+      const id = await actorsApi.create({ name, scores: { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 } }) as number
       const updated = await actorsApi.list() as Actor[]
       setAllActors(updated)
       setSelectedActorIds((prev) => [...prev, id])

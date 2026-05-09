@@ -249,8 +249,6 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   const [rankBy, setRankBy] = useState<'avg_score' | 'physScore' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'face' | 'score_bust' | 'score_hip' | 'physical' | 'skin' | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions'>(
     (localStorage.getItem('ratingCalc:rankBy') as 'avg_score' | 'physScore' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'face' | 'score_bust' | 'score_hip' | 'physical' | 'skin' | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions') || 'physScore'
   )
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editScores, setEditScores] = useState<ActorScores>({ face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 })
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   useEffect(() => {
@@ -263,16 +261,9 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  const startEdit = (a: ActorPhysicalData) => {
-    setEditingId(a.id)
-    setEditScores({ face: a.face, bust: a.score_bust, hip: a.score_hip, physical: a.physical, skin: a.skin, acting: a.acting, sexy: a.sexy, charm: a.charm, technique: a.technique, proportions: a.proportions })
-  }
-
-  const cancelEdit = () => setEditingId(null)
-
-  const handleEditScoreChange = async (key: keyof ActorScores, value: number, editingActorId: number) => {
+  const handleScoreChange = async (actorId: number, key: keyof ActorScores, value: number) => {
     if (value >= 11) {
-      const counts = await actorsApi.scoreGradeCounts(editingActorId)
+      const counts = await actorsApi.scoreGradeCounts(actorId)
       const itemCounts = counts[key]
       const limit = SCORE_GRADE_LIMITS[value]
       if ((itemCounts?.[value]?.count ?? 0) >= limit) {
@@ -281,14 +272,17 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
         return
       }
     }
-    setEditScores(prev => ({ ...prev, [key]: value }))
-  }
-
-  const saveEdit = async (id: number) => {
-    await actorsApi.update(id, { scores: editScores })
+    const actor = actors.find(a => a.id === actorId)
+    if (!actor) return
+    const scores: ActorScores = {
+      face: actor.face, bust: actor.score_bust, hip: actor.score_hip,
+      physical: actor.physical, skin: actor.skin, acting: actor.acting,
+      sexy: actor.sexy, charm: actor.charm, technique: actor.technique, proportions: actor.proportions,
+      [key]: value,
+    }
+    await actorsApi.update(actorId, { scores })
     const data = await actorsApi.physicalData()
     setActors(data as ActorPhysicalData[])
-    setEditingId(null)
     window.dispatchEvent(new Event('actorScoresUpdated'))
   }
 
@@ -309,13 +303,28 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
       return a[rankBy as keyof ActorPhysicalData] as number
     }
 
+    const profileKeyMap: Partial<Record<typeof rankBy, keyof PhysicalSettings['profile']>> = {
+      height: 'height', bust: 'bust', waist: 'waist', hip: 'hip', cup: 'cup',
+    }
+    const scoreKeyMap: Partial<Record<typeof rankBy, keyof PhysicalSettings['score']>> = {
+      face: 'face', score_bust: 'bust', score_hip: 'hip', physical: 'physical',
+      skin: 'skin', acting: 'acting', sexy: 'sexy', charm: 'charm',
+      technique: 'technique', proportions: 'proportions',
+    }
+    const isNeg = profileKeyMap[rankBy]
+      ? settings.profile[profileKeyMap[rankBy]!].dir === 'N'
+      : scoreKeyMap[rankBy]
+        ? settings.score[scoreKeyMap[rankBy]!].dir === 'N'
+        : false
+    const effectiveDir = isNeg ? (rankSortDir === 'desc' ? 'asc' : 'desc') : rankSortDir
+
     return actors
       .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
       .filter(a => getVal(a) != null)
       .sort((a, b) => {
         const av = getVal(a)!
         const bv = getVal(b)!
-        const primary = rankSortDir === 'desc' ? bv - av : av - bv
+        const primary = effectiveDir === 'desc' ? bv - av : av - bv
         if (primary !== 0) return primary
         const secondary = rankSortDir === 'desc' ? avgScore(b) - avgScore(a) : avgScore(a) - avgScore(b)
         if (secondary !== 0) return secondary
@@ -521,58 +530,39 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                   a.hip != null    ? `H:${a.hip}`       : '',
                   a.cup            ? `컵:${a.cup}`       : '',
                 ].filter(Boolean).join('  ')
-                const isEditing = editingId === a.id
                 return (
                   <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
                     <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? i + 1 : ranked.length - i}</span>
                     <div onClick={() => onViewActor?.(a.id)} className={onViewActor ? 'cursor-pointer' : ''} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
-                      <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" />
+                      <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" objectPosition="center 10%" />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
                       <div className="flex items-center justify-between gap-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
-                        </div>
-                        {isEditing ? (
-                          <div className="flex gap-1 shrink-0">
-                            <button onClick={() => saveEdit(a.id)} className="bg-green-600 hover:bg-green-500 text-white text-xs px-2 py-0.5 rounded">저장</button>
-                            <button onClick={cancelEdit} className="bg-red-600 hover:bg-red-500 text-white text-xs px-2 py-0.5 rounded">취소</button>
-                          </div>
-                        ) : (
-                          <button onClick={() => startEdit(a)} className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-0.5 rounded shrink-0">수정</button>
-                        )}
+                        <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
+                        <p className="text-yellow-400 text-xs font-bold shrink-0 leading-tight">{avgScore.toFixed(2)}점</p>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-gray-400 text-xs truncate pl-1.5">{profileParts || '-'}</p>
                         <p className="text-blue-400 text-xs font-bold shrink-0">{a.physScore.toFixed(2)}점</p>
                       </div>
-                      <div className="flex items-end justify-between gap-2">
-                        <div className="flex flex-col gap-0 shrink-0">
-                          <div className="flex gap-0.5">
-                            {EDIT_SCORE_FIELDS.map(({ label }) => (
-                              <div key={label} className="w-9 text-center text-gray-500 text-xs leading-tight">{label}</div>
-                            ))}
-                          </div>
-                          <div className="flex gap-0.5">
-                            {isEditing ? (
-                              EDIT_SCORE_FIELDS.map(({ label, apiKey }) => (
-                                <select
-                                  key={label}
-                                  value={editScores[apiKey]}
-                                  onChange={e => handleEditScoreChange(apiKey, Number(e.target.value), a.id)}
-                                  className="w-9 text-center bg-gray-600 text-white text-xs leading-tight rounded px-0 py-0.5"
-                                >
-                                  {SCORE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
-                                </select>
-                              ))
-                            ) : (
-                              EDIT_SCORE_FIELDS.map(({ label, getValue }) => (
-                                <div key={label} className="w-9 text-center text-gray-300 text-xs leading-tight">{Math.round(getValue(a))}</div>
-                              ))
-                            )}
-                          </div>
+                      <div className="flex flex-col gap-0 shrink-0">
+                        <div className="flex gap-0.5">
+                          {EDIT_SCORE_FIELDS.map(({ label }) => (
+                            <div key={label} className="w-9 text-center text-gray-500 text-xs leading-tight">{label}</div>
+                          ))}
                         </div>
-                        <p className="text-yellow-400 text-xs font-bold shrink-0 leading-tight">{avgScore.toFixed(2)}점</p>
+                        <div className="flex gap-0.5">
+                          {EDIT_SCORE_FIELDS.map(({ label, getValue, apiKey }) => (
+                            <select
+                              key={label}
+                              value={getValue(a)}
+                              onChange={e => handleScoreChange(a.id, apiKey, Number(e.target.value))}
+                              className="w-9 text-center bg-gray-600 text-white text-xs leading-tight rounded px-0 py-0.5"
+                            >
+                              {SCORE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>

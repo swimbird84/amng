@@ -52,6 +52,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [scanProgress, setScanProgress] = useState<{ phase: 'scanning' | 'registering'; current: number; total: number; fileName: string } | null>(null)
   const isDragging = useRef(false)
   const dragAction = useRef<'add' | 'remove'>('add')
 
@@ -130,14 +131,22 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const handleScan = async () => {
     const folder = await dialogApi.openFolder() as string | null
     if (!folder) return
+
+    setScanProgress({ phase: 'scanning', current: 0, total: 0, fileName: '' })
     const { newFiles, duplicates } = await scanApi.folder(folder) as { newFiles: { videoPath: string, imagePath: string | null }[], duplicates: string[] }
-    if (newFiles.length === 0 && duplicates.length === 0) return alert('동영상 파일이 없습니다')
+
+    if (newFiles.length === 0 && duplicates.length === 0) {
+      setScanProgress(null)
+      return alert('동영상 파일이 없습니다')
+    }
 
     let added = 0
-    for (const { videoPath, imagePath } of newFiles) {
+    for (let i = 0; i < newFiles.length; i++) {
+      const { videoPath, imagePath } = newFiles[i]
+      const parts = videoPath.replace(/\\/g, '/').split('/')
+      const fileName = parts[parts.length - 1] ?? ''
+      setScanProgress({ phase: 'registering', current: i + 1, total: newFiles.length, fileName })
       try {
-        const parts = videoPath.replace(/\\/g, '/').split('/')
-        const fileName = parts[parts.length - 1] ?? ''
         const folderName = parts.length >= 2 ? parts[parts.length - 2] : ''
         const parentFolder = parts.length >= 3 ? parts[parts.length - 3] : ''
         const productNumber = fileName.replace(/\.[^.]+$/, '')
@@ -158,6 +167,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
       }
     }
 
+    setScanProgress(null)
     const dupMsg = duplicates.length > 0 ? ` (${duplicates.length}개는 이미 등록된 파일)` : ''
     alert(`${added}개 파일 등록 완료${dupMsg}`)
     loadWorks()
@@ -224,6 +234,33 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
 
   return (
     <div className="h-full flex flex-col">
+      {/* 스캔 진행 오버레이 */}
+      {scanProgress && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
+          <div className="bg-gray-800 rounded-xl p-8 w-[480px] flex flex-col gap-4">
+            <div className="text-white font-semibold text-lg">
+              {scanProgress.phase === 'scanning' ? '폴더 스캔 중...' : '파일 등록 중...'}
+            </div>
+            {scanProgress.phase === 'registering' && (
+              <>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.round((scanProgress.current / scanProgress.total) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-sm text-gray-400">
+                  <span className="truncate max-w-[340px]">{scanProgress.fileName}</span>
+                  <span className="shrink-0 ml-2">{scanProgress.current} / {scanProgress.total}</span>
+                </div>
+              </>
+            )}
+            {scanProgress.phase === 'scanning' && (
+              <div className="text-sm text-gray-400">파일 목록을 읽는 중입니다...</div>
+            )}
+          </div>
+        </div>
+      )}
       {/* 목록 영역 */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="p-4">

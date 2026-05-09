@@ -132,6 +132,7 @@ export const dashboardApi = {
   actorScoreDist: () => api.invoke('dashboard:actor-score-dist'),
   actorCupDist: () => api.invoke('dashboard:actor-cup-dist'),
   ratingWorks: (bucket: number) => api.invoke('dashboard:rating-works', bucket),
+  debutAgeDist: () => api.invoke('dashboard:debut-age-dist'),
   debutYears: () => api.invoke('dashboard:debut-years'),
   debutMonths: (year: string) => api.invoke('dashboard:debut-months', year),
   debutMonthActors: (year: string, month: number) => api.invoke('dashboard:debut-month-actors', year, month),
