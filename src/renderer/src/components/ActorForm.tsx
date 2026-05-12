@@ -145,153 +145,166 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg w-[500px] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-800 rounded-lg w-[840px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => { if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel() }}
-          className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none"
+          className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10"
         >
           ✕
         </button>
-        <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
-          <h2 className="text-lg font-bold text-white">
-            {actor ? '배우 수정' : '배우 등록'}
-          </h2>
-        </div>
 
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4 space-y-3">
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">사진</label>
-            <div className="flex gap-3 items-start">
-              <ImagePreview path={photoPath} alt="배우 사진" className="w-24 h-24 rounded" />
-              <button onClick={handleSelectPhoto} className="bg-gray-600 hover:bg-gray-500 text-white text-sm px-3 py-1.5 rounded">
-                이미지 선택
+        {/* 좌측 */}
+        <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
+            <h2 className="text-lg font-bold text-white">
+              {actor ? '배우 수정' : '배우 등록'}
+            </h2>
+          </div>
+
+          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4 space-y-3">
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">사진</label>
+              <div className="flex gap-3 items-start">
+                <ImagePreview path={photoPath} alt="배우 사진" className="w-24 h-24 rounded" />
+                <button onClick={handleSelectPhoto} className="bg-gray-600 hover:bg-gray-500 text-white text-sm px-3 py-1.5 rounded">
+                  이미지 선택
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">이름</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-gray-400 block mb-1">생년월일</label>
+                <DateInput
+                  value={birthday}
+                  onChange={setBirthday}
+                  className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 block mb-1">데뷔일</label>
+                <DateInput
+                  value={debutDate}
+                  onChange={setDebutDate}
+                  className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">신체</label>
+              <div className="flex items-center gap-2">
+                {/* 신장 */}
+                <div className="flex items-center gap-1 flex-1">
+                  <span className="text-xs text-gray-400 flex-shrink-0">신장</span>
+                  <input
+                    type="number"
+                    value={height}
+                    onChange={(e) => setHeight(e.target.value)}
+                    placeholder="cm"
+                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                {/* B-W-H (붙임) */}
+                <div className="flex items-center flex-[2.5]">
+                  <div className="flex items-center gap-1 flex-1">
+                    <span className="text-xs text-gray-400 flex-shrink-0">B</span>
+                    <input
+                      type="number"
+                      value={bust}
+                      onChange={(e) => setBust(e.target.value)}
+                      placeholder="cm"
+                      className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                  <span className="text-gray-500">-</span>
+                  <div className="flex items-center gap-1 flex-1">
+                    <span className="text-xs text-gray-400 flex-shrink-0">W</span>
+                    <input
+                      type="number"
+                      value={waist}
+                      onChange={(e) => setWaist(e.target.value)}
+                      placeholder="cm"
+                      className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                  <span className="text-gray-500">-</span>
+                  <div className="flex items-center gap-1 flex-1">
+                    <span className="text-xs text-gray-400 flex-shrink-0">H</span>
+                    <input
+                      type="number"
+                      value={hip}
+                      onChange={(e) => setHip(e.target.value)}
+                      placeholder="cm"
+                      className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                </div>
+                {/* 컵 */}
+                <div className="flex items-center gap-1 flex-[0.8]">
+                  <input
+                    type="text"
+                    value={cup}
+                    onChange={(e) => {
+                      const KO_TO_CUP: Record<string, string> = { ㅁ:'A',ㅠ:'B',ㅊ:'C',ㅇ:'D',ㄷ:'E',ㄹ:'F',ㅎ:'G',ㅗ:'H',ㅑ:'I',ㅓ:'J',ㅏ:'K',ㅣ:'L',ㅡ:'M' }
+                      const converted = e.target.value.split('').map(c => KO_TO_CUP[c] ?? c).join('')
+                      setCup(converted.toUpperCase())
+                    }}
+                    placeholder="A"
+                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
+                  />
+                  <span className="text-xs text-gray-400 flex-shrink-0">컵</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">평점</label>
+              <div className="flex gap-1">
+                {SCORE_FIELDS.map(({ key, label }) => (
+                  <div key={key} className="flex flex-col gap-0.5 flex-1 min-w-0">
+                    <span className="text-xs text-gray-400 text-center truncate">{label}</span>
+                    <select
+                      value={scores[key]}
+                      onChange={(e) => handleScoreChange(key, Number(e.target.value))}
+                      className="bg-gray-700 text-white text-xs px-0 py-1 rounded text-center w-full"
+                    >
+                      {SCORE_OPTIONS.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 pb-2">
+              <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded">
+                저장
               </button>
             </div>
           </div>
+        </div>
 
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">이름</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm text-gray-400 block mb-1">생년월일</label>
-              <DateInput
-                value={birthday}
-                onChange={setBirthday}
-                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-400 block mb-1">데뷔일</label>
-              <DateInput
-                value={debutDate}
-                onChange={setDebutDate}
-                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">신체</label>
-            <div className="flex items-center gap-2">
-              {/* 신장 */}
-              <div className="flex items-center gap-1 flex-1">
-                <span className="text-xs text-gray-400 flex-shrink-0">신장</span>
-                <input
-                  type="number"
-                  value={height}
-                  onChange={(e) => setHeight(e.target.value)}
-                  placeholder="cm"
-                  className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-              {/* B-W-H (붙임) */}
-              <div className="flex items-center flex-[2.5]">
-                <div className="flex items-center gap-1 flex-1">
-                  <span className="text-xs text-gray-400 flex-shrink-0">B</span>
-                  <input
-                    type="number"
-                    value={bust}
-                    onChange={(e) => setBust(e.target.value)}
-                    placeholder="cm"
-                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
-                <span className="text-gray-500">-</span>
-                <div className="flex items-center gap-1 flex-1">
-                  <span className="text-xs text-gray-400 flex-shrink-0">W</span>
-                  <input
-                    type="number"
-                    value={waist}
-                    onChange={(e) => setWaist(e.target.value)}
-                    placeholder="cm"
-                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
-                <span className="text-gray-500">-</span>
-                <div className="flex items-center gap-1 flex-1">
-                  <span className="text-xs text-gray-400 flex-shrink-0">H</span>
-                  <input
-                    type="number"
-                    value={hip}
-                    onChange={(e) => setHip(e.target.value)}
-                    placeholder="cm"
-                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
-              </div>
-              {/* 컵 */}
-              <div className="flex items-center gap-1 flex-[0.8]">
-                <input
-                  type="text"
-                  value={cup}
-                  onChange={(e) => {
-                    const KO_TO_CUP: Record<string, string> = { ㅁ:'A',ㅠ:'B',ㅊ:'C',ㅇ:'D',ㄷ:'E',ㄹ:'F',ㅎ:'G',ㅗ:'H',ㅑ:'I',ㅓ:'J',ㅏ:'K',ㅣ:'L',ㅡ:'M' }
-                    const converted = e.target.value.split('').map(c => KO_TO_CUP[c] ?? c).join('')
-                    setCup(converted.toUpperCase())
-                  }}
-                  placeholder="A"
-                  className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
-                />
-                <span className="text-xs text-gray-400 flex-shrink-0">컵</span>
-              </div>
-            </div>
-          </div>
-
+        {/* 우측 - 코멘트 + 태그 */}
+        <div className="w-[330px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4">
           <div>
             <label className="text-sm text-gray-400 block mb-1">코멘트</label>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              rows={2}
+              rows={4}
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full resize-none"
             />
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">평점</label>
-            <div className="flex gap-1">
-              {SCORE_FIELDS.map(({ key, label }) => (
-                <div key={key} className="flex flex-col gap-0.5 flex-1 min-w-0">
-                  <span className="text-xs text-gray-400 text-center truncate">{label}</span>
-                  <select
-                    value={scores[key]}
-                    onChange={(e) => handleScoreChange(key, Number(e.target.value))}
-                    className="bg-gray-700 text-white text-xs px-0 py-1 rounded text-center w-full"
-                  >
-                    {SCORE_OPTIONS.map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
           </div>
 
           <div>
@@ -304,12 +317,6 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
               repTagIds={repTagIds}
               onChangeRep={setRepTagIds}
             />
-          </div>
-
-          <div className="flex justify-end pt-2 pb-2">
-            <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded">
-              저장
-            </button>
           </div>
         </div>
       </div>

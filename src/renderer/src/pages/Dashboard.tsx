@@ -139,6 +139,20 @@ function ActorAgeItem({ actor, onClick, onMouseMove, onMouseLeave }: { actor: Ac
   )
 }
 
+function formatCurrentAge(birthday: string): string {
+  const b = new Date(birthday)
+  const now = new Date()
+  let years = now.getFullYear() - b.getFullYear()
+  let months = now.getMonth() - b.getMonth()
+  let days = now.getDate() - b.getDate()
+  if (days < 0) {
+    months--
+    days += new Date(now.getFullYear(), now.getMonth(), 0).getDate()
+  }
+  if (months < 0) { years--; months += 12 }
+  return `${years}세 ${months}개월 ${days}일`
+}
+
 function formatDebutAge(birthday: string, debutDate: string): string {
   const b = new Date(birthday)
   const d = new Date(debutDate)
@@ -624,9 +638,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           )}
         </div>
 
-        {/* 데뷔 나이별 분포 */}
+        {/* 데뷔 나이대별 분포 */}
         <div>
-          <SectionTitle>데뷔 나이별 분포</SectionTitle>
+          <SectionTitle>데뷔 나이대별 분포</SectionTitle>
           {debutAgeList.length > 0 ? (
             <>
               <div className="grid grid-cols-10 gap-1.5 mb-4">
