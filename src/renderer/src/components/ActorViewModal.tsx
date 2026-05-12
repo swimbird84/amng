@@ -40,6 +40,7 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
   const [workSortDir, setWorkSortDir] = useState<'asc' | 'desc'>('desc')
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [hoverCover, setHoverCover] = useState<string | null>(null)
 
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
                   <span>{actor.debut_date || '-'}{actor.debut_date ? ` (${getDebutAge(actor.birthday ?? null, actor.debut_date)})` : ''}</span>
                 </div>
                 <p className="text-yellow-400 text-sm mt-1">
-                  평점 {(actor.avg_score ?? (actor.scores ? Object.values(actor.scores).reduce((a, b) => a + b, 0) / 10 : 0)).toFixed(2)}점
+                  평점 {(actor.avg_score ?? (actor.scores ? Object.values(actor.scores).reduce((a, b) => a + b, 0) / 13 : 0)).toFixed(2)}점
                 </p>
               </div>
             </div>
@@ -222,7 +223,7 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
                             onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
                             onMouseLeave={() => setTooltip(null)}
                           >
-                            <ImagePreview path={w.cover_path} alt={w.product_number || '-'} className="w-16 h-12 rounded flex-shrink-0 object-cover" />
+                            <ImagePreview path={w.cover_path} alt={w.product_number || '-'} className="w-16 h-12 rounded flex-shrink-0 object-cover" onMouseEnter={() => setHoverCover(w.cover_path ?? null)} onMouseLeave={() => setHoverCover(null)} />
                           </div>
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                             <div className="flex items-start justify-between gap-1">
@@ -264,6 +265,14 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
         </div>
 
       </div>
+      {hoverCover && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{ right: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh' }}
+        >
+          <ImagePreview path={hoverCover} alt="표지 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
+        </div>
+      )}
       {tooltip && <CardTooltip tooltip={tooltip} />}
     </div>
   )

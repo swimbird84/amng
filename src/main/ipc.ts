@@ -352,7 +352,7 @@ export function registerIpcHandlers(): void {
       )
       SELECT DISTINCT a.*,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
           THEN ROUND((
             (
@@ -361,7 +361,7 @@ export function registerIpcHandlers(): void {
               COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
               COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
             ) / 4.0 * 0.3 +
-            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
+            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 6.5 * 0.7
           ), 2)
           ELSE NULL
         END AS ratio_score
@@ -461,7 +461,7 @@ export function registerIpcHandlers(): void {
       )
       SELECT a.*,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
           THEN ROUND((
             (
@@ -470,7 +470,7 @@ export function registerIpcHandlers(): void {
               COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
               COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
             ) / 4.0 * 0.3 +
-            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
+            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 6.5 * 0.7
           ), 2)
           ELSE NULL
         END AS ratio_score
@@ -968,15 +968,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('studio-codes:applyToWorks', (_e, studioId: number, code: string) => {
     const upper = code.trim().toUpperCase()
     const works = db().prepare('SELECT id, product_number FROM works WHERE studio_id IS NULL AND product_number IS NOT NULL').all() as { id: number; product_number: string }[]
-    let updated = 0
-    for (const work of works) {
-      const m = work.product_number.match(/^(.+)-\d/)
-      if (m && m[1].toUpperCase() === upper) {
-        db().prepare('UPDATE works SET studio_id = ? WHERE id = ?').run(studioId, work.id)
-        updated++
-      }
-    }
-    return updated
+    const matched = works.filter(w => { const m = w.product_number.match(/^(.+)-\d/); return m && m[1].toUpperCase() === upper })
+    if (matched.length === 0) return 0
+    const updateStmt = db().prepare('UPDATE works SET studio_id = ? WHERE id = ?')
+    db().transaction(() => { for (const w of matched) updateStmt.run(studioId, w.id) })()
+    return matched.length
   })
 
   // ========== 파일/이미지 다이얼로그 ==========
@@ -1109,7 +1105,7 @@ export function registerIpcHandlers(): void {
         ), 0) AS actor_avg_score
       FROM works w
       WHERE w.release_date IS NOT NULL AND w.release_date != ''
-        AND w.release_date >= date('now', '-1 months')
+        AND w.release_date >= date('now', '-2 months')
       ORDER BY w.release_date DESC, w.rating DESC, actor_avg_score DESC
     `).all() as Array<Record<string, unknown>>
     if (works.length === 0) return []
@@ -1212,7 +1208,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('dashboard:new-actors', () => {
     return db().prepare(`
       SELECT a.*,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.debut_date IS NOT NULL AND a.debut_date != ''
@@ -1225,7 +1221,7 @@ export function registerIpcHandlers(): void {
     return db().prepare(`
       SELECT a.*,
         CAST((julianday('now') - julianday(a.birthday)) / 365.25 AS INTEGER) AS age,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.birthday IS NOT NULL AND a.birthday != ''
       ORDER BY a.birthday DESC, a.debut_date DESC
@@ -1236,7 +1232,7 @@ export function registerIpcHandlers(): void {
     return db().prepare(`
       SELECT a.*,
         CAST((julianday(a.debut_date) - julianday(a.birthday)) / 365.25 AS INTEGER) AS debut_age,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.birthday IS NOT NULL AND a.birthday != ''
         AND a.debut_date IS NOT NULL AND a.debut_date != ''
@@ -1278,7 +1274,7 @@ export function registerIpcHandlers(): void {
       )
       SELECT a.*,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
           THEN ROUND((
             (
@@ -1287,7 +1283,7 @@ export function registerIpcHandlers(): void {
               COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
               COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
             ) / 4.0 * 0.3 +
-            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
+            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 6.5 * 0.7
           ), 2)
           ELSE NULL
         END AS ratio_score
@@ -1323,7 +1319,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -1337,7 +1333,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -1351,7 +1347,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -1366,7 +1362,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -1382,7 +1378,7 @@ export function registerIpcHandlers(): void {
     const secondary = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -1397,7 +1393,7 @@ export function registerIpcHandlers(): void {
     const d = reverse ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       LEFT JOIN work_actors wa ON wa.actor_id = a.id
@@ -1421,7 +1417,7 @@ export function registerIpcHandlers(): void {
         WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
       )
       SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         ROUND((
           (
             COALESCE(CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10, 5.0) +
@@ -1429,7 +1425,7 @@ export function registerIpcHandlers(): void {
             COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
             COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
           ) / 4.0 * 0.3 +
-          (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
+          (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 6.5 * 0.7
         ), 2) AS ratio_score,
         COUNT(*) OVER () AS total_count
       FROM actors a, stats
@@ -1446,7 +1442,7 @@ export function registerIpcHandlers(): void {
     return db().prepare(`
       SELECT a.*, COUNT(wa.work_id) AS fav_work_count,
         COALESCE((SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id), 0) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         COUNT(*) OVER () AS total_count
       FROM actors a
       JOIN work_actors wa ON wa.actor_id = a.id
@@ -1476,12 +1472,57 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('dashboard:actor-score-dist', () => {
     return db().prepare(`
+      WITH stats AS (
+        SELECT
+          MIN(height) AS min_h, MAX(height) AS max_h,
+          MIN(bust)   AS min_b, MAX(bust)   AS max_b,
+          MIN(waist)  AS min_w, MAX(waist)  AS max_w,
+          MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
+        FROM actors
+        WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+      )
       SELECT a.*,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
+        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
+        CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
+          THEN ROUND((
+            (
+              COALESCE(CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10, 5.0) +
+              COALESCE(CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10, 5.0) +
+              COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
+              COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
+            ) / 4.0 * 0.3 +
+            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 6.5 * 0.7
+          ), 2)
+          ELSE NULL
+        END AS ratio_score
+      FROM actors a
+      LEFT OUTER JOIN stats ON 1=1
+      LEFT JOIN actor_scores s ON s.actor_id = a.id
+      ORDER BY avg_score ASC, ratio_score ASC
+    `).all()
+  })
+
+  ipcMain.handle('dashboard:actor-physical-dist', () => {
+    return db().prepare(`
+      SELECT
+        a.id, a.name, a.photo_path,
+        a.height, a.bust, a.waist, a.hip, a.cup,
+        COALESCE(s.face, 0)        AS face,
+        COALESCE(s.bust, 0)        AS score_bust,
+        COALESCE(s.hip, 0)         AS score_hip,
+        COALESCE(s.physical, 0)    AS physical,
+        COALESCE(s.skin, 0)        AS skin,
+        COALESCE(s.acting, 0)      AS acting,
+        COALESCE(s.sexy, 0)        AS sexy,
+        COALESCE(s.charm, 0)       AS charm,
+        COALESCE(s.technique, 0)   AS technique,
+        COALESCE(s.proportions, 0) AS proportions,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      ORDER BY avg_score DESC, work_count DESC
+      WHERE a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
     `).all()
   })
 
@@ -1539,7 +1580,7 @@ export function registerIpcHandlers(): void {
         WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
       )
       SELECT a.*,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) AS avg_score,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
         CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
           THEN ROUND((
@@ -1549,7 +1590,7 @@ export function registerIpcHandlers(): void {
               COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
               COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
             ) / 4.0 * 0.3 +
-            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 5.0 * 0.7
+            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 6.5 * 0.7
           ), 2)
           ELSE NULL
         END AS ratio_score

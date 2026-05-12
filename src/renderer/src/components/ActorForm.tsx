@@ -251,7 +251,11 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                 <input
                   type="text"
                   value={cup}
-                  onChange={(e) => setCup(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    const KO_TO_CUP: Record<string, string> = { ㅁ:'A',ㅠ:'B',ㅊ:'C',ㅇ:'D',ㄷ:'E',ㄹ:'F',ㅎ:'G',ㅗ:'H',ㅑ:'I',ㅓ:'J',ㅏ:'K',ㅣ:'L',ㅡ:'M' }
+                    const converted = e.target.value.split('').map(c => KO_TO_CUP[c] ?? c).join('')
+                    setCup(converted.toUpperCase())
+                  }}
                   placeholder="A"
                   className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
                 />

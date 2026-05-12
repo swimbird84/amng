@@ -61,6 +61,16 @@ export interface PhysicalStats {
   minW: number; maxW: number
   minHip: number; maxHip: number
   minCup: number; maxCup: number
+  minFace: number; maxFace: number
+  minSBust: number; maxSBust: number
+  minSHip: number; maxSHip: number
+  minPhysical: number; maxPhysical: number
+  minSkin: number; maxSkin: number
+  minActing: number; maxActing: number
+  minSexy: number; maxSexy: number
+  minCharm: number; maxCharm: number
+  minTechnique: number; maxTechnique: number
+  minProportions: number; maxProportions: number
 }
 
 export const DEFAULT_SETTINGS: PhysicalSettings = {
@@ -123,12 +133,33 @@ export function computeStats(actors: ActorPhysicalData[]): PhysicalStats {
   const ws   = actors.map(a => a.waist ).filter((v): v is number => v != null)
   const hips = actors.map(a => a.hip   ).filter((v): v is number => v != null)
   const cups = actors.map(a => a.cup ? cupToNum(a.cup) : 0).filter(v => v > 0)
+  const sc = (arr: number[]) => arr.length ? [Math.min(...arr), Math.max(...arr)] : [0, 13]
+  const faces  = actors.map(a => a.face)
+  const sBusts = actors.map(a => a.score_bust)
+  const sHips  = actors.map(a => a.score_hip)
+  const phys   = actors.map(a => a.physical)
+  const skins  = actors.map(a => a.skin)
+  const acts   = actors.map(a => a.acting)
+  const sexys  = actors.map(a => a.sexy)
+  const charms = actors.map(a => a.charm)
+  const techs  = actors.map(a => a.technique)
+  const props  = actors.map(a => a.proportions)
   return {
     minH:   hs.length   ? Math.min(...hs)   : 0,  maxH:   hs.length   ? Math.max(...hs)   : 10,
     minB:   bs.length   ? Math.min(...bs)   : 0,  maxB:   bs.length   ? Math.max(...bs)   : 10,
     minW:   ws.length   ? Math.min(...ws)   : 0,  maxW:   ws.length   ? Math.max(...ws)   : 10,
     minHip: hips.length ? Math.min(...hips) : 0,  maxHip: hips.length ? Math.max(...hips) : 10,
     minCup: cups.length ? Math.min(...cups) : 1,  maxCup: cups.length ? Math.max(...cups) : 11,
+    minFace: sc(faces)[0],        maxFace: sc(faces)[1],
+    minSBust: sc(sBusts)[0],      maxSBust: sc(sBusts)[1],
+    minSHip: sc(sHips)[0],        maxSHip: sc(sHips)[1],
+    minPhysical: sc(phys)[0],     maxPhysical: sc(phys)[1],
+    minSkin: sc(skins)[0],        maxSkin: sc(skins)[1],
+    minActing: sc(acts)[0],       maxActing: sc(acts)[1],
+    minSexy: sc(sexys)[0],        maxSexy: sc(sexys)[1],
+    minCharm: sc(charms)[0],      maxCharm: sc(charms)[1],
+    minTechnique: sc(techs)[0],   maxTechnique: sc(techs)[1],
+    minProportions: sc(props)[0], maxProportions: sc(props)[1],
   }
 }
 
@@ -183,16 +214,16 @@ export function calcPhysicalScore(
   if (settings.scoreEnabled) {
     const items: number[] = []
     const sc = settings.score
-    if (sc.face.enabled)        { let v = actor.face;        if (sc.face.dir        === 'N') v = 10 - v; items.push(v) }
-    if (sc.bust.enabled)        { let v = actor.score_bust;  if (sc.bust.dir        === 'N') v = 10 - v; items.push(v) }
-    if (sc.hip.enabled)         { let v = actor.score_hip;   if (sc.hip.dir         === 'N') v = 10 - v; items.push(v) }
-    if (sc.physical.enabled)    { let v = actor.physical;    if (sc.physical.dir    === 'N') v = 10 - v; items.push(v) }
-    if (sc.skin.enabled)        { let v = actor.skin;        if (sc.skin.dir        === 'N') v = 10 - v; items.push(v) }
-    if (sc.proportions.enabled) { let v = actor.proportions; if (sc.proportions.dir === 'N') v = 10 - v; items.push(v) }
-    if (sc.acting.enabled)      { let v = actor.acting;      if (sc.acting.dir      === 'N') v = 10 - v; items.push(v) }
-    if (sc.sexy.enabled)        { let v = actor.sexy;        if (sc.sexy.dir        === 'N') v = 10 - v; items.push(v) }
-    if (sc.charm.enabled)       { let v = actor.charm;       if (sc.charm.dir       === 'N') v = 10 - v; items.push(v) }
-    if (sc.technique.enabled)   { let v = actor.technique;   if (sc.technique.dir   === 'N') v = 10 - v; items.push(v) }
+    if (sc.face.enabled)        { let v = norm(actor.face,        stats.minFace,        stats.maxFace);        if (sc.face.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.bust.enabled)        { let v = norm(actor.score_bust,  stats.minSBust,       stats.maxSBust);       if (sc.bust.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.hip.enabled)         { let v = norm(actor.score_hip,   stats.minSHip,        stats.maxSHip);        if (sc.hip.dir         === 'N') v = 10 - v; items.push(v) }
+    if (sc.physical.enabled)    { let v = norm(actor.physical,    stats.minPhysical,    stats.maxPhysical);    if (sc.physical.dir    === 'N') v = 10 - v; items.push(v) }
+    if (sc.skin.enabled)        { let v = norm(actor.skin,        stats.minSkin,        stats.maxSkin);        if (sc.skin.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.proportions.enabled) { let v = norm(actor.proportions, stats.minProportions, stats.maxProportions); if (sc.proportions.dir === 'N') v = 10 - v; items.push(v) }
+    if (sc.acting.enabled)      { let v = norm(actor.acting,      stats.minActing,      stats.maxActing);      if (sc.acting.dir      === 'N') v = 10 - v; items.push(v) }
+    if (sc.sexy.enabled)        { let v = norm(actor.sexy,        stats.minSexy,        stats.maxSexy);        if (sc.sexy.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.charm.enabled)       { let v = norm(actor.charm,       stats.minCharm,       stats.maxCharm);       if (sc.charm.dir       === 'N') v = 10 - v; items.push(v) }
+    if (sc.technique.enabled)   { let v = norm(actor.technique,   stats.minTechnique,   stats.maxTechnique);   if (sc.technique.dir   === 'N') v = 10 - v; items.push(v) }
     if (items.length > 0) scoreScore = items.reduce((a, b) => a + b, 0) / items.length
   }
 
@@ -250,6 +281,8 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
     (localStorage.getItem('ratingCalc:rankBy') as 'avg_score' | 'physScore' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'face' | 'score_bust' | 'score_hip' | 'physical' | 'skin' | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions') || 'physScore'
   )
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [editingCell, setEditingCell] = useState<{ actorId: number; key: keyof ActorScores } | null>(null)
+  const [nameSearch, setNameSearch] = useState('')
 
   useEffect(() => {
     actorsApi.physicalData().then(d => setActors(d as ActorPhysicalData[]))
@@ -262,6 +295,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   }, [onClose])
 
   const handleScoreChange = async (actorId: number, key: keyof ActorScores, value: number) => {
+    setEditingCell(null)
     if (value >= 11) {
       const counts = await actorsApi.scoreGradeCounts(actorId)
       const itemCounts = counts[key]
@@ -290,7 +324,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
 
   const ranked = useMemo(() => {
     const avgScore = (a: ActorPhysicalData) =>
-      (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 10
+      (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 13
 
     const getVal = (a: ActorPhysicalData & { physScore: number | null }): number | null => {
       if (rankBy === 'avg_score') return avgScore(a)
@@ -320,7 +354,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
 
     return actors
       .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
-      .filter(a => getVal(a) != null)
+      .filter(a => a.physScore != null && getVal(a) != null)
       .sort((a, b) => {
         const av = getVal(a)!
         const bv = getVal(b)!
@@ -519,10 +553,20 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
               >
                 {rankSortDir === 'desc' ? '↓' : '↑'}
               </button>
+              <input
+                type="text"
+                value={nameSearch}
+                onChange={e => setNameSearch(e.target.value)}
+                placeholder="배우 이름"
+                className="ml-auto bg-gray-700 text-white text-xs px-2 py-0.5 rounded w-28 placeholder-gray-500"
+              />
             </div>
             <div className="flex-1 overflow-y-auto space-y-1 [scrollbar-gutter:stable]">
-              {ranked.map((a, i) => {
-                const avgScore = (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 10
+              {ranked
+                .map((a, i) => ({ ...a, _rank: i }))
+                .filter(a => !nameSearch || a.name.includes(nameSearch))
+                .map((a) => {
+                const avgScore = (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 13
                 const profileParts = [
                   a.height != null ? `키:${a.height}cm` : '',
                   a.bust != null   ? `B:${a.bust}`      : '',
@@ -532,7 +576,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                 ].filter(Boolean).join('  ')
                 return (
                   <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
-                    <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? i + 1 : ranked.length - i}</span>
+                    <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? a._rank + 1 : ranked.length - a._rank}</span>
                     <div onClick={() => onViewActor?.(a.id)} className={onViewActor ? 'cursor-pointer' : ''} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
                       <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" objectPosition="center 10%" />
                     </div>
@@ -552,16 +596,30 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                           ))}
                         </div>
                         <div className="flex gap-0.5">
-                          {EDIT_SCORE_FIELDS.map(({ label, getValue, apiKey }) => (
-                            <select
-                              key={label}
-                              value={getValue(a)}
-                              onChange={e => handleScoreChange(a.id, apiKey, Number(e.target.value))}
-                              className="w-9 text-center bg-gray-600 text-white text-xs leading-tight rounded px-0 py-0.5"
-                            >
-                              {SCORE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                          ))}
+                          {EDIT_SCORE_FIELDS.map(({ label, getValue, apiKey }) => {
+                            const isEditing = editingCell?.actorId === a.id && editingCell?.key === apiKey
+                            const currentVal = getValue(a)
+                            return isEditing ? (
+                              <select
+                                key={label}
+                                autoFocus
+                                defaultValue={currentVal}
+                                onChange={e => handleScoreChange(a.id, apiKey, Number(e.target.value))}
+                                onBlur={() => setEditingCell(null)}
+                                className="w-9 h-5 text-center bg-gray-600 text-white text-xs leading-tight rounded px-0 py-0"
+                              >
+                                {SCORE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            ) : (
+                              <button
+                                key={label}
+                                onClick={() => setEditingCell({ actorId: a.id, key: apiKey })}
+                                className="w-9 h-5 text-center bg-gray-600 hover:bg-gray-500 text-white text-xs leading-tight rounded px-0 py-0"
+                              >
+                                {currentVal}
+                              </button>
+                            )
+                          })}
                         </div>
                       </div>
                     </div>

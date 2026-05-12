@@ -433,7 +433,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
           <div>
             <label className="text-sm text-gray-400 block mb-1">표지</label>
             <div className="flex gap-3 items-start">
-              <ImagePreview path={coverPath} alt="표지" className="w-24 h-32 rounded" />
+              <ImagePreview path={coverPath} alt="표지" className="h-32 aspect-[800/540] rounded" />
               <button onClick={handleSelectCover} className="bg-gray-600 hover:bg-gray-500 text-white text-sm px-3 py-1.5 rounded">
                 이미지 선택
               </button>

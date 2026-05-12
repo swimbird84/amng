@@ -335,6 +335,9 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                     <p className="text-xs text-gray-400">총{a.work_count ?? 0}편</p>
                   </div>
                   <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-400">{a.debut_date || '-'} ({getDebutAge(a.birthday, a.debut_date)})</p>
+                  </div>
+                  <div className="flex items-center justify-between">
                     <p className="text-xs text-gray-400">
                       {[
                         a.height ? `${a.height}cm` : '',
@@ -409,7 +412,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                   <p className="text-yellow-400 text-sm mt-1">
                     평점 {(selected.avg_score ?? (
                       selected.scores
-                        ? (Object.values(selected.scores).reduce((a, b) => a + b, 0) / 10)
+                        ? (Object.values(selected.scores).reduce((a, b) => a + b, 0) / 13)
                         : 0
                     )).toFixed(2)}점
                   </p>

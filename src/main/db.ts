@@ -99,6 +99,13 @@ export function initDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_works_product_number ON works(product_number);
     CREATE INDEX IF NOT EXISTS idx_actors_birthday ON actors(birthday);
     CREATE INDEX IF NOT EXISTS idx_actors_rating ON actors(rating);
+    CREATE INDEX IF NOT EXISTS idx_work_actors_actor_id ON work_actors(actor_id);
+    CREATE INDEX IF NOT EXISTS idx_work_actors_work_id ON work_actors(work_id);
+    CREATE INDEX IF NOT EXISTS idx_work_tags_tag_id ON work_tags(tag_id);
+    CREATE INDEX IF NOT EXISTS idx_actor_tags_tag_id ON actor_tags(tag_id);
+    CREATE INDEX IF NOT EXISTS idx_actors_name ON actors(name);
+    CREATE INDEX IF NOT EXISTS idx_works_studio_id ON works(studio_id);
+    CREATE INDEX IF NOT EXISTS idx_actors_debut_date ON actors(debut_date);
   `)
 
   // work_files 테이블 마이그레이션
