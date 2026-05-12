@@ -558,13 +558,13 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                 value={nameSearch}
                 onChange={e => setNameSearch(e.target.value)}
                 placeholder="배우 이름"
-                className="ml-auto bg-gray-700 text-white text-xs px-2 py-0.5 rounded w-28 placeholder-gray-500"
+                className="ml-auto bg-gray-700 text-white text-xs px-2 py-0.5 rounded w-56 placeholder-gray-500"
               />
             </div>
             <div className="flex-1 overflow-y-auto space-y-1 [scrollbar-gutter:stable]">
               {ranked
                 .map((a, i) => ({ ...a, _rank: i }))
-                .filter(a => !nameSearch || a.name.includes(nameSearch))
+                .filter(a => !nameSearch || a.name.toLowerCase().includes(nameSearch.toLowerCase()))
                 .map((a) => {
                 const avgScore = (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 13
                 const profileParts = [
