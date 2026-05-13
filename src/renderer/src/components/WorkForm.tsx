@@ -41,6 +41,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [labelAddMode, setLabelAddMode] = useState(false)
   const [newLabelName, setNewLabelName] = useState('')
   const [studioDropOpen, setStudioDropOpen] = useState(false)
+  const [studioSearch, setStudioSearch] = useState('')
   const studioDropRef = useRef<HTMLDivElement>(null)
   const studioTriggerRef = useRef<HTMLButtonElement>(null)
   const [studioDropRect, setStudioDropRect] = useState<{ top: number; left: number; width: number } | null>(null)
@@ -61,7 +62,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
     return (a.id - b.id) * dir
   }), [allStudios, studioSortBy, studioSortDir])
 
-  const handleStudioDropClose = useCallback(() => setStudioDropOpen(false), [])
+  const handleStudioDropClose = useCallback(() => { setStudioDropOpen(false); setStudioSearch('') }, [])
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -545,7 +546,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                   {studioDropOpen && studioDropRect && (
                     <div
                       ref={studioDropRef}
-                      className="fixed z-50 bg-gray-800 rounded shadow-lg overflow-y-scroll"
+                      className="fixed z-50 bg-gray-800 rounded shadow-lg flex flex-col"
                       style={{
                         top: studioDropRect.top,
                         left: studioDropRect.left,
@@ -553,23 +554,43 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                         maxHeight: `calc(95vh - ${studioDropRect.top}px - 8px)`,
                       }}
                     >
-                      <button
-                        type="button"
-                        onClick={() => { setStudioId(null); setStudioDropOpen(false) }}
-                        className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === null ? 'text-white font-bold' : 'text-gray-300'}`}
-                      >
-                        없음
-                      </button>
-                      {sortedStudios.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => { setStudioId(s.id); setStudioDropOpen(false) }}
-                          className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
-                        >
-                          {s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name}
-                        </button>
-                      ))}
+                      <div className="p-1.5 border-b border-gray-700 flex-shrink-0">
+                        <input
+                          type="text"
+                          value={studioSearch}
+                          onChange={(e) => setStudioSearch(e.target.value)}
+                          placeholder="레이블 검색"
+                          autoFocus
+                          className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full"
+                        />
+                      </div>
+                      <div className="overflow-y-auto">
+                        {!studioSearch && (
+                          <button
+                            type="button"
+                            onClick={() => { setStudioId(null); handleStudioDropClose() }}
+                            className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === null ? 'text-white font-bold' : 'text-gray-300'}`}
+                          >
+                            없음
+                          </button>
+                        )}
+                        {sortedStudios
+                          .filter((s) => {
+                            if (!studioSearch) return true
+                            const full = s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name
+                            return full.toLowerCase().includes(studioSearch.toLowerCase())
+                          })
+                          .map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => { setStudioId(s.id); handleStudioDropClose() }}
+                              className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
+                            >
+                              {s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name}
+                            </button>
+                          ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -636,7 +657,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                 </div>
                 <div className="border-t border-gray-700" />
                 <div className="flex flex-wrap gap-1.5">
-                  {allActors.map((actor) => {
+                  {allActors.filter((a) => !newActor || a.name.toLowerCase().includes(newActor.toLowerCase())).map((actor) => {
                     const isRep = repActorIds.includes(actor.id)
                     return (<button
                       key={actor.id}

@@ -622,7 +622,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
                       {actors.length > 0 ? (
                         <div className="grid grid-cols-10 gap-2">
                           {actors.map((a, i) => (
-                            <ActorRankCard key={a.id} actor={a} rank={i + 1} subtitle={`${(a.avg_score ?? 0).toFixed(2)}점`} showRank={false} onClick={() => onNavigateToActor(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
+                            <ActorRankCard key={a.id} actor={a} rank={i + 1} subtitle={a.birthday ? formatCurrentAge(a.birthday) : '-'} showRank={false} onClick={() => onNavigateToActor(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
                           ))}
                         </div>
                       ) : (

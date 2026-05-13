@@ -150,6 +150,7 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
           {allTags.length === 0 ? (
             <span className="text-xs text-gray-500">등록된 태그가 없습니다</span>
           ) : (() => {
+            const filterText = newTag || inlineCatName
             type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof allTags }
             const catMap = new Map<number | null, Group>()
             const groups: Group[] = []
@@ -198,7 +199,7 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
                       </div>
                     )}
                     <div className="flex flex-wrap gap-1.5">
-                      {g.tags.map((tag) => {
+                      {g.tags.filter((t) => !filterText || t.name.toLowerCase().includes(filterText.toLowerCase())).map((tag) => {
                         const isSelected = selectedIds.includes(tag.id)
                         const isRep = repTagIds?.includes(tag.id)
                         return (

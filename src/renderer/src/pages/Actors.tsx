@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Actor, Tag, Work } from '../types'
 import { actorsApi, actorTagsApi, shellApi } from '../api'
-import SearchBar, { type ActorSearchParams } from '../components/SearchBar'
+import SearchBar, { type ActorSearchParams, DEFAULT_ACTOR_SEARCH } from '../components/SearchBar'
 import ActorForm from '../components/ActorForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
@@ -40,9 +40,9 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   const [search, setSearch] = useState<ActorSearchParams>(() => {
     try {
       const saved = localStorage.getItem('actors:search')
-      return saved ? JSON.parse(saved) : { keyword: '', tagIds: [], tagMode: 'and' }
+      return saved ? { ...DEFAULT_ACTOR_SEARCH, ...JSON.parse(saved) } : DEFAULT_ACTOR_SEARCH
     } catch {
-      return { keyword: '', tagIds: [], tagMode: 'and' }
+      return DEFAULT_ACTOR_SEARCH
     }
   })
   const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score'>(
@@ -81,6 +81,46 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
     const params: Record<string, unknown> = {}
     if (search.keyword) params.keyword = search.keyword
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
+    if (search.ageFrom !== '') params.ageFrom = Number(search.ageFrom)
+    if (search.ageTo !== '') params.ageTo = Number(search.ageTo)
+    if (search.debutDateFrom) params.debutDateFrom = search.debutDateFrom
+    if (search.debutDateTo) params.debutDateTo = search.debutDateTo
+    if (search.workCountFrom !== '') params.workCountFrom = Number(search.workCountFrom)
+    if (search.workCountTo !== '') params.workCountTo = Number(search.workCountTo)
+    if (search.avgRatingFrom !== '') params.avgRatingFrom = Number(search.avgRatingFrom)
+    if (search.avgRatingTo !== '') params.avgRatingTo = Number(search.avgRatingTo)
+    if (search.faceFrom !== '') params.faceFrom = Number(search.faceFrom)
+    if (search.faceTo !== '') params.faceTo = Number(search.faceTo)
+    if (search.bustScoreFrom !== '') params.bustScoreFrom = Number(search.bustScoreFrom)
+    if (search.bustScoreTo !== '') params.bustScoreTo = Number(search.bustScoreTo)
+    if (search.hipScoreFrom !== '') params.hipScoreFrom = Number(search.hipScoreFrom)
+    if (search.hipScoreTo !== '') params.hipScoreTo = Number(search.hipScoreTo)
+    if (search.physicalScoreFrom !== '') params.physicalScoreFrom = Number(search.physicalScoreFrom)
+    if (search.physicalScoreTo !== '') params.physicalScoreTo = Number(search.physicalScoreTo)
+    if (search.skinFrom !== '') params.skinFrom = Number(search.skinFrom)
+    if (search.skinTo !== '') params.skinTo = Number(search.skinTo)
+    if (search.actingFrom !== '') params.actingFrom = Number(search.actingFrom)
+    if (search.actingTo !== '') params.actingTo = Number(search.actingTo)
+    if (search.sexyFrom !== '') params.sexyFrom = Number(search.sexyFrom)
+    if (search.sexyTo !== '') params.sexyTo = Number(search.sexyTo)
+    if (search.charmFrom !== '') params.charmFrom = Number(search.charmFrom)
+    if (search.charmTo !== '') params.charmTo = Number(search.charmTo)
+    if (search.techniqueFrom !== '') params.techniqueFrom = Number(search.techniqueFrom)
+    if (search.techniqueTo !== '') params.techniqueTo = Number(search.techniqueTo)
+    if (search.proportionsFrom !== '') params.proportionsFrom = Number(search.proportionsFrom)
+    if (search.proportionsTo !== '') params.proportionsTo = Number(search.proportionsTo)
+    if (search.ratioScoreFrom !== '') params.ratioScoreFrom = Number(search.ratioScoreFrom)
+    if (search.ratioScoreTo !== '') params.ratioScoreTo = Number(search.ratioScoreTo)
+    if (search.heightFrom !== '') params.heightFrom = Number(search.heightFrom)
+    if (search.heightTo !== '') params.heightTo = Number(search.heightTo)
+    if (search.bustFrom !== '') params.bustFrom = Number(search.bustFrom)
+    if (search.bustTo !== '') params.bustTo = Number(search.bustTo)
+    if (search.waistFrom !== '') params.waistFrom = Number(search.waistFrom)
+    if (search.waistTo !== '') params.waistTo = Number(search.waistTo)
+    if (search.hipFrom !== '') params.hipFrom = Number(search.hipFrom)
+    if (search.hipTo !== '') params.hipTo = Number(search.hipTo)
+    if (search.cupFrom) params.cupFrom = search.cupFrom
+    if (search.cupTo) params.cupTo = search.cupTo
     if (sortBy !== 'ratio_score') {
       params.sortBy = sortBy
       params.sortDir = sortDir
@@ -241,7 +281,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                 {sortDir === 'asc' ? '↑' : '↓'}
               </button>
             </div>
-            <div className="w-[38rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <div className="w-[38rem] shrink-0 flex items-center bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <SearchBar type="actors" params={search} onChange={setSearch} tags={tags} resultCount={displayActors.length} />
             </div>
             <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">

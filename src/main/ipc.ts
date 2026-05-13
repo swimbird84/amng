@@ -21,6 +21,8 @@ export function registerIpcHandlers(): void {
     sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
+    titleSearch?: string
+    titleNull?: boolean
   }) => {
     let sql = `
       SELECT DISTINCT w.*, s.name AS studio_name, s.color AS studio_color, m.name AS studio_maker_name, m.color AS studio_maker_color FROM works w
@@ -87,12 +89,12 @@ export function registerIpcHandlers(): void {
       }
     }
 
-    if (params?.sortBy === 'title') {
-      if (params.sortDir === 'asc') {
-        conditions.push("(w.comment IS NOT NULL AND TRIM(w.comment) != '')")
-      } else {
-        conditions.push("(w.comment IS NULL OR TRIM(w.comment) = '')")
-      }
+    if (params?.titleSearch) {
+      conditions.push('w.comment LIKE ?')
+      bindings.push(`%${params.titleSearch}%`)
+    }
+    if (params?.titleNull) {
+      conditions.push("(w.comment IS NULL OR TRIM(w.comment) = '')")
     }
 
     if (conditions.length > 0) {
@@ -101,7 +103,7 @@ export function registerIpcHandlers(): void {
 
     const sortDir = params?.sortDir === 'asc' ? 'ASC' : 'DESC'
     if (params?.sortBy === 'title') {
-      sql += ' ORDER BY w.created_at DESC'
+      sql += ` ORDER BY w.comment IS NULL ASC, w.comment ${sortDir}`
     } else {
       const validWorkSortCols = ['product_number', 'rating', 'release_date', 'created_at']
       const sortCol = validWorkSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
@@ -339,6 +341,26 @@ export function registerIpcHandlers(): void {
     sortBy?: 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
+    debutDateFrom?: string
+    debutDateTo?: string
+    workCountFrom?: number
+    workCountTo?: number
+    faceFrom?: number; faceTo?: number
+    bustScoreFrom?: number; bustScoreTo?: number
+    hipScoreFrom?: number; hipScoreTo?: number
+    physicalScoreFrom?: number; physicalScoreTo?: number
+    skinFrom?: number; skinTo?: number
+    actingFrom?: number; actingTo?: number
+    sexyFrom?: number; sexyTo?: number
+    charmFrom?: number; charmTo?: number
+    techniqueFrom?: number; techniqueTo?: number
+    proportionsFrom?: number; proportionsTo?: number
+    ratioScoreFrom?: number; ratioScoreTo?: number
+    heightFrom?: number; heightTo?: number
+    bustFrom?: number; bustTo?: number
+    waistFrom?: number; waistTo?: number
+    hipFrom?: number; hipTo?: number
+    cupFrom?: string; cupTo?: string
   }) => {
     let sql = `
       WITH stats AS (
@@ -410,6 +432,45 @@ export function registerIpcHandlers(): void {
     if (params?.favoriteOnly) {
       conditions.push('a.is_favorite = 1')
     }
+    if (params?.debutDateFrom) { conditions.push('a.debut_date >= ?'); bindings.push(params.debutDateFrom) }
+    if (params?.debutDateTo) { conditions.push('a.debut_date <= ?'); bindings.push(params.debutDateTo) }
+    if (params?.workCountFrom !== undefined && params.workCountFrom > 0) {
+      conditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id) >= ?'); bindings.push(params.workCountFrom)
+    }
+    if (params?.workCountTo !== undefined && params.workCountTo > 0) {
+      conditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id) <= ?'); bindings.push(params.workCountTo)
+    }
+    const scoreFields: [keyof typeof params, string][] = [
+      ['faceFrom', 'face'], ['faceTo', 'face'],
+      ['bustScoreFrom', 'bust'], ['bustScoreTo', 'bust'],
+      ['hipScoreFrom', 'hip'], ['hipScoreTo', 'hip'],
+      ['physicalScoreFrom', 'physical'], ['physicalScoreTo', 'physical'],
+      ['skinFrom', 'skin'], ['skinTo', 'skin'],
+      ['actingFrom', 'acting'], ['actingTo', 'acting'],
+      ['sexyFrom', 'sexy'], ['sexyTo', 'sexy'],
+      ['charmFrom', 'charm'], ['charmTo', 'charm'],
+      ['techniqueFrom', 'technique'], ['techniqueTo', 'technique'],
+      ['proportionsFrom', 'proportions'], ['proportionsTo', 'proportions'],
+    ]
+    for (const [key, col] of scoreFields) {
+      const val = params?.[key] as number | undefined
+      if (val !== undefined && val > 0) {
+        const op = (key as string).endsWith('From') ? '>=' : '<='
+        conditions.push(`COALESCE(s.${col}, 0) ${op} ?`); bindings.push(val)
+      }
+    }
+    if (params?.ratioScoreFrom !== undefined && params.ratioScoreFrom > 0) { conditions.push('ratio_score >= ?'); bindings.push(params.ratioScoreFrom) }
+    if (params?.ratioScoreTo !== undefined && params.ratioScoreTo > 0) { conditions.push('ratio_score <= ?'); bindings.push(params.ratioScoreTo) }
+    if (params?.heightFrom !== undefined && params.heightFrom > 0) { conditions.push('a.height >= ?'); bindings.push(params.heightFrom) }
+    if (params?.heightTo !== undefined && params.heightTo > 0) { conditions.push('a.height <= ?'); bindings.push(params.heightTo) }
+    if (params?.bustFrom !== undefined && params.bustFrom > 0) { conditions.push('a.bust >= ?'); bindings.push(params.bustFrom) }
+    if (params?.bustTo !== undefined && params.bustTo > 0) { conditions.push('a.bust <= ?'); bindings.push(params.bustTo) }
+    if (params?.waistFrom !== undefined && params.waistFrom > 0) { conditions.push('a.waist >= ?'); bindings.push(params.waistFrom) }
+    if (params?.waistTo !== undefined && params.waistTo > 0) { conditions.push('a.waist <= ?'); bindings.push(params.waistTo) }
+    if (params?.hipFrom !== undefined && params.hipFrom > 0) { conditions.push('a.hip >= ?'); bindings.push(params.hipFrom) }
+    if (params?.hipTo !== undefined && params.hipTo > 0) { conditions.push('a.hip <= ?'); bindings.push(params.hipTo) }
+    if (params?.cupFrom) { conditions.push('a.cup >= ?'); bindings.push(params.cupFrom) }
+    if (params?.cupTo) { conditions.push('a.cup <= ?'); bindings.push(params.cupTo) }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')

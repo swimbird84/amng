@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Work, Tag, Actor, Studio } from '../types'
 import { worksApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi } from '../api'
-import SearchBar, { type WorkSearchParams } from '../components/SearchBar'
+import SearchBar, { type WorkSearchParams, DEFAULT_WORK_SEARCH } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
@@ -36,9 +36,9 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [search, setSearch] = useState<WorkSearchParams>(() => {
     try {
       const saved = localStorage.getItem('works:search')
-      return saved ? JSON.parse(saved) : { keyword: '', tagIds: [], tagMode: 'and', actorId: '', studioId: '' }
+      return saved ? { ...DEFAULT_WORK_SEARCH, ...JSON.parse(saved) } : DEFAULT_WORK_SEARCH
     } catch {
-      return { keyword: '', tagIds: [], tagMode: 'and', actorId: '', studioId: '' }
+      return DEFAULT_WORK_SEARCH
     }
   })
   const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title'>(
@@ -62,6 +62,12 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
     if (search.actorId) params.actorId = Number(search.actorId)
     if (search.studioId) params.studioId = Number(search.studioId)
+    if (search.releaseDateFrom) params.releaseDateFrom = search.releaseDateFrom
+    if (search.releaseDateTo) params.releaseDateTo = search.releaseDateTo
+    if (search.ratingFrom !== '') params.ratingFrom = Number(search.ratingFrom)
+    if (search.ratingTo !== '') params.ratingTo = Number(search.ratingTo)
+    if (search.titleSearch) params.titleSearch = search.titleSearch
+    if (search.titleNull) params.titleNull = true
     params.sortBy = sortBy
     params.sortDir = sortDir
     if (favoriteOnly) params.favoriteOnly = true
@@ -304,7 +310,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                 {sortDir === 'asc' ? '↑' : '↓'}
               </button>
             </div>
-            <div className="w-[38rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <div className="w-[38rem] shrink-0 flex items-center bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} studios={studioList} resultCount={works.length} />
             </div>
             <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
