@@ -62,6 +62,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [tagCloud, setTagCloud] = useState<{ category_id: number | null; category_name: string | null; category_sort_order: number | null; tag_id: number; tag_name: string; count: number }[] | null>(null)
   const isDragging = useRef(false)
   const dragAction = useRef<'add' | 'remove'>('add')
 
@@ -152,10 +153,10 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   }, [])
   useEffect(() => {
     if (!selected) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null) }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (tagCloud) setTagCloud(null); else setSelected(null) } }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [selected])
+  }, [selected, tagCloud])
   useEffect(() => {
     if (!openEditId) return
     actorsApi.get(openEditId).then((a) => {
@@ -558,7 +559,19 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                 {selected.works && selected.works.length > 0 ? (
                   <>
                     <div className="flex items-center justify-between">
-                      <p className="text-xs text-gray-500">출연작 ({selected.works.length})</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs text-gray-500">출연작 ({selected.works.length})</p>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const data = await actorsApi.workTags(selected.id)
+                            setTagCloud(data)
+                          }}
+                          className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        >
+                          태그
+                        </button>
+                      </div>
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => {
@@ -665,6 +678,55 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
           onCancel={() => setShowForm(false)}
         />
       )}
+
+      {tagCloud && (() => {
+        const sizeClass = (count: number, catMax: number) => {
+          const tier = catMax < 5 ? count : Math.ceil((count / catMax) * 5)
+          if (tier >= 5) return 'text-base font-bold text-gray-100'
+          if (tier >= 4) return 'text-sm font-semibold text-gray-200'
+          if (tier >= 3) return 'text-sm text-gray-200'
+          if (tier >= 2) return 'text-xs text-gray-300'
+          return 'text-xs text-gray-400 opacity-60'
+        }
+        type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof tagCloud }
+        const catMap = new Map<number | null, Group>()
+        const groups: Group[] = []
+        for (const t of tagCloud) {
+          const key = t.category_id ?? null
+          if (!catMap.has(key)) {
+            const g: Group = { catId: key, catName: t.category_name ?? null, sortOrder: t.category_sort_order ?? 999999, tags: [] }
+            catMap.set(key, g); groups.push(g)
+          }
+          catMap.get(key)!.tags.push(t)
+        }
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setTagCloud(null)}>
+            <div className="bg-gray-800 rounded-lg w-[600px] max-h-[80vh] flex flex-col relative" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+                <span className="text-white font-semibold">출연작 태그</span>
+                <button onClick={() => setTagCloud(null)} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+              </div>
+              <div className="overflow-y-auto p-4 space-y-3">
+                {groups.map(g => (
+                  <div key={g.catId ?? 'none'}>
+                    <p className="text-xs text-gray-500 mb-1.5 border-b border-gray-700 pb-0.5">{g.catName ?? '미분류'}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(() => {
+                        const catMax = Math.max(...g.tags.map(t => t.count), 1)
+                        return g.tags.map(t => (
+                          <span key={t.tag_id} className={`px-2 py-0.5 rounded bg-gray-700 ${sizeClass(t.count, catMax)}`}>
+                            {t.tag_name} {t.count}
+                          </span>
+                        ))
+                      })()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {showPhysical && (
         <PhysicalCorrectionModal onClose={() => setShowPhysical(false)} onViewActor={onNavigateToActor} />

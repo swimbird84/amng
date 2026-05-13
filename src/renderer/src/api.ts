@@ -19,6 +19,7 @@ export const actorsApi = {
   physicalData: () => api.invoke('actors:physical-data'),
   findOrCreate: (name: string, birthday?: string) => api.invoke('actors:findOrCreate', name, birthday) as Promise<number>,
   scoreGradeCounts: (excludeId?: number) => api.invoke('actors:scoreGradeCounts', excludeId) as Promise<Record<string, Record<number, { count: number; names: string }>>>,
+  workTags: (actorId: number) => api.invoke('actors:workTags', actorId) as Promise<{ category_id: number | null; category_name: string | null; category_sort_order: number | null; tag_id: number; tag_name: string; count: number }[]>,
 }
 
 // 태그 카테고리

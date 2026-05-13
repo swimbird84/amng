@@ -722,6 +722,25 @@ export function registerIpcHandlers(): void {
     return true
   })
 
+  ipcMain.handle('actors:workTags', (_e, actorId: number) => {
+    return db().prepare(`
+      SELECT
+        c.id   AS category_id,
+        c.name AS category_name,
+        c.sort_order AS category_sort_order,
+        m.id   AS tag_id,
+        m.name AS tag_name,
+        COUNT(*) AS count
+      FROM work_actors wa
+      JOIN work_tags wt ON wt.work_id = wa.work_id
+      JOIN work_tags_master m ON m.id = wt.tag_id
+      LEFT JOIN work_tag_categories c ON c.id = m.category_id
+      WHERE wa.actor_id = ?
+      GROUP BY m.id
+      ORDER BY COALESCE(c.sort_order, 999999) ASC, count DESC
+    `).all(actorId)
+  })
+
   ipcMain.handle('actors:scoreGradeCounts', (_e, excludeId?: number) => {
     const rows = db().prepare(`
       SELECT a.name, s.face, s.bust, s.hip, s.physical, s.skin, s.acting, s.sexy, s.charm, s.technique, s.proportions

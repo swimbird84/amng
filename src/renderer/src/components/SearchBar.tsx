@@ -289,7 +289,23 @@ export default function SearchBar(props: Props) {
   )
   const [advancedPos, setAdvancedPos] = useState({ top: 0, left: 0 })
   const advancedToggleRef = useRef<HTMLButtonElement>(null)
+  const advancedPanelRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!advancedOpen) return
+    const handler = (e: MouseEvent) => {
+      if (
+        advancedPanelRef.current && !advancedPanelRef.current.contains(e.target as Node) &&
+        advancedToggleRef.current && !advancedToggleRef.current.contains(e.target as Node)
+      ) {
+        setAdvancedOpen(false)
+        localStorage.setItem(`${type}:advancedOpen`, 'false')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [advancedOpen, type])
 
   const toggleAdvanced = () => {
     const next = !advancedOpen
@@ -596,6 +612,7 @@ export default function SearchBar(props: Props) {
       {/* ── advanced panel ──────────────────────────────────────────── */}
       {advancedOpen && (
         <div
+          ref={advancedPanelRef}
           className="fixed z-40 border border-gray-700 rounded-lg shadow-2xl overflow-y-auto"
           style={{
             top: advancedPos.top,
@@ -628,7 +645,7 @@ export default function SearchBar(props: Props) {
                       <span className="text-gray-400 text-xs shrink-0">▼</span>
                     </button>
                     {studioDropOpen && (
-                      <div ref={studioDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: studioDropPos.top, left: studioDropPos.left, width: studioDropPos.width, maxHeight: '300px' }}>
+                      <div ref={studioDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: studioDropPos.top, left: studioDropPos.left, width: studioDropPos.width, maxHeight: '600px' }}>
                         <div className="p-1.5 border-b border-gray-700">
                           <input type="text" value={studioFilter} onChange={e => setStudioFilter(e.target.value)} placeholder="레이블 검색" autoFocus className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full" />
                         </div>
@@ -663,7 +680,7 @@ export default function SearchBar(props: Props) {
                       <span className="text-gray-400 text-xs shrink-0">▼</span>
                     </button>
                     {actorDropOpen && (
-                      <div ref={actorDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: actorDropPos.top, left: actorDropPos.left, width: actorDropPos.width, maxHeight: '300px' }}>
+                      <div ref={actorDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: actorDropPos.top, left: actorDropPos.left, width: actorDropPos.width, maxHeight: '600px' }}>
                         <div className="p-1.5 border-b border-gray-700">
                           <input type="text" value={actorFilter} onChange={e => setActorFilter(e.target.value)} placeholder="배우 검색" autoFocus className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full" />
                         </div>
