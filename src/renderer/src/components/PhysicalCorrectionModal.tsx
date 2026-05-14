@@ -254,6 +254,18 @@ const SCORE_ITEMS: { key: keyof PhysicalSettings['score']; label: string }[] = [
   { key: 'technique',   label: '테크닉' },
 ]
 
+const KO_TO_CUP: Record<string, string> = { ㅁ:'A',ㅠ:'B',ㅊ:'C',ㅇ:'D',ㄷ:'E',ㄹ:'F',ㅎ:'G',ㅗ:'H',ㅑ:'I',ㅓ:'J',ㅏ:'K',ㅣ:'L',ㅡ:'M' }
+
+type ProfileField = 'height' | 'bust' | 'waist' | 'hip' | 'cup'
+
+const PROFILE_EDIT_FIELDS: { key: ProfileField; label: string; getValue: (a: ActorPhysicalData) => string | number | null }[] = [
+  { key: 'height', label: '키', getValue: a => a.height },
+  { key: 'bust',   label: 'B',  getValue: a => a.bust   },
+  { key: 'waist',  label: 'W',  getValue: a => a.waist  },
+  { key: 'hip',    label: 'H',  getValue: a => a.hip    },
+  { key: 'cup',    label: '컵', getValue: a => a.cup    },
+]
+
 const EDIT_SCORE_FIELDS: { label: string; getValue: (a: ActorPhysicalData) => number; apiKey: keyof ActorScores }[] = [
   { label: '얼굴',   getValue: a => a.face,        apiKey: 'face'        },
   { label: '가슴',   getValue: a => a.score_bust,  apiKey: 'bust'        },
@@ -278,6 +290,8 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   )
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [editingCell, setEditingCell] = useState<{ actorId: number; key: keyof ActorScores } | null>(null)
+  const [editingProfile, setEditingProfile] = useState<{ actorId: number; key: ProfileField } | null>(null)
+  const [profileInputValue, setProfileInputValue] = useState('')
   const [nameSearch, setNameSearch] = useState('')
 
   useEffect(() => {
@@ -314,6 +328,22 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
     const data = await actorsApi.physicalData()
     setActors(data as ActorPhysicalData[])
     window.dispatchEvent(new Event('actorScoresUpdated'))
+  }
+
+  const handleProfileChange = async (actorId: number, key: ProfileField, rawValue: string) => {
+    setEditingProfile(null)
+    const trimmed = rawValue.trim()
+    let value: string | number | null
+    if (key === 'cup') {
+      value = trimmed.toUpperCase() || null
+      if (value && !CUP_ORDER.includes(value as string)) return
+    } else {
+      value = trimmed === '' ? null : parseFloat(trimmed)
+      if (value !== null && isNaN(value as number)) return
+    }
+    await actorsApi.update(actorId, { [key]: value })
+    const data = await actorsApi.physicalData()
+    setActors(data as ActorPhysicalData[])
   }
 
   const stats = useMemo(() => computeStats(actors), [actors])
@@ -402,7 +432,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
 
         <div className="flex-1 flex gap-4 overflow-hidden p-4">
           {/* 좌측: 설정 패널 */}
-          <div className="w-52 flex flex-col gap-3 overflow-y-auto shrink-0">
+          <div className="w-44 flex flex-col gap-3 overflow-y-auto shrink-0">
 
             <p className="text-sm text-gray-300 font-bold shrink-0">피지컬 계산기</p>
 
@@ -564,22 +594,11 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                 .map((a) => {
                 const avgScore = (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 13
                 const _ar = new Set((a.phys_arbitrary ?? '').split('|').filter(Boolean))
-                const profilePartsJsx: React.ReactNode[] = []
-                const _addPart = (text: string, field: string) => {
-                  if (profilePartsJsx.length > 0) profilePartsJsx.push('  ')
-                  profilePartsJsx.push(text)
-                  if (_ar.has(field)) profilePartsJsx.push(<span key={`${field}-ar`} className="text-gray-500">(ar)</span>)
-                }
-                if (a.height != null) _addPart(`키:${a.height}cm`, 'height')
-                if (a.bust != null)   _addPart(`B:${a.bust}`, 'bust')
-                if (a.waist != null)  _addPart(`W:${a.waist}`, 'waist')
-                if (a.hip != null)    _addPart(`H:${a.hip}`, 'hip')
-                if (a.cup)            _addPart(`컵:${a.cup}`, 'cup')
                 return (
                   <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
                     <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? a._rank + 1 : ranked.length - a._rank}</span>
-                    <div onClick={() => onViewActor?.(a.id)} className={onViewActor ? 'cursor-pointer' : ''} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
-                      <ImagePreview path={a.photo_path} alt={a.name} className="w-[74px] h-[74px] rounded shrink-0 object-cover" objectPosition="center 10%" />
+                    <div onClick={() => onViewActor?.(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} className={`w-[90px] h-[90px] shrink-0 rounded overflow-hidden ${onViewActor ? 'cursor-pointer' : ''}`}>
+                      <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-full" objectPosition="center 10%" />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
                       <div className="flex items-center justify-between gap-1">
@@ -587,8 +606,46 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                         <p className="text-yellow-400 text-xs font-bold shrink-0 leading-tight">{avgScore.toFixed(2)}점</p>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-gray-400 text-xs truncate pl-1.5">{profilePartsJsx.length > 0 ? profilePartsJsx : '-'}</p>
-                        <p className="text-blue-400 text-xs font-bold shrink-0">{a.physScore.toFixed(2)}점</p>
+                        <div className="flex gap-1 flex-wrap">
+                          {PROFILE_EDIT_FIELDS.map(({ key, label, getValue }) => {
+                            const isEditing = editingProfile?.actorId === a.id && editingProfile?.key === key
+                            const val = getValue(a)
+                            const isGray = val == null || _ar.has(key)
+                            return isEditing ? (
+                              <input
+                                key={label}
+                                autoFocus
+                                value={profileInputValue}
+                                onChange={e => {
+                                  if (key === 'cup') {
+                                    const converted = e.target.value.split('').map(c => KO_TO_CUP[c] ?? c).join('')
+                                    setProfileInputValue(converted.toUpperCase())
+                                  } else {
+                                    setProfileInputValue(e.target.value)
+                                  }
+                                }}
+                                onBlur={() => handleProfileChange(a.id, key, profileInputValue)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') handleProfileChange(a.id, key, profileInputValue)
+                                  if (e.key === 'Escape') setEditingProfile(null)
+                                }}
+                                className="w-14 h-5 text-center bg-gray-600 text-white text-xs leading-tight rounded px-1"
+                              />
+                            ) : (
+                              <button
+                                key={label}
+                                onClick={() => {
+                                  setProfileInputValue(val != null ? String(val) : '')
+                                  setEditingProfile({ actorId: a.id, key })
+                                }}
+                                className={`w-14 h-5 text-center text-white text-xs leading-tight rounded ${isGray ? 'bg-gray-600 hover:bg-gray-500' : 'bg-blue-700 hover:bg-blue-600'}`}
+                              >
+                                {label}:{val ?? '-'}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p className="text-blue-400 text-xs font-bold shrink-0">{(a.physScore ?? 0).toFixed(2)}점</p>
                       </div>
                       <div className="flex flex-col gap-0 shrink-0">
                         <div className="flex gap-0.5">
