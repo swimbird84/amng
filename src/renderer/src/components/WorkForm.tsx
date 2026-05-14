@@ -15,7 +15,8 @@ interface Props {
 type FileEntry = { path: string; type: 'local' | 'url' }
 
 export default function WorkForm({ work, onSave, onCancel }: Props) {
-  const [comment, setComment] = useState(work?.comment || '')
+  const [comment, setComment] = useState(work?.title || '')
+  const [workComment, setWorkComment] = useState(work?.comment || '')
   const [fileEntries, setFileEntries] = useState<FileEntry[]>(
     work?.files?.map((f) => ({ path: f.file_path, type: f.type || 'local' })) ??
     (work?.file_path ? [{ path: work.file_path, type: 'local' }] : [])
@@ -214,7 +215,8 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         product_number: productNumber.trim() || undefined,
         release_date: releaseDate || undefined,
         rating,
-        comment: comment.trim() || null,
+        title: comment.trim() || null,
+        comment: workComment.trim() || null,
         studio_id: studioId,
         actor_ids: selectedActorIds,
         rep_actor_ids: repActorIds,
@@ -232,7 +234,8 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         product_number: productNumber.trim() || undefined,
         release_date: releaseDate || undefined,
         rating,
-        comment: comment.trim() || null,
+        title: comment.trim() || null,
+        comment: workComment.trim() || null,
         studio_id: studioId,
         actor_ids: selectedActorIds,
         rep_actor_ids: repActorIds,
@@ -329,10 +332,13 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
         {/* 좌측 */}
         <div className="flex flex-col flex-1 min-w-0">
-          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
+          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700 flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">
               {work ? '작품 수정' : '작품 등록'}
             </h2>
+            <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm">
+              저장
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4 space-y-3">
@@ -682,11 +688,16 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
             )}
           </div>
 
-          <div className="flex justify-end pt-2 pb-2">
-            <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded">
-              저장
-            </button>
+          <div>
+            <label className="text-sm text-gray-400 block mb-1">코멘트</label>
+            <textarea
+              value={workComment}
+              onChange={(e) => setWorkComment(e.target.value)}
+              rows={3}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full resize-none"
+            />
           </div>
+
           </div>
         </div>
 
@@ -711,6 +722,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
               onCreateTagInCategory={handleCreateTagInCategory}
               repTagIds={repTagIds}
               onChangeRep={setRepTagIds}
+              defaultOpen={true}
             />
           </div>
         </div>

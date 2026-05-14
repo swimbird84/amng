@@ -176,6 +176,9 @@ export function initDatabase(): void {
   if (!workCols.includes('comment')) {
     db.prepare('ALTER TABLE works ADD COLUMN comment TEXT').run()
   }
+  if (workCols.includes('comment')) {
+    db.prepare('UPDATE works SET title = comment WHERE title IS NULL').run()
+  }
   if (!workCols.includes('studio_id')) {
     db.prepare('ALTER TABLE works ADD COLUMN studio_id INTEGER').run()
   }
@@ -194,6 +197,9 @@ export function initDatabase(): void {
   }
   if (!actorCols.includes('hip')) {
     db.prepare('ALTER TABLE actors ADD COLUMN hip INTEGER').run()
+  }
+  if (!actorCols.includes('phys_arbitrary')) {
+    db.prepare('ALTER TABLE actors ADD COLUMN phys_arbitrary TEXT').run()
   }
   if (!actorCols.includes('comment')) {
     db.prepare('ALTER TABLE actors ADD COLUMN comment TEXT').run()

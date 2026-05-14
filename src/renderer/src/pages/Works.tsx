@@ -534,6 +534,13 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                   </div>
                 )}
 
+                {selected.comment && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">코멘트</p>
+                    <p className="text-sm text-gray-300 whitespace-pre-wrap">{selected.comment}</p>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-xs text-gray-500 mb-1">재생 경로</p>
                   <div className="space-y-1">
@@ -615,10 +622,10 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
 
             {/* 우측 - 타이틀 + 태그 */}
             <div className="w-[330px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-3">
-              {selected.comment && (
+              {selected.title && (
                 <div>
                   <p className="text-xs text-gray-500 mb-1">타이틀</p>
-                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{selected.comment}</p>
+                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{selected.title}</p>
                 </div>
               )}
 

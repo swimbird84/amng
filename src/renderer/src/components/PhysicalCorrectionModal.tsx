@@ -42,6 +42,7 @@ export interface ActorPhysicalData {
   waist: number | null
   hip: number | null
   cup: string | null
+  phys_arbitrary?: string | null
   face: number
   score_bust: number
   score_hip: number
@@ -165,7 +166,7 @@ export function computeStats(actors: ActorPhysicalData[]): PhysicalStats {
 
 function norm(value: number, min: number, max: number): number {
   if (max === min) return 5
-  return (value - min) / (max - min) * 10
+  return (value - min) / (max - min) * 5 + 5
 }
 
 export function calcPhysicalScore(
@@ -181,22 +182,22 @@ export function calcPhysicalScore(
     const p = settings.profile
     if (p.height.enabled) {
       let v = actor.height != null ? norm(actor.height, stats.minH, stats.maxH) : 5
-      if (p.height.dir === 'N') v = 10 - v
+      if (p.height.dir === 'N') v = 15 - v
       items.push(v)
     }
     if (p.bust.enabled) {
       let v = actor.bust != null ? norm(actor.bust, stats.minB, stats.maxB) : 5
-      if (p.bust.dir === 'N') v = 10 - v
+      if (p.bust.dir === 'N') v = 15 - v
       items.push(v)
     }
     if (p.waist.enabled) {
       let v = actor.waist != null ? norm(actor.waist, stats.minW, stats.maxW) : 5
-      if (p.waist.dir === 'N') v = 10 - v
+      if (p.waist.dir === 'N') v = 15 - v
       items.push(v)
     }
     if (p.hip.enabled) {
       let v = actor.hip != null ? norm(actor.hip, stats.minHip, stats.maxHip) : 5
-      if (p.hip.dir === 'N') v = 10 - v
+      if (p.hip.dir === 'N') v = 15 - v
       items.push(v)
     }
     if (p.cup.enabled) {
@@ -205,7 +206,7 @@ export function calcPhysicalScore(
         const cn = cupToNum(actor.cup)
         if (cn > 0 && stats.maxCup > stats.minCup) v = norm(cn, stats.minCup, stats.maxCup)
       }
-      if (p.cup.dir === 'N') v = 10 - v
+      if (p.cup.dir === 'N') v = 15 - v
       items.push(v)
     }
     if (items.length > 0) profileScore = items.reduce((a, b) => a + b, 0) / items.length
@@ -214,16 +215,16 @@ export function calcPhysicalScore(
   if (settings.scoreEnabled) {
     const items: number[] = []
     const sc = settings.score
-    if (sc.face.enabled)        { let v = norm(actor.face,        stats.minFace,        stats.maxFace);        if (sc.face.dir        === 'N') v = 10 - v; items.push(v) }
-    if (sc.bust.enabled)        { let v = norm(actor.score_bust,  stats.minSBust,       stats.maxSBust);       if (sc.bust.dir        === 'N') v = 10 - v; items.push(v) }
-    if (sc.hip.enabled)         { let v = norm(actor.score_hip,   stats.minSHip,        stats.maxSHip);        if (sc.hip.dir         === 'N') v = 10 - v; items.push(v) }
-    if (sc.physical.enabled)    { let v = norm(actor.physical,    stats.minPhysical,    stats.maxPhysical);    if (sc.physical.dir    === 'N') v = 10 - v; items.push(v) }
-    if (sc.skin.enabled)        { let v = norm(actor.skin,        stats.minSkin,        stats.maxSkin);        if (sc.skin.dir        === 'N') v = 10 - v; items.push(v) }
-    if (sc.proportions.enabled) { let v = norm(actor.proportions, stats.minProportions, stats.maxProportions); if (sc.proportions.dir === 'N') v = 10 - v; items.push(v) }
-    if (sc.acting.enabled)      { let v = norm(actor.acting,      stats.minActing,      stats.maxActing);      if (sc.acting.dir      === 'N') v = 10 - v; items.push(v) }
-    if (sc.sexy.enabled)        { let v = norm(actor.sexy,        stats.minSexy,        stats.maxSexy);        if (sc.sexy.dir        === 'N') v = 10 - v; items.push(v) }
-    if (sc.charm.enabled)       { let v = norm(actor.charm,       stats.minCharm,       stats.maxCharm);       if (sc.charm.dir       === 'N') v = 10 - v; items.push(v) }
-    if (sc.technique.enabled)   { let v = norm(actor.technique,   stats.minTechnique,   stats.maxTechnique);   if (sc.technique.dir   === 'N') v = 10 - v; items.push(v) }
+    if (sc.face.enabled)        { let v = actor.face;        if (sc.face.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.bust.enabled)        { let v = actor.score_bust;  if (sc.bust.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.hip.enabled)         { let v = actor.score_hip;   if (sc.hip.dir         === 'N') v = 10 - v; items.push(v) }
+    if (sc.physical.enabled)    { let v = actor.physical;    if (sc.physical.dir    === 'N') v = 10 - v; items.push(v) }
+    if (sc.skin.enabled)        { let v = actor.skin;        if (sc.skin.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.proportions.enabled) { let v = actor.proportions; if (sc.proportions.dir === 'N') v = 10 - v; items.push(v) }
+    if (sc.acting.enabled)      { let v = actor.acting;      if (sc.acting.dir      === 'N') v = 10 - v; items.push(v) }
+    if (sc.sexy.enabled)        { let v = actor.sexy;        if (sc.sexy.dir        === 'N') v = 10 - v; items.push(v) }
+    if (sc.charm.enabled)       { let v = actor.charm;       if (sc.charm.dir       === 'N') v = 10 - v; items.push(v) }
+    if (sc.technique.enabled)   { let v = actor.technique;   if (sc.technique.dir   === 'N') v = 10 - v; items.push(v) }
     if (items.length > 0) scoreScore = items.reduce((a, b) => a + b, 0) / items.length
   }
 
@@ -567,13 +568,18 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                 .filter(a => !nameSearch || a.name.toLowerCase().includes(nameSearch.toLowerCase()))
                 .map((a) => {
                 const avgScore = (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 13
-                const profileParts = [
-                  a.height != null ? `키:${a.height}cm` : '',
-                  a.bust != null   ? `B:${a.bust}`      : '',
-                  a.waist != null  ? `W:${a.waist}`     : '',
-                  a.hip != null    ? `H:${a.hip}`       : '',
-                  a.cup            ? `컵:${a.cup}`       : '',
-                ].filter(Boolean).join('  ')
+                const _ar = new Set((a.phys_arbitrary ?? '').split('|').filter(Boolean))
+                const profilePartsJsx: React.ReactNode[] = []
+                const _addPart = (text: string, field: string) => {
+                  if (profilePartsJsx.length > 0) profilePartsJsx.push('  ')
+                  profilePartsJsx.push(text)
+                  if (_ar.has(field)) profilePartsJsx.push(<span key={`${field}-ar`} className="text-gray-500">(ar)</span>)
+                }
+                if (a.height != null) _addPart(`키:${a.height}cm`, 'height')
+                if (a.bust != null)   _addPart(`B:${a.bust}`, 'bust')
+                if (a.waist != null)  _addPart(`W:${a.waist}`, 'waist')
+                if (a.hip != null)    _addPart(`H:${a.hip}`, 'hip')
+                if (a.cup)            _addPart(`컵:${a.cup}`, 'cup')
                 return (
                   <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
                     <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? a._rank + 1 : ranked.length - a._rank}</span>
@@ -586,7 +592,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                         <p className="text-yellow-400 text-xs font-bold shrink-0 leading-tight">{avgScore.toFixed(2)}점</p>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-gray-400 text-xs truncate pl-1.5">{profileParts || '-'}</p>
+                        <p className="text-gray-400 text-xs truncate pl-1.5">{profilePartsJsx.length > 0 ? profilePartsJsx : '-'}</p>
                         <p className="text-blue-400 text-xs font-bold shrink-0">{a.physScore.toFixed(2)}점</p>
                       </div>
                       <div className="flex flex-col gap-0 shrink-0">

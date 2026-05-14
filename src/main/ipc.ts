@@ -90,11 +90,11 @@ export function registerIpcHandlers(): void {
     }
 
     if (params?.titleSearch) {
-      conditions.push('w.comment LIKE ?')
+      conditions.push('w.title LIKE ?')
       bindings.push(`%${params.titleSearch}%`)
     }
     if (params?.titleNull) {
-      conditions.push("(w.comment IS NULL OR TRIM(w.comment) = '')")
+      conditions.push("(w.title IS NULL OR TRIM(w.title) = '')")
     }
 
     if (conditions.length > 0) {
@@ -103,7 +103,7 @@ export function registerIpcHandlers(): void {
 
     const sortDir = params?.sortDir === 'asc' ? 'ASC' : 'DESC'
     if (params?.sortBy === 'title') {
-      sql += ` ORDER BY w.comment IS NULL ASC, w.comment ${sortDir}`
+      sql += ` ORDER BY w.title IS NULL ASC, w.title ${sortDir}`
     } else {
       const validWorkSortCols = ['product_number', 'rating', 'release_date', 'created_at']
       const sortCol = validWorkSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
@@ -197,7 +197,7 @@ export function registerIpcHandlers(): void {
     title?: string
     release_date?: string
     rating?: number
-    comment?: string
+    comment?: string | null
     studio_id?: number | null
     actor_ids?: number[]
     rep_actor_ids?: number[]
@@ -616,16 +616,17 @@ export function registerIpcHandlers(): void {
     waist?: number | null
     hip?: number | null
     cup?: string | null
+    phys_arbitrary?: string | null
     comment?: string | null
     scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
     const result = db().prepare(`
-      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, comment)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, comment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(data.name, data.photo_path || null, data.birthday || null, data.debut_date || null,
-      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.comment || null)
+      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.comment || null)
     const actorId = result.lastInsertRowid
 
     const s = data.scores
@@ -667,6 +668,7 @@ export function registerIpcHandlers(): void {
     waist?: number | null
     hip?: number | null
     cup?: string | null
+    phys_arbitrary?: string | null
     comment?: string | null
     scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
@@ -685,6 +687,7 @@ export function registerIpcHandlers(): void {
     if (data.waist !== undefined) { fields.push('waist = ?'); values.push(data.waist) }
     if (data.hip !== undefined) { fields.push('hip = ?'); values.push(data.hip) }
     if (data.cup !== undefined) { fields.push('cup = ?'); values.push(data.cup) }
+    if (data.phys_arbitrary !== undefined) { fields.push('phys_arbitrary = ?'); values.push(data.phys_arbitrary) }
     if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
 
     if (fields.length > 0) {
@@ -1686,7 +1689,7 @@ export function registerIpcHandlers(): void {
     return db().prepare(`
       SELECT
         a.id, a.name, a.photo_path,
-        a.height, a.bust, a.waist, a.hip, a.cup,
+        a.height, a.bust, a.waist, a.hip, a.cup, a.phys_arbitrary,
         COALESCE(s.face, 0)        AS face,
         COALESCE(s.bust, 0)        AS score_bust,
         COALESCE(s.hip, 0)         AS score_hip,

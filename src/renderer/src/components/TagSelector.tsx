@@ -9,10 +9,11 @@ interface Props {
   repTagIds?: number[]
   onChangeRep?: (ids: number[]) => void
   onCreateTagInCategory?: (name: string, categoryId: number | null) => Promise<number>
+  defaultOpen?: boolean
 }
 
-export default function TagSelector({ allTags, selectedIds, onChange, onCreateTag, repTagIds, onChangeRep, onCreateTagInCategory }: Props) {
-  const [open, setOpen] = useState(false)
+export default function TagSelector({ allTags, selectedIds, onChange, onCreateTag, repTagIds, onChangeRep, onCreateTagInCategory, defaultOpen }: Props) {
+  const [open, setOpen] = useState(defaultOpen ?? false)
   const [newTag, setNewTag] = useState('')
   const [addingCatKey, setAddingCatKey] = useState<string | null>(null)
   const [inlineCatName, setInlineCatName] = useState('')

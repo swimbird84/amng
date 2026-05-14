@@ -473,13 +473,19 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                   <p className="text-xs text-gray-500 mb-1">신체</p>
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-gray-300">
-                      {[
-                        selected.height ? `신장 ${selected.height}cm` : '',
-                        (selected.bust || selected.waist || selected.hip)
-                          ? `B${selected.bust ?? '?'} - W${selected.waist ?? '?'} - H${selected.hip ?? '?'}`
-                          : '',
-                        selected.cup ? `${selected.cup}컵` : '',
-                      ].filter(Boolean).join('  ')}
+                      {(() => {
+                        const ar = new Set((selected.phys_arbitrary ?? '').split('|').filter(Boolean))
+                        return <>
+                          {selected.height && <span>신장 {selected.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
+                          {(selected.bust || selected.waist || selected.hip) && <span>
+                            B{selected.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
+                            {' - '}W{selected.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
+                            {' - '}H{selected.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
+                            {'  '}
+                          </span>}
+                          {selected.cup && <span>{selected.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
+                        </>
+                      })()}
                     </p>
                     {(physScoreMap.get(selected.id) != null || selected.ratio_score != null) && (
                       <p className="text-sm text-blue-400 shrink-0 ml-2">{(physScoreMap.get(selected.id) ?? selected.ratio_score!).toFixed(2)}점</p>
@@ -682,11 +688,11 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
       {tagCloud && (() => {
         const sizeClass = (count: number, catMax: number) => {
           const tier = catMax < 5 ? count : Math.ceil((count / catMax) * 5)
-          if (tier >= 5) return 'text-base font-bold text-gray-100'
+          if (tier >= 5) return 'text-base font-bold text-white'
           if (tier >= 4) return 'text-sm font-semibold text-gray-200'
           if (tier >= 3) return 'text-sm text-gray-200'
           if (tier >= 2) return 'text-xs text-gray-300'
-          return 'text-xs text-gray-400 opacity-60'
+          return 'text-xs text-gray-400'
         }
         type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof tagCloud }
         const catMap = new Map<number | null, Group>()

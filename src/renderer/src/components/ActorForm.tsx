@@ -37,6 +37,12 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   const [waist, setWaist] = useState(actor?.waist?.toString() || '')
   const [hip, setHip] = useState(actor?.hip?.toString() || '')
   const [cup, setCup] = useState(actor?.cup || '')
+  const [physArbitrary, setPhysArbitrary] = useState<Set<string>>(
+    new Set((actor?.phys_arbitrary ?? '').split('|').filter(Boolean))
+  )
+  const toggleArbitrary = (field: string) => setPhysArbitrary(prev => {
+    const next = new Set(prev); next.has(field) ? next.delete(field) : next.add(field); return next
+  })
   const [comment, setComment] = useState(actor?.comment || '')
   const [scores, setScores] = useState<ActorScores>(
     actor?.scores ? { ...actor.scores, charm: actor.scores.charm ?? 0, technique: actor.scores.technique ?? 0, proportions: actor.scores.proportions ?? 0 } : { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
@@ -105,6 +111,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
       waist: waist ? Number(waist) : null,
       hip: hip ? Number(hip) : null,
       cup: cup.trim() || null,
+      phys_arbitrary: physArbitrary.size > 0 ? [...physArbitrary].join('|') : null,
       comment: comment.trim() || null,
       scores,
       tag_ids: selectedTagIds,
@@ -155,10 +162,13 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
 
         {/* 좌측 */}
         <div className="flex flex-col flex-1 min-w-0">
-          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
+          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700 flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">
               {actor ? '배우 수정' : '배우 등록'}
             </h2>
+            <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm">
+              저장
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4 space-y-3">
@@ -202,10 +212,13 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
 
             <div>
               <label className="text-sm text-gray-400 block mb-1">신체</label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-stretch gap-2">
                 {/* 신장 */}
-                <div className="flex items-center gap-1 flex-1">
-                  <span className="text-xs text-gray-400 flex-shrink-0">신장</span>
+                <div className="flex items-stretch gap-1 flex-1">
+                  <div className="flex flex-col items-center justify-between flex-shrink-0">
+                    <span className="text-xs text-gray-400">신장</span>
+                    <input type="checkbox" checked={physArbitrary.has('height')} onChange={() => toggleArbitrary('height')} className="w-3 h-3 cursor-pointer" />
+                  </div>
                   <input
                     type="number"
                     value={height}
@@ -214,43 +227,50 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
-                {/* B-W-H (붙임) */}
-                <div className="flex items-center flex-[2.5]">
-                  <div className="flex items-center gap-1 flex-1">
-                    <span className="text-xs text-gray-400 flex-shrink-0">B</span>
-                    <input
-                      type="number"
-                      value={bust}
-                      onChange={(e) => setBust(e.target.value)}
-                      placeholder="cm"
-                      className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
+                {/* B */}
+                <div className="flex items-stretch gap-1 flex-1">
+                  <div className="flex flex-col items-center justify-between flex-shrink-0">
+                    <span className="text-xs text-gray-400">B</span>
+                    <input type="checkbox" checked={physArbitrary.has('bust')} onChange={() => toggleArbitrary('bust')} className="w-3 h-3 cursor-pointer" />
                   </div>
-                  <span className="text-gray-500">-</span>
-                  <div className="flex items-center gap-1 flex-1">
-                    <span className="text-xs text-gray-400 flex-shrink-0">W</span>
-                    <input
-                      type="number"
-                      value={waist}
-                      onChange={(e) => setWaist(e.target.value)}
-                      placeholder="cm"
-                      className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
+                  <input
+                    type="number"
+                    value={bust}
+                    onChange={(e) => setBust(e.target.value)}
+                    placeholder="cm"
+                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                {/* W */}
+                <div className="flex items-stretch gap-1 flex-1">
+                  <div className="flex flex-col items-center justify-between flex-shrink-0">
+                    <span className="text-xs text-gray-400">W</span>
+                    <input type="checkbox" checked={physArbitrary.has('waist')} onChange={() => toggleArbitrary('waist')} className="w-3 h-3 cursor-pointer" />
                   </div>
-                  <span className="text-gray-500">-</span>
-                  <div className="flex items-center gap-1 flex-1">
-                    <span className="text-xs text-gray-400 flex-shrink-0">H</span>
-                    <input
-                      type="number"
-                      value={hip}
-                      onChange={(e) => setHip(e.target.value)}
-                      placeholder="cm"
-                      className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
+                  <input
+                    type="number"
+                    value={waist}
+                    onChange={(e) => setWaist(e.target.value)}
+                    placeholder="cm"
+                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                {/* H */}
+                <div className="flex items-stretch gap-1 flex-1">
+                  <div className="flex flex-col items-center justify-between flex-shrink-0">
+                    <span className="text-xs text-gray-400">H</span>
+                    <input type="checkbox" checked={physArbitrary.has('hip')} onChange={() => toggleArbitrary('hip')} className="w-3 h-3 cursor-pointer" />
                   </div>
+                  <input
+                    type="number"
+                    value={hip}
+                    onChange={(e) => setHip(e.target.value)}
+                    placeholder="cm"
+                    className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
                 </div>
                 {/* 컵 */}
-                <div className="flex items-center gap-1 flex-[0.8]">
+                <div className="flex items-stretch gap-1 flex-[0.8]">
                   <input
                     type="text"
                     value={cup}
@@ -262,7 +282,10 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                     placeholder="A"
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
                   />
-                  <span className="text-xs text-gray-400 flex-shrink-0">컵</span>
+                  <div className="flex flex-col items-center justify-between flex-shrink-0">
+                    <span className="text-xs text-gray-400">컵</span>
+                    <input type="checkbox" checked={physArbitrary.has('cup')} onChange={() => toggleArbitrary('cup')} className="w-3 h-3 cursor-pointer" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -287,11 +310,6 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
               </div>
             </div>
 
-            <div className="flex justify-end pt-2 pb-2">
-              <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded">
-                저장
-              </button>
-            </div>
           </div>
         </div>
 
@@ -316,6 +334,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
               onCreateTagInCategory={handleCreateTagInCategory}
               repTagIds={repTagIds}
               onChangeRep={setRepTagIds}
+              defaultOpen={true}
             />
           </div>
         </div>

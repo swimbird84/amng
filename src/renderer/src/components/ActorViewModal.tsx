@@ -103,11 +103,19 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
                 <p className="text-xs text-gray-500 mb-1">신체</p>
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-300">
-                    {[
-                      actor.height ? `신장 ${actor.height}cm` : '',
-                      (actor.bust || actor.waist || actor.hip) ? `B${actor.bust ?? '?'} - W${actor.waist ?? '?'} - H${actor.hip ?? '?'}` : '',
-                      actor.cup ? `${actor.cup}컵` : '',
-                    ].filter(Boolean).join('  ')}
+                    {(() => {
+                      const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
+                      return <>
+                        {actor.height && <span>신장 {actor.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
+                        {(actor.bust || actor.waist || actor.hip) && <span>
+                          B{actor.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
+                          {' - '}W{actor.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
+                          {' - '}H{actor.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
+                          {'  '}
+                        </span>}
+                        {actor.cup && <span>{actor.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
+                      </>
+                    })()}
                   </p>
                   {actor.ratio_score != null && (
                     <p className="text-sm text-blue-400 shrink-0 ml-2">{actor.ratio_score.toFixed(2)}점</p>

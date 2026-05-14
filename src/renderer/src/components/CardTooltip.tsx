@@ -71,7 +71,7 @@ function WorkContent({ work }: { work: Work }) {
     .filter((a) => !repIds.has(a.id))
     .sort((a, b) => a.name.localeCompare(b.name, 'ko-KR'))
   const allActors = [...repActors, ...otherActors]
-  const hasComment = !!(work.comment && work.comment.trim())
+  const hasComment = !!(work.title && work.title.trim())
   const hasActors = allActors.length > 0
   return (
     <div className="space-y-1.5 text-[13px]">
@@ -88,22 +88,29 @@ function WorkContent({ work }: { work: Work }) {
         </div>
       )}
       {work.product_number && <p className="font-bold text-gray-300">{work.product_number}</p>}
-      {hasComment && <p className="whitespace-pre-wrap leading-relaxed text-gray-300">{work.comment}</p>}
+      {hasComment && <p className="whitespace-pre-wrap leading-relaxed text-gray-300">{work.title}</p>}
       {hasActors && <p className="font-bold text-gray-300 leading-relaxed">{allActors.map((a) => a.name).join(', ')}</p>}
+      {work.comment && <p className="whitespace-pre-wrap leading-relaxed text-gray-400 text-[12px]">{work.comment}</p>}
     </div>
   )
 }
 
 function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | null }) {
   const s = actor.scores
-  const body = [
-    actor.height ? `${actor.height}cm` : null,
-    (actor.bust || actor.waist || actor.hip)
-      ? `B${actor.bust ?? '?'}-W${actor.waist ?? '?'}-H${actor.hip ?? '?'}`
-      : null,
-    actor.cup ? `${actor.cup}컵` : null,
-  ].filter(Boolean).join('  ')
   const hasBody = !!(actor.height || actor.bust || actor.waist || actor.hip || actor.cup)
+  const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
+  const body = hasBody ? (
+    <>
+      {actor.height && <span>{actor.height}cm{ar.has('height') && <span className="text-gray-500">(ar)</span>}{'  '}</span>}
+      {(actor.bust || actor.waist || actor.hip) && <span>
+        B{actor.bust ?? '?'}{ar.has('bust') && <span className="text-gray-500">(ar)</span>}
+        {'-'}W{actor.waist ?? '?'}{ar.has('waist') && <span className="text-gray-500">(ar)</span>}
+        {'-'}H{actor.hip ?? '?'}{ar.has('hip') && <span className="text-gray-500">(ar)</span>}
+        {'  '}
+      </span>}
+      {actor.cup && <span>{actor.cup}컵{ar.has('cup') && <span className="text-gray-500">(ar)</span>}</span>}
+    </>
+  ) : null
 
   return (
     <div className="space-y-1 leading-relaxed">
