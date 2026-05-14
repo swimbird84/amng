@@ -181,33 +181,28 @@ export function calcPhysicalScore(
     const items: number[] = []
     const p = settings.profile
     if (p.height.enabled) {
-      let v = actor.height != null ? norm(actor.height, stats.minH, stats.maxH) : 5
-      if (p.height.dir === 'N') v = 15 - v
-      items.push(v)
+      if (actor.height != null) { let v = norm(actor.height, stats.minH, stats.maxH); if (p.height.dir === 'N') v = 15 - v; items.push(v) }
+      else items.push(5)
     }
     if (p.bust.enabled) {
-      let v = actor.bust != null ? norm(actor.bust, stats.minB, stats.maxB) : 5
-      if (p.bust.dir === 'N') v = 15 - v
-      items.push(v)
+      if (actor.bust != null) { let v = norm(actor.bust, stats.minB, stats.maxB); if (p.bust.dir === 'N') v = 15 - v; items.push(v) }
+      else items.push(5)
     }
     if (p.waist.enabled) {
-      let v = actor.waist != null ? norm(actor.waist, stats.minW, stats.maxW) : 5
-      if (p.waist.dir === 'N') v = 15 - v
-      items.push(v)
+      if (actor.waist != null) { let v = norm(actor.waist, stats.minW, stats.maxW); if (p.waist.dir === 'N') v = 15 - v; items.push(v) }
+      else items.push(5)
     }
     if (p.hip.enabled) {
-      let v = actor.hip != null ? norm(actor.hip, stats.minHip, stats.maxHip) : 5
-      if (p.hip.dir === 'N') v = 15 - v
-      items.push(v)
+      if (actor.hip != null) { let v = norm(actor.hip, stats.minHip, stats.maxHip); if (p.hip.dir === 'N') v = 15 - v; items.push(v) }
+      else items.push(5)
     }
     if (p.cup.enabled) {
-      let v = 5
       if (actor.cup) {
         const cn = cupToNum(actor.cup)
-        if (cn > 0 && stats.maxCup > stats.minCup) v = norm(cn, stats.minCup, stats.maxCup)
-      }
-      if (p.cup.dir === 'N') v = 15 - v
-      items.push(v)
+        let v = (cn > 0 && stats.maxCup > stats.minCup) ? norm(cn, stats.minCup, stats.maxCup) : 5
+        if (p.cup.dir === 'N') v = 15 - v
+        items.push(v)
+      } else items.push(5)
     }
     if (items.length > 0) profileScore = items.reduce((a, b) => a + b, 0) / items.length
   }
