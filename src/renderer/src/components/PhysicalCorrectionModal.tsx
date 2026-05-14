@@ -341,7 +341,15 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
       value = trimmed === '' ? null : parseFloat(trimmed)
       if (value !== null && isNaN(value as number)) return
     }
-    await actorsApi.update(actorId, { [key]: value })
+    const actor = actors.find(a => a.id === actorId)
+    if (!actor) return
+    const updateData: Record<string, unknown> = { [key]: value }
+    if (actor[key] == null && value !== null) {
+      const arSet = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
+      arSet.add(key)
+      updateData.phys_arbitrary = [...arSet].join('|')
+    }
+    await actorsApi.update(actorId, updateData)
     const data = await actorsApi.physicalData()
     setActors(data as ActorPhysicalData[])
   }
