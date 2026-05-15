@@ -287,6 +287,32 @@ export function initDatabase(): void {
     db.prepare('ALTER TABLE actor_tags ADD COLUMN is_rep INTEGER DEFAULT 0').run()
   }
 
+  // work_tag_links / actor_tag_links 마이그레이션
+  const workTagLinksTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='work_tag_links'").get()
+  if (!workTagLinksTable) {
+    db.exec(`
+      CREATE TABLE work_tag_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        parent_tag_id INTEGER NOT NULL REFERENCES work_tags_master(id) ON DELETE CASCADE,
+        child_tag_id INTEGER NOT NULL REFERENCES work_tags_master(id) ON DELETE CASCADE,
+        UNIQUE(parent_tag_id, child_tag_id),
+        CHECK(parent_tag_id != child_tag_id)
+      )
+    `)
+  }
+  const actorTagLinksTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='actor_tag_links'").get()
+  if (!actorTagLinksTable) {
+    db.exec(`
+      CREATE TABLE actor_tag_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        parent_tag_id INTEGER NOT NULL REFERENCES actor_tags_master(id) ON DELETE CASCADE,
+        child_tag_id INTEGER NOT NULL REFERENCES actor_tags_master(id) ON DELETE CASCADE,
+        UNIQUE(parent_tag_id, child_tag_id),
+        CHECK(parent_tag_id != child_tag_id)
+      )
+    `)
+  }
+
   // work_tags_master / actor_tags_master created_at 마이그레이션
   const workTagMasterCols = (db.prepare("PRAGMA table_info(work_tags_master)").all() as { name: string }[]).map(c => c.name)
   if (!workTagMasterCols.includes('created_at')) {

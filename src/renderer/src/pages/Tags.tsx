@@ -7,6 +7,7 @@ import Rating from '../components/Rating'
 import WorkViewModal from '../components/WorkViewModal'
 import ActorViewModal from '../components/ActorViewModal'
 import TagCategoryManager from '../components/TagManager'
+import TagLinkModal from '../components/TagLinkModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
 interface Props {
@@ -98,6 +99,7 @@ function TagPanel({
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const [showTagLinkModal, setShowTagLinkModal] = useState(false)
   const [addingCategoryKey, setAddingCategoryKey] = useState<string | null>(null)
   const [inlineName, setInlineName] = useState('')
 
@@ -196,12 +198,20 @@ function TagPanel({
           <h2 className="text-white font-bold text-base">{title}</h2>
           <span className="text-xs text-gray-500">{tags.length}개</span>
         </div>
-        <button
-          onClick={() => setShowCategoryManager(true)}
-          className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
-        >
-          카테고리 관리
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => setShowTagLinkModal(true)}
+            className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
+          >
+            태그 연결
+          </button>
+          <button
+            onClick={() => setShowCategoryManager(true)}
+            className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
+          >
+            카테고리 관리
+          </button>
+        </div>
       </div>
 
       {/* 툴바 */}
@@ -355,6 +365,12 @@ function TagPanel({
         <TagCategoryManager
           type={type}
           onClose={() => { setShowCategoryManager(false); onRefresh() }}
+        />
+      )}
+      {showTagLinkModal && (
+        <TagLinkModal
+          type={type === 'works' ? 'work' : 'actor'}
+          onClose={() => setShowTagLinkModal(false)}
         />
       )}
     </div>

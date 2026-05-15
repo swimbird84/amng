@@ -931,6 +931,42 @@ export function registerIpcHandlers(): void {
     return true
   })
 
+  // ========== 태그 연결 ==========
+
+  ipcMain.handle('work-tag-links:list', () => {
+    return db().prepare('SELECT parent_tag_id, child_tag_id FROM work_tag_links').all()
+  })
+
+  ipcMain.handle('work-tag-links:set', (_e, parentId: number, childIds: number[]) => {
+    const d = db()
+    const del = d.prepare('DELETE FROM work_tag_links WHERE parent_tag_id = ?')
+    const ins = d.prepare('INSERT OR IGNORE INTO work_tag_links (parent_tag_id, child_tag_id) VALUES (?, ?)')
+    d.transaction(() => {
+      del.run(parentId)
+      for (const cid of childIds) {
+        if (cid !== parentId) ins.run(parentId, cid)
+      }
+    })()
+    return true
+  })
+
+  ipcMain.handle('actor-tag-links:list', () => {
+    return db().prepare('SELECT parent_tag_id, child_tag_id FROM actor_tag_links').all()
+  })
+
+  ipcMain.handle('actor-tag-links:set', (_e, parentId: number, childIds: number[]) => {
+    const d = db()
+    const del = d.prepare('DELETE FROM actor_tag_links WHERE parent_tag_id = ?')
+    const ins = d.prepare('INSERT OR IGNORE INTO actor_tag_links (parent_tag_id, child_tag_id) VALUES (?, ?)')
+    d.transaction(() => {
+      del.run(parentId)
+      for (const cid of childIds) {
+        if (cid !== parentId) ins.run(parentId, cid)
+      }
+    })()
+    return true
+  })
+
   // ========== 제작사 CRUD ==========
 
   ipcMain.handle('studios:list', (_e, withCount?: boolean) => {

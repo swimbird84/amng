@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Actor, Tag, ActorScores } from '../types'
-import { actorsApi, actorTagsApi, actorTagCategoriesApi, dialogApi, imageApi } from '../api'
+import { actorsApi, actorTagsApi, actorTagCategoriesApi, dialogApi, imageApi, actorTagLinksApi } from '../api'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
 import DateInput from './DateInput'
@@ -50,6 +50,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(actor?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(actor?.rep_tags?.map((t) => t.id) || [])
   const [allTags, setAllTags] = useState<Tag[]>([])
+  const [tagLinks, setTagLinks] = useState<{ parent_tag_id: number; child_tag_id: number }[]>([])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -63,6 +64,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
 
   useEffect(() => {
     actorTagsApi.list().then((t) => setAllTags(t as Tag[]))
+    actorTagLinksApi.list().then(l => setTagLinks(l))
   }, [])
 
   const handleSelectPhoto = async () => {
@@ -335,6 +337,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
               repTagIds={repTagIds}
               onChangeRep={setRepTagIds}
               defaultOpen={true}
+              tagLinks={tagLinks}
             />
           </div>
         </div>

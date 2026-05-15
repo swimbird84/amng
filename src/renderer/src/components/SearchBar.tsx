@@ -395,11 +395,10 @@ export default function SearchBar(props: Props) {
   }, [tagOpen])
 
   const handleToggleTagDropdown = () => {
-    if (!tagOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect()
-      const dropdownWidth = Math.min(window.innerWidth * 0.9, 63 * 16)
-      const left = Math.min(rect.left, window.innerWidth - dropdownWidth - 8)
-      setDropdownPos({ top: rect.bottom + 4, left: Math.max(8, left) })
+    if (!tagOpen && wrapperRef.current) {
+      const container = wrapperRef.current.parentElement ?? wrapperRef.current
+      const cr = container.getBoundingClientRect()
+      setDropdownPos({ top: cr.bottom + 4, left: cr.left })
     }
     setTagOpen(v => !v)
   }
@@ -520,6 +519,42 @@ export default function SearchBar(props: Props) {
         className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
       />
 
+      {/* actor dropdown (works only) */}
+      {type === 'works' && wParams && (
+        <div className="relative">
+          <button
+            ref={actorButtonRef}
+            type="button"
+            onClick={() => {
+              if (!actorDropOpen && actorButtonRef.current) {
+                const r = actorButtonRef.current.getBoundingClientRect()
+                setActorDropPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 180) })
+              }
+              setActorDropOpen(v => !v)
+            }}
+            className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-[120px] text-left flex items-center justify-between gap-1 shrink-0 ${actorId !== '' ? 'ring-1 ring-blue-500' : ''}`}
+          >
+            <span className="truncate">{actorLabel}</span>
+            <span className="text-gray-400 text-xs shrink-0">▼</span>
+          </button>
+          {actorDropOpen && (
+            <div ref={actorDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: actorDropPos.top, left: actorDropPos.left, width: actorDropPos.width, maxHeight: '600px' }}>
+              <div className="p-1.5 border-b border-gray-700">
+                <input type="text" value={actorFilter} onChange={e => setActorFilter(e.target.value)} placeholder="배우 검색" autoFocus className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full" />
+              </div>
+              <div className="overflow-y-auto">
+                <button type="button" onClick={() => { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>배우 전체</button>
+                <button type="button" onClick={() => { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>배우 없음</button>
+                {filteredActors.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
+                {filteredActors.map(a => (
+                  <button key={a.id} type="button" onClick={() => { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${actorId === a.id ? 'text-white font-bold' : 'text-gray-300'}`}>{a.name}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* tag button */}
       <div className="relative">
         <button
@@ -589,7 +624,7 @@ export default function SearchBar(props: Props) {
 
       {/* result count */}
       {resultCount !== undefined && (
-        <div className="w-28 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 whitespace-nowrap">
+        <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 whitespace-nowrap">
           결과: {resultCount}
         </div>
       )}
@@ -662,39 +697,6 @@ export default function SearchBar(props: Props) {
                     )}
                   </div>
 
-                  {/* actor dropdown */}
-                  <div className="relative">
-                    <button
-                      ref={actorButtonRef}
-                      type="button"
-                      onClick={() => {
-                        if (!actorDropOpen && actorButtonRef.current) {
-                          const r = actorButtonRef.current.getBoundingClientRect()
-                          setActorDropPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 180) })
-                        }
-                        setActorDropOpen(v => !v)
-                      }}
-                      className={`bg-gray-700 text-white text-xs px-2 py-1.5 rounded w-[200px] text-left flex items-center justify-between gap-1 ${actorId !== '' ? 'ring-1 ring-blue-500' : ''}`}
-                    >
-                      <span className="truncate">{actorLabel}</span>
-                      <span className="text-gray-400 text-xs shrink-0">▼</span>
-                    </button>
-                    {actorDropOpen && (
-                      <div ref={actorDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: actorDropPos.top, left: actorDropPos.left, width: actorDropPos.width, maxHeight: '600px' }}>
-                        <div className="p-1.5 border-b border-gray-700">
-                          <input type="text" value={actorFilter} onChange={e => setActorFilter(e.target.value)} placeholder="배우 검색" autoFocus className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full" />
-                        </div>
-                        <div className="overflow-y-auto">
-                          <button type="button" onClick={() => { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>배우 전체</button>
-                          <button type="button" onClick={() => { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>배우 없음</button>
-                          {filteredActors.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
-                          {filteredActors.map(a => (
-                            <button key={a.id} type="button" onClick={() => { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${actorId === a.id ? 'text-white font-bold' : 'text-gray-300'}`}>{a.name}</button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* 발매일 */}

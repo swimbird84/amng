@@ -437,7 +437,6 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
           <h2 className="text-white font-bold text-base">평점 계산기</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
         </div>
-
         <div className="flex-1 flex gap-4 overflow-hidden p-4">
           {/* 좌측: 설정 패널 */}
           <div className="w-44 flex flex-col gap-3 overflow-y-auto shrink-0">

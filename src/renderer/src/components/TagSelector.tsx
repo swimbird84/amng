@@ -10,9 +10,10 @@ interface Props {
   onChangeRep?: (ids: number[]) => void
   onCreateTagInCategory?: (name: string, categoryId: number | null) => Promise<number>
   defaultOpen?: boolean
+  tagLinks?: { parent_tag_id: number; child_tag_id: number }[]
 }
 
-export default function TagSelector({ allTags, selectedIds, onChange, onCreateTag, repTagIds, onChangeRep, onCreateTagInCategory, defaultOpen }: Props) {
+export default function TagSelector({ allTags, selectedIds, onChange, onCreateTag, repTagIds, onChangeRep, onCreateTagInCategory, defaultOpen, tagLinks }: Props) {
   const [open, setOpen] = useState(defaultOpen ?? false)
   const [newTag, setNewTag] = useState('')
   const [addingCatKey, setAddingCatKey] = useState<string | null>(null)
@@ -21,12 +22,15 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
   const toggle = (id: number) => {
     if (selectedIds.includes(id)) {
       onChange(selectedIds.filter((t) => t !== id))
-      // 대표 태그에서도 제거
       if (onChangeRep && repTagIds?.includes(id)) {
         onChangeRep(repTagIds.filter((t) => t !== id))
       }
     } else {
-      onChange([...selectedIds, id])
+      const childIds = tagLinks
+        ? tagLinks.filter(l => l.parent_tag_id === id).map(l => l.child_tag_id)
+        : []
+      const toAdd = [id, ...childIds].filter(cid => !selectedIds.includes(cid))
+      onChange([...selectedIds, ...toAdd])
     }
   }
 

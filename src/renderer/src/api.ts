@@ -56,6 +56,17 @@ export const actorTagsApi = {
   delete: (id: number) => api.invoke('actor-tags:delete', id),
 }
 
+// 태그 연결
+export const workTagLinksApi = {
+  list: () => api.invoke('work-tag-links:list') as Promise<{ parent_tag_id: number; child_tag_id: number }[]>,
+  set: (parentId: number, childIds: number[]) => api.invoke('work-tag-links:set', parentId, childIds),
+}
+
+export const actorTagLinksApi = {
+  list: () => api.invoke('actor-tag-links:list') as Promise<{ parent_tag_id: number; child_tag_id: number }[]>,
+  set: (parentId: number, childIds: number[]) => api.invoke('actor-tag-links:set', parentId, childIds),
+}
+
 // 제작사
 export const studiosApi = {
   list: (withCount?: boolean) => api.invoke('studios:list', withCount),

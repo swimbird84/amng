@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type { Work, Tag, Actor, Studio, Maker } from '../types'
-import { worksApi, workTagsApi, workTagCategoriesApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi } from '../api'
+import { worksApi, workTagsApi, workTagCategoriesApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi, workTagLinksApi } from '../api'
 import Rating from './Rating'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
@@ -31,6 +31,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [repActorIds, setRepActorIds] = useState<number[]>(work?.rep_actors?.map((a) => a.id) || [])
   const [fileStatuses, setFileStatuses] = useState<Record<string, boolean>>({})
   const [allTags, setAllTags] = useState<Tag[]>([])
+  const [tagLinks, setTagLinks] = useState<{ parent_tag_id: number; child_tag_id: number }[]>([])
   const [allActors, setAllActors] = useState<Actor[]>([])
   const [allStudios, setAllStudios] = useState<(Studio & { maker_name?: string | null })[]>([])
   const [allMakers, setAllMakers] = useState<Maker[]>([])
@@ -91,6 +92,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   useEffect(() => {
     workTagsApi.list().then((t) => setAllTags(t as Tag[]))
+    workTagLinksApi.list().then(l => setTagLinks(l))
     actorsApi.list().then((a) => setAllActors(a as Actor[]))
     studiosApi.list().then((s) => setAllStudios(s as (Studio & { maker_name?: string | null })[]))
     makersApi.list().then((m) => setAllMakers(m as Maker[]))
@@ -723,6 +725,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
               repTagIds={repTagIds}
               onChangeRep={setRepTagIds}
               defaultOpen={true}
+              tagLinks={tagLinks}
             />
           </div>
         </div>
