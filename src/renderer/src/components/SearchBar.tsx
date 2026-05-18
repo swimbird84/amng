@@ -11,10 +11,13 @@ interface WorkSearchParams {
   studioId: number | ''
   releaseDateFrom: string
   releaseDateTo: string
+  releaseDateNull: boolean
   ratingFrom: number | ''
   ratingTo: number | ''
   titleSearch: string
   titleNull: boolean
+  commentSearch: string
+  commentNull: boolean
 }
 
 interface ActorSearchParams {
@@ -45,18 +48,26 @@ interface ActorSearchParams {
   waistFrom: number | ''; waistTo: number | ''
   hipFrom: number | ''; hipTo: number | ''
   cupFrom: string; cupTo: string
+  ageNull: boolean
+  debutDateNull: boolean
+  workCountNull: boolean
+  heightNull: boolean
+  bustNull: boolean
+  waistNull: boolean
+  hipNull: boolean
+  cupNull: boolean
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
   keyword: '', tagIds: [], tagMode: 'and', actorId: '', studioId: '',
-  releaseDateFrom: '', releaseDateTo: '', ratingFrom: '', ratingTo: '',
-  titleSearch: '', titleNull: false,
+  releaseDateFrom: '', releaseDateTo: '', releaseDateNull: false, ratingFrom: '', ratingTo: '',
+  titleSearch: '', titleNull: false, commentSearch: '', commentNull: false,
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   keyword: '', tagIds: [], tagMode: 'and',
-  ageFrom: '', ageTo: '', debutDateFrom: '', debutDateTo: '',
-  workCountFrom: '', workCountTo: '', avgRatingFrom: '', avgRatingTo: '',
+  ageFrom: '', ageTo: '', ageNull: false, debutDateFrom: '', debutDateTo: '', debutDateNull: false,
+  workCountFrom: '', workCountTo: '', workCountNull: false, avgRatingFrom: '', avgRatingTo: '',
   faceFrom: '', faceTo: '', bustScoreFrom: '', bustScoreTo: '',
   hipScoreFrom: '', hipScoreTo: '', physicalScoreFrom: '', physicalScoreTo: '',
   skinFrom: '', skinTo: '', actingFrom: '', actingTo: '',
@@ -66,6 +77,7 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   heightFrom: '', heightTo: '', bustFrom: '', bustTo: '',
   waistFrom: '', waistTo: '', hipFrom: '', hipTo: '',
   cupFrom: '', cupTo: '',
+  heightNull: false, bustNull: false, waistNull: false, hipNull: false, cupNull: false,
 }
 
 export type { WorkSearchParams, ActorSearchParams, TagMode }
@@ -83,6 +95,12 @@ function renderStars(v: number): string {
     else s += '☆'
   }
   return s
+}
+
+function subtractDate(months: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() - months)
+  return d.toISOString().slice(0, 10)
 }
 
 function normalizeDateRaw(raw: string): string {
@@ -354,6 +372,20 @@ export default function SearchBar(props: Props) {
 
   useEffect(() => {
     if (!actorDropOpen) return
+    setTimeout(() => {
+      actorDropRef.current?.querySelector('[data-actor-selected]')?.scrollIntoView({ block: 'start' })
+    }, 0)
+  }, [actorDropOpen])
+
+  useEffect(() => {
+    if (!studioDropOpen) return
+    setTimeout(() => {
+      studioDropRef.current?.querySelector('[data-studio-selected]')?.scrollIntoView({ block: 'start' })
+    }, 0)
+  }, [studioDropOpen])
+
+  useEffect(() => {
+    if (!actorDropOpen) return
     const handler = (e: MouseEvent) => {
       if (actorDropRef.current && !actorDropRef.current.contains(e.target as Node) &&
           actorButtonRef.current && !actorButtonRef.current.contains(e.target as Node))
@@ -480,15 +512,21 @@ export default function SearchBar(props: Props) {
       })
     if (wp.titleSearch) conditions.push({ label: `타이틀: ${wp.titleSearch}`, onClear: () => onChange({ ...wp, titleSearch: '' } as never) })
     if (wp.titleNull) conditions.push({ label: '타이틀없음', onClear: () => onChange({ ...wp, titleNull: false } as never) })
+    if (wp.releaseDateNull) conditions.push({ label: '발매일없음', onClear: () => onChange({ ...wp, releaseDateNull: false } as never) })
+    if (wp.commentSearch) conditions.push({ label: `코멘트: ${wp.commentSearch}`, onClear: () => onChange({ ...wp, commentSearch: '' } as never) })
+    if (wp.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...wp, commentNull: false } as never) })
   }
 
   if (type === 'actors' && aParams) {
     const ap = aParams
     if (ap.keyword) conditions.push({ label: `이름: ${ap.keyword}`, onClear: () => onChange({ ...ap, keyword: '' } as never) })
+    if (ap.ageNull) conditions.push({ label: '나이없음', onClear: () => onChange({ ...ap, ageNull: false } as never) })
     if (ap.ageFrom !== '' || ap.ageTo !== '')
       conditions.push({ label: `나이: ${ap.ageFrom !== '' ? ap.ageFrom : '?'}~${ap.ageTo !== '' ? ap.ageTo : '?'}`, onClear: () => onChange({ ...ap, ageFrom: '', ageTo: '' } as never) })
+    if (ap.debutDateNull) conditions.push({ label: '데뷔일없음', onClear: () => onChange({ ...ap, debutDateNull: false } as never) })
     if (ap.debutDateFrom || ap.debutDateTo)
       conditions.push({ label: `데뷔일: ${ap.debutDateFrom || '?'} ~ ${ap.debutDateTo || '?'}`, onClear: () => onChange({ ...ap, debutDateFrom: '', debutDateTo: '' } as never) })
+    if (ap.workCountNull) conditions.push({ label: '작품수없음', onClear: () => onChange({ ...ap, workCountNull: false } as never) })
     if (ap.workCountFrom !== '' || ap.workCountTo !== '')
       conditions.push({ label: `작품수: ${ap.workCountFrom !== '' ? ap.workCountFrom : '?'}~${ap.workCountTo !== '' ? ap.workCountTo : '?'}`, onClear: () => onChange({ ...ap, workCountFrom: '', workCountTo: '' } as never) })
     if (ap.avgRatingFrom !== '' || ap.avgRatingTo !== '')
@@ -500,10 +538,15 @@ export default function SearchBar(props: Props) {
     }
     if (ap.ratioScoreFrom !== '' || ap.ratioScoreTo !== '')
       conditions.push({ label: `피지컬: ${ap.ratioScoreFrom !== '' ? ap.ratioScoreFrom : '?'}~${ap.ratioScoreTo !== '' ? ap.ratioScoreTo : '?'}`, onClear: () => onChange({ ...ap, ratioScoreFrom: '', ratioScoreTo: '' } as never) })
+    if (ap.heightNull) conditions.push({ label: '키없음', onClear: () => onChange({ ...ap, heightNull: false } as never) })
     if (ap.heightFrom !== '' || ap.heightTo !== '') conditions.push({ label: `키: ${ap.heightFrom !== '' ? ap.heightFrom : '?'}~${ap.heightTo !== '' ? ap.heightTo : '?'}`, onClear: () => onChange({ ...ap, heightFrom: '', heightTo: '' } as never) })
+    if (ap.bustNull) conditions.push({ label: '바스트없음', onClear: () => onChange({ ...ap, bustNull: false } as never) })
     if (ap.bustFrom !== '' || ap.bustTo !== '') conditions.push({ label: `바스트: ${ap.bustFrom !== '' ? ap.bustFrom : '?'}~${ap.bustTo !== '' ? ap.bustTo : '?'}`, onClear: () => onChange({ ...ap, bustFrom: '', bustTo: '' } as never) })
+    if (ap.waistNull) conditions.push({ label: '웨이스트없음', onClear: () => onChange({ ...ap, waistNull: false } as never) })
     if (ap.waistFrom !== '' || ap.waistTo !== '') conditions.push({ label: `웨이스트: ${ap.waistFrom !== '' ? ap.waistFrom : '?'}~${ap.waistTo !== '' ? ap.waistTo : '?'}`, onClear: () => onChange({ ...ap, waistFrom: '', waistTo: '' } as never) })
+    if (ap.hipNull) conditions.push({ label: '힙없음', onClear: () => onChange({ ...ap, hipNull: false } as never) })
     if (ap.hipFrom !== '' || ap.hipTo !== '') conditions.push({ label: `힙: ${ap.hipFrom !== '' ? ap.hipFrom : '?'}~${ap.hipTo !== '' ? ap.hipTo : '?'}`, onClear: () => onChange({ ...ap, hipFrom: '', hipTo: '' } as never) })
+    if (ap.cupNull) conditions.push({ label: '컵없음', onClear: () => onChange({ ...ap, cupNull: false } as never) })
     if (ap.cupFrom || ap.cupTo) conditions.push({ label: `컵: ${ap.cupFrom || '?'}~${ap.cupTo || '?'}`, onClear: () => onChange({ ...ap, cupFrom: '', cupTo: '' } as never) })
   }
 
@@ -547,7 +590,7 @@ export default function SearchBar(props: Props) {
                 <button type="button" onClick={() => { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>배우 없음</button>
                 {filteredActors.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
                 {filteredActors.map(a => (
-                  <button key={a.id} type="button" onClick={() => { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${actorId === a.id ? 'text-white font-bold' : 'text-gray-300'}`}>{a.name}</button>
+                  <button key={a.id} type="button" onClick={() => { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() }} {...(actorId === a.id ? { 'data-actor-selected': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${actorId === a.id ? 'text-white font-bold' : 'text-gray-300'}`}>{a.name}</button>
                 ))}
               </div>
             </div>
@@ -565,7 +608,7 @@ export default function SearchBar(props: Props) {
           태그 <span className="text-gray-500 text-xs">▼</span>
         </button>
         {tagOpen && (
-          <div ref={popoverRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl w-[min(63rem,90vw)]" style={{ top: dropdownPos.top, left: dropdownPos.left }}>
+          <div ref={popoverRef} className="fixed z-50 border border-gray-700 rounded-lg shadow-xl w-[min(63rem,90vw)]" style={{ top: dropdownPos.top, left: dropdownPos.left, backgroundColor: 'rgba(26, 35, 50, 0.8)', backdropFilter: 'blur(8px)' }}>
             <div className="p-2 border-b border-gray-700 space-y-1.5">
               <div className="flex gap-1">
                 <input type="text" value={tagFilter} onChange={e => setTagFilter(e.target.value)} placeholder="태그 검색" className="bg-gray-700 text-white text-xs px-2 py-1 rounded min-w-0" style={{ flex: '6' }} autoFocus />
@@ -654,9 +697,9 @@ export default function SearchBar(props: Props) {
             left: advancedPos.left,
             maxHeight: 'calc(100vh - 80px)',
             width: type === 'works' ? '680px' : '680px',
-            backgroundColor: '#1a2332',
           }}
         >
+          <div className="absolute inset-0 rounded-lg -z-10" style={{ backgroundColor: 'rgba(26, 35, 50, 0.8)', backdropFilter: 'blur(8px)' }} />
           <div className="p-3 space-y-3">
             {/* ── works ─────────────────────────────────────────── */}
             {type === 'works' && wParams && (
@@ -690,7 +733,7 @@ export default function SearchBar(props: Props) {
                           {filteredStudios.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
                           {filteredStudios.map(s => {
                             const label = s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name
-                            return <button key={s.id} type="button" onClick={() => { onChange({ ...wParams, studioId: s.id } as never); closeStudioDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}>{label}</button>
+                            return <button key={s.id} type="button" onClick={() => { onChange({ ...wParams, studioId: s.id } as never); closeStudioDrop() }} {...(studioId === s.id ? { 'data-studio-selected': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}>{label}</button>
                           })}
                         </div>
                       </div>
@@ -700,17 +743,21 @@ export default function SearchBar(props: Props) {
                 </div>
 
                 {/* 발매일 */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-gray-400 w-12 shrink-0">발매일</span>
                   <DatePickerInput value={wParams.releaseDateFrom} onChange={v => {
-                    if (wParams.releaseDateTo && v && v > wParams.releaseDateTo) { alert('시작 날짜는 끝 날짜보다 이후일 수 없습니다'); onChange({ ...wParams, releaseDateFrom: wParams.releaseDateTo } as never); return }
-                    onChange({ ...wParams, releaseDateFrom: v } as never)
+                    if (wParams.releaseDateTo && v && v > wParams.releaseDateTo) { alert('시작 날짜는 끝 날짜보다 이후일 수 없습니다'); onChange({ ...wParams, releaseDateFrom: wParams.releaseDateTo, releaseDateNull: false } as never); return }
+                    onChange({ ...wParams, releaseDateFrom: v, releaseDateNull: false } as never)
                   }} />
                   <span className="text-gray-400 text-xs">~</span>
                   <DatePickerInput value={wParams.releaseDateTo} onChange={v => {
-                    if (wParams.releaseDateFrom && v && v < wParams.releaseDateFrom) { alert('끝 날짜는 시작 날짜보다 이전일 수 없습니다'); onChange({ ...wParams, releaseDateTo: wParams.releaseDateFrom } as never); return }
-                    onChange({ ...wParams, releaseDateTo: v } as never)
+                    if (wParams.releaseDateFrom && v && v < wParams.releaseDateFrom) { alert('끝 날짜는 시작 날짜보다 이전일 수 없습니다'); onChange({ ...wParams, releaseDateTo: wParams.releaseDateFrom, releaseDateNull: false } as never); return }
+                    onChange({ ...wParams, releaseDateTo: v, releaseDateNull: false } as never)
                   }} />
+                  <button type="button" onClick={() => onChange({ ...wParams, releaseDateNull: !wParams.releaseDateNull, releaseDateFrom: '', releaseDateTo: '' } as never)} className={`text-xs px-2 py-1 rounded shrink-0 ${wParams.releaseDateNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>발매일없음</button>
+                  {([{ label: '1달', months: 1 }, { label: '2달', months: 2 }, { label: '3달', months: 3 }, { label: '반년', months: 6 }, { label: '1년', months: 12 }] as const).map(({ label, months }) => (
+                    <button key={label} type="button" onClick={() => onChange({ ...wParams, releaseDateFrom: subtractDate(months), releaseDateNull: false } as never)} className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0">{label}</button>
+                  ))}
                 </div>
 
                 {/* 별점 */}
@@ -719,6 +766,7 @@ export default function SearchBar(props: Props) {
                   <StarSelect value={wParams.ratingFrom} onChange={v => onChange({ ...wParams, ratingFrom: v } as never)} />
                   <span className="text-gray-400 text-xs">~</span>
                   <StarSelect value={wParams.ratingTo} onChange={v => onChange({ ...wParams, ratingTo: v } as never)} />
+                  <button type="button" onClick={() => onChange({ ...wParams, ratingFrom: 0, ratingTo: 0 } as never)} className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0">별점 0점</button>
                 </div>
 
                 {/* 타이틀 */}
@@ -740,6 +788,26 @@ export default function SearchBar(props: Props) {
                     타이틀없음
                   </button>
                 </div>
+
+                {/* 코멘트 */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 w-12 shrink-0">코멘트</span>
+                  <input
+                    type="text"
+                    value={wParams.commentSearch}
+                    disabled={wParams.commentNull}
+                    onChange={e => onChange({ ...wParams, commentSearch: e.target.value } as never)}
+                    placeholder="코멘트 검색"
+                    className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...wParams, commentNull: !wParams.commentNull, commentSearch: '' } as never)}
+                    className={`text-xs px-2 py-1 rounded shrink-0 ${wParams.commentNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >
+                    코멘트없음
+                  </button>
+                </div>
               </>
             )}
 
@@ -749,31 +817,37 @@ export default function SearchBar(props: Props) {
                 {/* 나이 */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-14 shrink-0">나이</span>
-                  <NumInput value={aParams.ageFrom} onChange={v => onChange({ ...aParams, ageFrom: v } as never)} />
+                  <NumInput value={aParams.ageFrom} onChange={v => onChange({ ...aParams, ageFrom: v, ageNull: false } as never)} />
                   <span className="text-gray-400 text-xs">~</span>
-                  <NumInput value={aParams.ageTo} onChange={v => onChange({ ...aParams, ageTo: v } as never)} />
+                  <NumInput value={aParams.ageTo} onChange={v => onChange({ ...aParams, ageTo: v, ageNull: false } as never)} />
+                  <button type="button" onClick={() => onChange({ ...aParams, ageNull: !aParams.ageNull, ageFrom: '', ageTo: '' } as never)} className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.ageNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>나이없음</button>
                 </div>
 
                 {/* 데뷔일 */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-gray-400 w-14 shrink-0">데뷔일</span>
                   <DatePickerInput value={aParams.debutDateFrom} onChange={v => {
-                    if (aParams.debutDateTo && v && v > aParams.debutDateTo) { alert('시작 날짜는 끝 날짜보다 이후일 수 없습니다'); onChange({ ...aParams, debutDateFrom: aParams.debutDateTo } as never); return }
-                    onChange({ ...aParams, debutDateFrom: v } as never)
+                    if (aParams.debutDateTo && v && v > aParams.debutDateTo) { alert('시작 날짜는 끝 날짜보다 이후일 수 없습니다'); onChange({ ...aParams, debutDateFrom: aParams.debutDateTo, debutDateNull: false } as never); return }
+                    onChange({ ...aParams, debutDateFrom: v, debutDateNull: false } as never)
                   }} />
                   <span className="text-gray-400 text-xs">~</span>
                   <DatePickerInput value={aParams.debutDateTo} onChange={v => {
-                    if (aParams.debutDateFrom && v && v < aParams.debutDateFrom) { alert('끝 날짜는 시작 날짜보다 이전일 수 없습니다'); onChange({ ...aParams, debutDateTo: aParams.debutDateFrom } as never); return }
-                    onChange({ ...aParams, debutDateTo: v } as never)
+                    if (aParams.debutDateFrom && v && v < aParams.debutDateFrom) { alert('끝 날짜는 시작 날짜보다 이전일 수 없습니다'); onChange({ ...aParams, debutDateTo: aParams.debutDateFrom, debutDateNull: false } as never); return }
+                    onChange({ ...aParams, debutDateTo: v, debutDateNull: false } as never)
                   }} />
+                  <button type="button" onClick={() => onChange({ ...aParams, debutDateNull: !aParams.debutDateNull, debutDateFrom: '', debutDateTo: '' } as never)} className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.debutDateNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>데뷔일없음</button>
+                  {([{ label: '1달', months: 1 }, { label: '반년', months: 6 }, { label: '1년', months: 12 }, { label: '2년', months: 24 }, { label: '3년', months: 36 }] as const).map(({ label, months }) => (
+                    <button key={label} type="button" onClick={() => onChange({ ...aParams, debutDateFrom: subtractDate(months), debutDateNull: false } as never)} className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0">{label}</button>
+                  ))}
                 </div>
 
                 {/* 작품수 */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-14 shrink-0">작품수</span>
-                  <NumInput value={aParams.workCountFrom} onChange={v => onChange({ ...aParams, workCountFrom: v } as never)} />
+                  <NumInput value={aParams.workCountFrom} onChange={v => onChange({ ...aParams, workCountFrom: v, workCountNull: false } as never)} />
                   <span className="text-gray-400 text-xs">~</span>
-                  <NumInput value={aParams.workCountTo} onChange={v => onChange({ ...aParams, workCountTo: v } as never)} />
+                  <NumInput value={aParams.workCountTo} onChange={v => onChange({ ...aParams, workCountTo: v, workCountNull: false } as never)} />
+                  <button type="button" onClick={() => onChange({ ...aParams, workCountNull: !aParams.workCountNull, workCountFrom: '', workCountTo: '' } as never)} className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.workCountNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>작품수없음</button>
                 </div>
 
                 {/* 평점 */}
@@ -783,11 +857,15 @@ export default function SearchBar(props: Props) {
                     <NumInput value={aParams.avgRatingFrom} onChange={v => onChange({ ...aParams, avgRatingFrom: v } as never)} />
                     <span className="text-gray-400 text-xs">~</span>
                     <NumInput value={aParams.avgRatingTo} onChange={v => onChange({ ...aParams, avgRatingTo: v } as never)} />
+                    <button type="button" onClick={() => onChange({ ...aParams, avgRatingFrom: 0, avgRatingTo: 0 } as never)} className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0">평점 0점</button>
                   </div>
                   <div className="grid grid-cols-[repeat(5,auto)] gap-x-6 gap-y-1.5 w-fit">
                     {SCORE_FIELDS_ADV.map(({ fromKey, toKey, label }) => (
                       <div key={label}>
-                        <p className="text-xs text-gray-500 text-center mb-0.5">{label}</p>
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <p className="text-xs text-gray-500">{label}</p>
+                          <button type="button" onClick={() => onChange({ ...aParams, [fromKey]: 0, [toKey]: 0 } as never)} className="text-xs px-1 py-0 rounded bg-gray-700 text-gray-400 hover:bg-gray-600 leading-4">0점</button>
+                        </div>
                         <div className="flex items-center gap-0.5 justify-center">
                           <NumInput value={aParams[fromKey as keyof ActorSearchParams] as number | ''} onChange={v => onChange({ ...aParams, [fromKey]: v } as never)} />
                           <span className="text-gray-500 text-xs">~</span>
@@ -805,6 +883,7 @@ export default function SearchBar(props: Props) {
                     <NumInput value={aParams.ratioScoreFrom} onChange={v => onChange({ ...aParams, ratioScoreFrom: v } as never)} />
                     <span className="text-gray-400 text-xs">~</span>
                     <NumInput value={aParams.ratioScoreTo} onChange={v => onChange({ ...aParams, ratioScoreTo: v } as never)} />
+                    <button type="button" onClick={() => onChange({ ...aParams, ratioScoreFrom: 0, ratioScoreTo: 0 } as never)} className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0">피지컬 0점</button>
                   </div>
                   <div className="grid grid-cols-[repeat(5,auto)] gap-x-6 gap-y-1.5 w-fit">
                     {[
@@ -813,22 +892,33 @@ export default function SearchBar(props: Props) {
                       { label: '웨이스트', from: aParams.waistFrom, to: aParams.waistTo, fk: 'waistFrom', tk: 'waistTo', cup: false },
                       { label: '힙', from: aParams.hipFrom, to: aParams.hipTo, fk: 'hipFrom', tk: 'hipTo', cup: false },
                       { label: '컵', from: aParams.cupFrom, to: aParams.cupTo, fk: 'cupFrom', tk: 'cupTo', cup: true },
-                    ].map(({ label, from, to, fk, tk, cup }) => (
-                      <div key={label}>
-                        <p className="text-xs text-gray-500 text-center mb-0.5">{label}</p>
-                        <div className="flex items-center gap-0.5 justify-center">
-                          {cup
-                            ? <CupInput value={from as string} onChange={v => onChange({ ...aParams, [fk]: v } as never)} />
-                            : <NumInput value={from as number | ''} onChange={v => onChange({ ...aParams, [fk]: v } as never)} />
-                          }
-                          <span className="text-gray-500 text-xs">~</span>
-                          {cup
-                            ? <CupInput value={to as string} onChange={v => onChange({ ...aParams, [tk]: v } as never)} />
-                            : <NumInput value={to as number | ''} onChange={v => onChange({ ...aParams, [tk]: v } as never)} />
-                          }
+                    ].map(({ label, from, to, fk, tk, cup }) => {
+                      const nullKey = `${fk.replace('From', '')}Null` as keyof ActorSearchParams
+                      const isNull = aParams[nullKey] as boolean
+                      return (
+                        <div key={label}>
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <p className="text-xs text-gray-500">{label}</p>
+                            <button
+                              type="button"
+                              onClick={() => onChange({ ...aParams, [nullKey]: !isNull, [fk]: '', [tk]: '' } as never)}
+                              className={`text-xs px-1 py-0 rounded leading-4 ${isNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                            >없음</button>
+                          </div>
+                          <div className="flex items-center gap-0.5 justify-center">
+                            {cup
+                              ? <CupInput value={from as string} onChange={v => onChange({ ...aParams, [fk]: v, [nullKey]: false } as never)} />
+                              : <NumInput value={from as number | ''} onChange={v => onChange({ ...aParams, [fk]: v, [nullKey]: false } as never)} />
+                            }
+                            <span className="text-gray-500 text-xs">~</span>
+                            {cup
+                              ? <CupInput value={to as string} onChange={v => onChange({ ...aParams, [tk]: v, [nullKey]: false } as never)} />
+                              : <NumInput value={to as number | ''} onChange={v => onChange({ ...aParams, [tk]: v, [nullKey]: false } as never)} />
+                            }
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               </>

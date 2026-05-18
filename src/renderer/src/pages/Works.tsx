@@ -68,6 +68,9 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     if (search.ratingTo !== '') params.ratingTo = Number(search.ratingTo)
     if (search.titleSearch) params.titleSearch = search.titleSearch
     if (search.titleNull) params.titleNull = true
+    if (search.commentSearch) params.commentSearch = search.commentSearch
+    if (search.commentNull) params.commentNull = true
+    if (search.releaseDateNull) params.releaseDateNull = true
     params.sortBy = sortBy
     params.sortDir = sortDir
     if (favoriteOnly) params.favoriteOnly = true

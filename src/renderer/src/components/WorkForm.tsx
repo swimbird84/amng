@@ -25,6 +25,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [productNumber, setProductNumber] = useState(work?.product_number || '')
   const [releaseDate, setReleaseDate] = useState(work?.release_date || '')
   const [rating, setRating] = useState(work?.rating || 0)
+  const [isFavorite, setIsFavorite] = useState(work?.is_favorite || false)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(work?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(work?.rep_tags?.map((t) => t.id) || [])
   const [selectedActorIds, setSelectedActorIds] = useState<number[]>(work?.actors?.map((a) => a.id) || [])
@@ -89,6 +90,13 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [studioDropOpen, handleStudioDropClose])
+
+  useEffect(() => {
+    if (!studioDropOpen) return
+    setTimeout(() => {
+      studioDropRef.current?.querySelector('[data-studio-selected]')?.scrollIntoView({ block: 'start' })
+    }, 0)
+  }, [studioDropOpen])
 
   useEffect(() => {
     workTagsApi.list().then((t) => setAllTags(t as Tag[]))
@@ -217,6 +225,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         product_number: productNumber.trim() || undefined,
         release_date: releaseDate || undefined,
         rating,
+        is_favorite: isFavorite,
         title: comment.trim() || null,
         comment: workComment.trim() || null,
         studio_id: studioId,
@@ -236,6 +245,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         product_number: productNumber.trim() || undefined,
         release_date: releaseDate || undefined,
         rating,
+        is_favorite: isFavorite,
         title: comment.trim() || null,
         comment: workComment.trim() || null,
         studio_id: studioId,
@@ -335,9 +345,23 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         {/* 좌측 */}
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">
-              {work ? '작품 수정' : '작품 등록'}
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-white">
+                {work ? '작품 수정' : '작품 등록'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsFavorite((v) => !v)}
+                className="text-2xl leading-none"
+                title={isFavorite ? '찜 해제' : '찜하기'}
+              >
+                {isFavorite ? (
+                  <span className="text-red-500">♥</span>
+                ) : (
+                  <span className="text-gray-500 hover:text-red-400">♡</span>
+                )}
+              </button>
+            </div>
             <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm">
               저장
             </button>
@@ -593,6 +617,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                               key={s.id}
                               type="button"
                               onClick={() => { setStudioId(s.id); handleStudioDropClose() }}
+                              {...(studioId === s.id ? { 'data-studio-selected': '' } : {})}
                               className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
                             >
                               {s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name}

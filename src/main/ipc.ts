@@ -23,6 +23,9 @@ export function registerIpcHandlers(): void {
     favoriteOnly?: boolean
     titleSearch?: string
     titleNull?: boolean
+    commentSearch?: string
+    commentNull?: boolean
+    releaseDateNull?: boolean
   }) => {
     let sql = `
       SELECT DISTINCT w.*, s.name AS studio_name, s.color AS studio_color, m.name AS studio_maker_name, m.color AS studio_maker_color FROM works w
@@ -95,6 +98,16 @@ export function registerIpcHandlers(): void {
     }
     if (params?.titleNull) {
       conditions.push("(w.title IS NULL OR TRIM(w.title) = '')")
+    }
+    if (params?.commentSearch) {
+      conditions.push('w.comment LIKE ?')
+      bindings.push(`%${params.commentSearch}%`)
+    }
+    if (params?.commentNull) {
+      conditions.push("(w.comment IS NULL OR TRIM(w.comment) = '')")
+    }
+    if (params?.releaseDateNull) {
+      conditions.push("(w.release_date IS NULL OR TRIM(w.release_date) = '')")
     }
 
     if (conditions.length > 0) {
@@ -361,6 +374,14 @@ export function registerIpcHandlers(): void {
     waistFrom?: number; waistTo?: number
     hipFrom?: number; hipTo?: number
     cupFrom?: string; cupTo?: string
+    ageNull?: boolean
+    debutDateNull?: boolean
+    workCountNull?: boolean
+    heightNull?: boolean
+    bustNull?: boolean
+    waistNull?: boolean
+    hipNull?: boolean
+    cupNull?: boolean
   }) => {
     let sql = `
       WITH stats AS (
@@ -413,20 +434,20 @@ export function registerIpcHandlers(): void {
       conditions.push('a.name LIKE ?')
       bindings.push(`%${params.keyword}%`)
     }
-    if (params?.ageFrom !== undefined && params.ageFrom > 0) {
+    if (params?.ageFrom !== undefined) {
       conditions.push("(julianday('now') - julianday(a.birthday)) / 365.25 >= ?")
       bindings.push(params.ageFrom)
     }
-    if (params?.ageTo !== undefined && params.ageTo > 0) {
+    if (params?.ageTo !== undefined) {
       conditions.push("(julianday('now') - julianday(a.birthday)) / 365.25 <= ?")
       bindings.push(params.ageTo)
     }
     if (params?.ratingFrom !== undefined) {
-      conditions.push('COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) >= ?')
+      conditions.push('COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) >= ?')
       bindings.push(params.ratingFrom)
     }
     if (params?.ratingTo !== undefined) {
-      conditions.push('COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0, 0) <= ?')
+      conditions.push('COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) <= ?')
       bindings.push(params.ratingTo)
     }
     if (params?.favoriteOnly) {
@@ -434,10 +455,10 @@ export function registerIpcHandlers(): void {
     }
     if (params?.debutDateFrom) { conditions.push('a.debut_date >= ?'); bindings.push(params.debutDateFrom) }
     if (params?.debutDateTo) { conditions.push('a.debut_date <= ?'); bindings.push(params.debutDateTo) }
-    if (params?.workCountFrom !== undefined && params.workCountFrom > 0) {
+    if (params?.workCountFrom !== undefined) {
       conditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id) >= ?'); bindings.push(params.workCountFrom)
     }
-    if (params?.workCountTo !== undefined && params.workCountTo > 0) {
+    if (params?.workCountTo !== undefined) {
       conditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id) <= ?'); bindings.push(params.workCountTo)
     }
     const scoreFields: [keyof typeof params, string][] = [
@@ -454,23 +475,30 @@ export function registerIpcHandlers(): void {
     ]
     for (const [key, col] of scoreFields) {
       const val = params?.[key] as number | undefined
-      if (val !== undefined && val > 0) {
+      if (val !== undefined) {
         const op = (key as string).endsWith('From') ? '>=' : '<='
         conditions.push(`COALESCE(s.${col}, 0) ${op} ?`); bindings.push(val)
       }
     }
-    if (params?.ratioScoreFrom !== undefined && params.ratioScoreFrom > 0) { conditions.push('ratio_score >= ?'); bindings.push(params.ratioScoreFrom) }
-    if (params?.ratioScoreTo !== undefined && params.ratioScoreTo > 0) { conditions.push('ratio_score <= ?'); bindings.push(params.ratioScoreTo) }
-    if (params?.heightFrom !== undefined && params.heightFrom > 0) { conditions.push('a.height >= ?'); bindings.push(params.heightFrom) }
-    if (params?.heightTo !== undefined && params.heightTo > 0) { conditions.push('a.height <= ?'); bindings.push(params.heightTo) }
-    if (params?.bustFrom !== undefined && params.bustFrom > 0) { conditions.push('a.bust >= ?'); bindings.push(params.bustFrom) }
-    if (params?.bustTo !== undefined && params.bustTo > 0) { conditions.push('a.bust <= ?'); bindings.push(params.bustTo) }
-    if (params?.waistFrom !== undefined && params.waistFrom > 0) { conditions.push('a.waist >= ?'); bindings.push(params.waistFrom) }
-    if (params?.waistTo !== undefined && params.waistTo > 0) { conditions.push('a.waist <= ?'); bindings.push(params.waistTo) }
-    if (params?.hipFrom !== undefined && params.hipFrom > 0) { conditions.push('a.hip >= ?'); bindings.push(params.hipFrom) }
-    if (params?.hipTo !== undefined && params.hipTo > 0) { conditions.push('a.hip <= ?'); bindings.push(params.hipTo) }
+    // ratio_score 필터는 클라이언트 사이드에서 처리
+    if (params?.heightFrom !== undefined) { conditions.push('a.height >= ?'); bindings.push(params.heightFrom) }
+    if (params?.heightTo !== undefined) { conditions.push('a.height <= ?'); bindings.push(params.heightTo) }
+    if (params?.bustFrom !== undefined) { conditions.push('a.bust >= ?'); bindings.push(params.bustFrom) }
+    if (params?.bustTo !== undefined) { conditions.push('a.bust <= ?'); bindings.push(params.bustTo) }
+    if (params?.waistFrom !== undefined) { conditions.push('a.waist >= ?'); bindings.push(params.waistFrom) }
+    if (params?.waistTo !== undefined) { conditions.push('a.waist <= ?'); bindings.push(params.waistTo) }
+    if (params?.hipFrom !== undefined) { conditions.push('a.hip >= ?'); bindings.push(params.hipFrom) }
+    if (params?.hipTo !== undefined) { conditions.push('a.hip <= ?'); bindings.push(params.hipTo) }
     if (params?.cupFrom) { conditions.push('a.cup >= ?'); bindings.push(params.cupFrom) }
     if (params?.cupTo) { conditions.push('a.cup <= ?'); bindings.push(params.cupTo) }
+    if (params?.ageNull) { conditions.push("(a.birthday IS NULL OR TRIM(a.birthday) = '')") }
+    if (params?.debutDateNull) { conditions.push("(a.debut_date IS NULL OR TRIM(a.debut_date) = '')") }
+    if (params?.workCountNull) { conditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id) = 0') }
+    if (params?.heightNull) { conditions.push('a.height IS NULL') }
+    if (params?.bustNull) { conditions.push('a.bust IS NULL') }
+    if (params?.waistNull) { conditions.push('a.waist IS NULL') }
+    if (params?.hipNull) { conditions.push('a.hip IS NULL') }
+    if (params?.cupNull) { conditions.push("(a.cup IS NULL OR TRIM(a.cup) = '')") }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')

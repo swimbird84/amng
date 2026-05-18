@@ -88,8 +88,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
     if (search.debutDateTo) params.debutDateTo = search.debutDateTo
     if (search.workCountFrom !== '') params.workCountFrom = Number(search.workCountFrom)
     if (search.workCountTo !== '') params.workCountTo = Number(search.workCountTo)
-    if (search.avgRatingFrom !== '') params.avgRatingFrom = Number(search.avgRatingFrom)
-    if (search.avgRatingTo !== '') params.avgRatingTo = Number(search.avgRatingTo)
+    if (search.avgRatingFrom !== '') params.ratingFrom = Number(search.avgRatingFrom)
+    if (search.avgRatingTo !== '') params.ratingTo = Number(search.avgRatingTo)
     if (search.faceFrom !== '') params.faceFrom = Number(search.faceFrom)
     if (search.faceTo !== '') params.faceTo = Number(search.faceTo)
     if (search.bustScoreFrom !== '') params.bustScoreFrom = Number(search.bustScoreFrom)
@@ -122,6 +122,14 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
     if (search.hipTo !== '') params.hipTo = Number(search.hipTo)
     if (search.cupFrom) params.cupFrom = search.cupFrom
     if (search.cupTo) params.cupTo = search.cupTo
+    if (search.ageNull) params.ageNull = true
+    if (search.debutDateNull) params.debutDateNull = true
+    if (search.workCountNull) params.workCountNull = true
+    if (search.heightNull) params.heightNull = true
+    if (search.bustNull) params.bustNull = true
+    if (search.waistNull) params.waistNull = true
+    if (search.hipNull) params.hipNull = true
+    if (search.cupNull) params.cupNull = true
     if (sortBy !== 'ratio_score') {
       params.sortBy = sortBy
       params.sortDir = sortDir
@@ -132,8 +140,19 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   }, [search, sortBy, sortDir, favoriteOnly])
 
   const displayActors = useMemo(() => {
-    if (sortBy !== 'ratio_score') return actors
-    return [...actors].sort((a, b) => {
+    const ratioFrom = search.ratioScoreFrom !== '' ? Number(search.ratioScoreFrom) : null
+    const ratioTo   = search.ratioScoreTo   !== '' ? Number(search.ratioScoreTo)   : null
+    const filtered = (ratioFrom !== null || ratioTo !== null)
+      ? actors.filter(a => {
+          const score = physScoreMap.get(a.id) ?? null
+          if (score === null) return false
+          if (ratioFrom !== null && score < ratioFrom) return false
+          if (ratioTo   !== null && score > ratioTo)   return false
+          return true
+        })
+      : actors
+    if (sortBy !== 'ratio_score') return filtered
+    return [...filtered].sort((a, b) => {
       const sa = physScoreMap.get(a.id) ?? -1
       const sb = physScoreMap.get(b.id) ?? -1
       return sortDir === 'desc' ? sb - sa : sa - sb
