@@ -271,7 +271,6 @@ interface WorkSearchProps {
   actors: Actor[]
   studios: { id: number; name: string; maker_id?: number | null; maker_name?: string | null }[]
   resultCount?: number
-  resultMore?: boolean
 }
 
 interface ActorSearchProps {
@@ -301,7 +300,6 @@ const SCORE_FIELDS_ADV = [
 
 export default function SearchBar(props: Props) {
   const { type, params, onChange, tags, resultCount } = props
-  const resultMore = type === 'works' ? (props as WorkSearchProps).resultMore : false
   const actors = type === 'works' ? (props as WorkSearchProps).actors : []
   const studios = type === 'works' ? (props as WorkSearchProps).studios : []
   const wParams = type === 'works' ? params as WorkSearchParams : null
@@ -677,7 +675,7 @@ export default function SearchBar(props: Props) {
       {/* result count */}
       {resultCount !== undefined && (
         <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 whitespace-nowrap">
-          결과: {resultCount}{resultMore ? '+' : ''}
+          결과: {resultCount}
         </div>
       )}
 

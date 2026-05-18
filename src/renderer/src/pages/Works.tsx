@@ -59,6 +59,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const dragAction = useRef<'add' | 'remove'>('add')
   const [hasMore, setHasMore] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [totalCount, setTotalCount] = useState<number | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const hasMoreRef = useRef(true)
   const isLoadingMoreRef = useRef(false)
@@ -87,10 +88,11 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     if (favoriteOnly) params.favoriteOnly = true
     params.limit = limit
     params.offset = offset
-    const list = await worksApi.list(params) as Work[]
-    if (replace) setWorks(list)
-    else setWorks(prev => [...prev, ...list])
-    const more = list.length === limit
+    const result = await worksApi.list(params) as { items: Work[]; total: number }
+    if (replace) setWorks(result.items)
+    else setWorks(prev => [...prev, ...result.items])
+    setTotalCount(result.total)
+    const more = result.items.length === limit
     setHasMore(more)
     hasMoreRef.current = more
     setIsLoadingMore(false)
@@ -357,7 +359,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
               </button>
             </div>
             <div className="w-[38rem] shrink-0 flex items-center bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
-              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} studios={studioList} resultCount={works.length} resultMore={hasMore} />
+              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} studios={studioList} resultCount={totalCount ?? works.length} />
             </div>
             <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <button

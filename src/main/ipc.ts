@@ -139,7 +139,10 @@ export function registerIpcHandlers(): void {
       sql += ` ORDER BY w.${sortCol} ${sortDir}`
     }
 
+    let total: number | undefined
     if (params?.limit !== undefined) {
+      const countResult = db().prepare(`SELECT COUNT(*) AS cnt FROM (${sql}) t`).get(...bindings) as { cnt: number }
+      total = countResult.cnt
       sql += ' LIMIT ?'
       bindings.push(params.limit)
       sql += ' OFFSET ?'
@@ -147,7 +150,7 @@ export function registerIpcHandlers(): void {
     }
 
     const rawList = db().prepare(sql).all(...bindings) as Array<Record<string, unknown>>
-    if (rawList.length === 0) return []
+    if (rawList.length === 0) return total !== undefined ? { items: [], total } : []
     const workIds = rawList.map(w => w.id as number)
     const ph = workIds.map(() => '?').join(',')
     const repRows = db().prepare(`
@@ -175,7 +178,8 @@ export function registerIpcHandlers(): void {
       if (!repActorMap.has(row.work_id)) repActorMap.set(row.work_id, [])
       repActorMap.get(row.work_id)!.push({ id: row.id, name: row.name })
     }
-    return rawList.map(w => ({ ...w, rep_tags: repTagMap.get(w.id as number) ?? [], rep_actors: repActorMap.get(w.id as number) ?? [] }))
+    const items = rawList.map(w => ({ ...w, rep_tags: repTagMap.get(w.id as number) ?? [], rep_actors: repActorMap.get(w.id as number) ?? [] }))
+    return total !== undefined ? { items, total } : items
   })
 
   ipcMain.handle('works:get', (_e, id: number) => {
