@@ -18,6 +18,9 @@ interface WorkSearchParams {
   titleNull: boolean
   commentSearch: string
   commentNull: boolean
+  actorCountFrom: number | ''
+  actorCountTo: number | ''
+  actorCountNull: boolean
 }
 
 interface ActorSearchParams {
@@ -62,6 +65,7 @@ export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
   keyword: '', tagIds: [], tagMode: 'and', actorId: '', studioId: '',
   releaseDateFrom: '', releaseDateTo: '', releaseDateNull: false, ratingFrom: '', ratingTo: '',
   titleSearch: '', titleNull: false, commentSearch: '', commentNull: false,
+  actorCountFrom: '', actorCountTo: '', actorCountNull: false,
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
@@ -267,6 +271,7 @@ interface WorkSearchProps {
   actors: Actor[]
   studios: { id: number; name: string; maker_id?: number | null; maker_name?: string | null }[]
   resultCount?: number
+  resultMore?: boolean
 }
 
 interface ActorSearchProps {
@@ -296,6 +301,7 @@ const SCORE_FIELDS_ADV = [
 
 export default function SearchBar(props: Props) {
   const { type, params, onChange, tags, resultCount } = props
+  const resultMore = type === 'works' ? (props as WorkSearchProps).resultMore : false
   const actors = type === 'works' ? (props as WorkSearchProps).actors : []
   const studios = type === 'works' ? (props as WorkSearchProps).studios : []
   const wParams = type === 'works' ? params as WorkSearchParams : null
@@ -510,6 +516,9 @@ export default function SearchBar(props: Props) {
         ),
         onClear: () => onChange({ ...wp, ratingFrom: '', ratingTo: '' } as never),
       })
+    if (wp.actorCountFrom !== '' || wp.actorCountTo !== '')
+      conditions.push({ label: `배우수: ${wp.actorCountFrom !== '' ? wp.actorCountFrom : '?'}~${wp.actorCountTo !== '' ? wp.actorCountTo : '?'}`, onClear: () => onChange({ ...wp, actorCountFrom: '', actorCountTo: '' } as never) })
+    if (wp.actorCountNull) conditions.push({ label: '배우없음', onClear: () => onChange({ ...wp, actorCountNull: false } as never) })
     if (wp.titleSearch) conditions.push({ label: `타이틀: ${wp.titleSearch}`, onClear: () => onChange({ ...wp, titleSearch: '' } as never) })
     if (wp.titleNull) conditions.push({ label: '타이틀없음', onClear: () => onChange({ ...wp, titleNull: false } as never) })
     if (wp.releaseDateNull) conditions.push({ label: '발매일없음', onClear: () => onChange({ ...wp, releaseDateNull: false } as never) })
@@ -608,7 +617,7 @@ export default function SearchBar(props: Props) {
           태그 <span className="text-gray-500 text-xs">▼</span>
         </button>
         {tagOpen && (
-          <div ref={popoverRef} className="fixed z-50 border border-gray-700 rounded-lg shadow-xl w-[min(63rem,90vw)]" style={{ top: dropdownPos.top, left: dropdownPos.left, backgroundColor: 'rgba(26, 35, 50, 0.8)', backdropFilter: 'blur(8px)' }}>
+          <div ref={popoverRef} className="fixed z-50 border border-gray-700 rounded-lg shadow-xl w-[min(63rem,90vw)]" style={{ top: dropdownPos.top, left: dropdownPos.left, backgroundColor: 'rgba(26, 35, 50, 0.9)', backdropFilter: 'blur(8px)' }}>
             <div className="p-2 border-b border-gray-700 space-y-1.5">
               <div className="flex gap-1">
                 <input type="text" value={tagFilter} onChange={e => setTagFilter(e.target.value)} placeholder="태그 검색" className="bg-gray-700 text-white text-xs px-2 py-1 rounded min-w-0" style={{ flex: '6' }} autoFocus />
@@ -668,7 +677,7 @@ export default function SearchBar(props: Props) {
       {/* result count */}
       {resultCount !== undefined && (
         <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 whitespace-nowrap">
-          결과: {resultCount}
+          결과: {resultCount}{resultMore ? '+' : ''}
         </div>
       )}
 
@@ -699,7 +708,7 @@ export default function SearchBar(props: Props) {
             width: type === 'works' ? '680px' : '680px',
           }}
         >
-          <div className="absolute inset-0 rounded-lg -z-10" style={{ backgroundColor: 'rgba(26, 35, 50, 0.8)', backdropFilter: 'blur(8px)' }} />
+          <div className="absolute inset-0 rounded-lg -z-10" style={{ backgroundColor: 'rgba(26, 35, 50, 0.9)', backdropFilter: 'blur(8px)' }} />
           <div className="p-3 space-y-3">
             {/* ── works ─────────────────────────────────────────── */}
             {type === 'works' && wParams && (
@@ -767,6 +776,15 @@ export default function SearchBar(props: Props) {
                   <span className="text-gray-400 text-xs">~</span>
                   <StarSelect value={wParams.ratingTo} onChange={v => onChange({ ...wParams, ratingTo: v } as never)} />
                   <button type="button" onClick={() => onChange({ ...wParams, ratingFrom: 0, ratingTo: 0 } as never)} className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0">별점 0점</button>
+                </div>
+
+                {/* 배우수 */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 w-12 shrink-0">배우수</span>
+                  <NumInput value={wParams.actorCountFrom} onChange={v => onChange({ ...wParams, actorCountFrom: v, actorCountNull: false } as never)} />
+                  <span className="text-gray-400 text-xs">~</span>
+                  <NumInput value={wParams.actorCountTo} onChange={v => onChange({ ...wParams, actorCountTo: v, actorCountNull: false } as never)} />
+                  <button type="button" onClick={() => onChange({ ...wParams, actorCountNull: !wParams.actorCountNull, actorCountFrom: '', actorCountTo: '' } as never)} className={`text-xs px-2 py-1 rounded shrink-0 ${wParams.actorCountNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>배우없음</button>
                 </div>
 
                 {/* 타이틀 */}

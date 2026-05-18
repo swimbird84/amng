@@ -17,6 +17,8 @@ function studioColor(name: string, color?: string | null): string {
   return color || hashColor(name)
 }
 
+const BATCH_SIZE = 100
+
 interface WorksProps {
   onNavigateToActor?: (id: number) => void
   openEditId?: number | null
@@ -55,8 +57,14 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [scanProgress, setScanProgress] = useState<{ phase: 'scanning' | 'registering' | 'done'; current: number; total: number; fileName: string; result?: { added: number; duplicates: number } } | null>(null)
   const isDragging = useRef(false)
   const dragAction = useRef<'add' | 'remove'>('add')
+  const [hasMore, setHasMore] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const hasMoreRef = useRef(true)
+  const isLoadingMoreRef = useRef(false)
+  const worksCountRef = useRef(0)
 
-  const loadWorks = useCallback(async () => {
+  const fetchWorks = useCallback(async (offset: number, replace: boolean, limit = BATCH_SIZE) => {
     const params: Record<string, unknown> = {}
     if (search.keyword) params.keyword = search.keyword
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
@@ -71,12 +79,28 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     if (search.commentSearch) params.commentSearch = search.commentSearch
     if (search.commentNull) params.commentNull = true
     if (search.releaseDateNull) params.releaseDateNull = true
+    if (search.actorCountFrom !== '') params.actorCountFrom = Number(search.actorCountFrom)
+    if (search.actorCountTo !== '') params.actorCountTo = Number(search.actorCountTo)
+    if (search.actorCountNull) params.actorCountNull = true
     params.sortBy = sortBy
     params.sortDir = sortDir
     if (favoriteOnly) params.favoriteOnly = true
+    params.limit = limit
+    params.offset = offset
     const list = await worksApi.list(params) as Work[]
-    setWorks(list)
+    if (replace) setWorks(list)
+    else setWorks(prev => [...prev, ...list])
+    const more = list.length === limit
+    setHasMore(more)
+    hasMoreRef.current = more
+    setIsLoadingMore(false)
+    isLoadingMoreRef.current = false
   }, [search, sortBy, sortDir, favoriteOnly])
+
+  const refreshWorks = useCallback((extraCount = 0) => {
+    const count = Math.max(worksCountRef.current + extraCount, BATCH_SIZE)
+    return fetchWorks(0, true, count)
+  }, [fetchWorks])
 
   const loadTags = async () => {
     setTags(await workTagsApi.list() as Tag[])
@@ -86,7 +110,29 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     setActorList(await actorsApi.list({ sortBy: 'name', sortDir: 'asc' }) as Actor[])
   }
 
-  useEffect(() => { loadWorks() }, [loadWorks])
+  useEffect(() => {
+    setHasMore(true)
+    hasMoreRef.current = true
+    setIsLoadingMore(true)
+    isLoadingMoreRef.current = true
+    fetchWorks(0, true)
+  }, [fetchWorks])
+
+  useEffect(() => { worksCountRef.current = works.length }, [works.length])
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && hasMoreRef.current && !isLoadingMoreRef.current) {
+        isLoadingMoreRef.current = true
+        setIsLoadingMore(true)
+        fetchWorks(worksCountRef.current, false)
+      }
+    }, { rootMargin: '200px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [fetchWorks])
   useEffect(() => {
     const onMouseUp = () => { isDragging.current = false }
     document.addEventListener('mouseup', onMouseUp)
@@ -133,7 +179,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     if (selected && confirm('정말 삭제하시겠습니까?')) {
       await worksApi.delete(selected.id)
       setSelected(null)
-      loadWorks()
+      refreshWorks(-1)
     }
   }
 
@@ -181,15 +227,13 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     }
 
     setScanProgress({ phase: 'done', current: 0, total: 0, fileName: '', result: { added, duplicates: duplicates.length } })
-    loadWorks()
+    refreshWorks(added)
   }
 
   const handleRating = async (id: number, rating: number) => {
     await worksApi.update(id, { rating })
-    loadWorks()
-    if (selected?.id === id) {
-      setSelected({ ...selected, rating })
-    }
+    setWorks(prev => prev.map(w => w.id === id ? { ...w, rating } : w))
+    if (selected?.id === id) setSelected({ ...selected, rating })
   }
 
   const handleToggleRepTag = async (tagId: number) => {
@@ -201,7 +245,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     await worksApi.update(selected.id, { rep_tag_ids: newRepIds })
     const newRepTags = (selected.tags ?? []).filter((t) => newRepIds.includes(t.id))
     setSelected({ ...selected, rep_tags: newRepTags })
-    loadWorks()
+    refreshWorks()
   }
 
   const handleToggleRepActor = async (actorId: number) => {
@@ -215,7 +259,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
       .filter((a) => newRepIds.includes(a.id))
       .map((a) => ({ id: a.id, name: a.name }))
     setSelected({ ...selected, rep_actors: newRepActors })
-    loadWorks()
+    refreshWorks()
   }
 
   const exitDeleteMode = () => {
@@ -225,22 +269,21 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   }
 
   const handleBulkDelete = async () => {
+    const deleteCount = selectedDeleteIds.size
     for (const id of selectedDeleteIds) {
       await worksApi.delete(id)
     }
     setSelected(null)
     exitDeleteMode()
-    loadWorks()
+    refreshWorks(-deleteCount)
   }
 
   const handleToggleFavorite = async (id: number, current: number, e?: React.MouseEvent) => {
     e?.stopPropagation()
     const next = current ? 0 : 1
     await worksApi.update(id, { is_favorite: next })
-    loadWorks()
-    if (selected?.id === id) {
-      setSelected({ ...selected, is_favorite: next })
-    }
+    setWorks(prev => prev.map(w => w.id === id ? { ...w, is_favorite: next } : w))
+    if (selected?.id === id) setSelected({ ...selected, is_favorite: next })
   }
 
   return (
@@ -314,7 +357,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
               </button>
             </div>
             <div className="w-[38rem] shrink-0 flex items-center bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
-              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} studios={studioList} resultCount={works.length} />
+              <SearchBar type="works" params={search} onChange={setSearch} tags={tags} actors={actorList} studios={studioList} resultCount={works.length} resultMore={hasMore} />
             </div>
             <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
               <button
@@ -439,8 +482,15 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
               </div>
             ))}
           </div>
-          {works.length === 0 && (
+          {works.length === 0 && !isLoadingMore && (
             <p className="text-gray-500 text-center mt-10">등록된 작품이 없습니다</p>
+          )}
+          <div ref={sentinelRef} className="h-4" />
+          {isLoadingMore && (
+            <div className="text-center text-gray-500 text-sm py-4">로딩 중...</div>
+          )}
+          {!hasMore && works.length > 0 && (
+            <div className="text-center text-gray-600 text-xs py-2">전체 {works.length}개</div>
           )}
         </div>
       </div>
@@ -706,7 +756,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
       {showForm && (
         <WorkForm
           work={editWork}
-          onSave={() => { setShowForm(false); loadWorks(); setRefreshKey((k) => k + 1); if (selected) handleSelect(selected.id) }}
+          onSave={() => { setShowForm(false); refreshWorks(); setRefreshKey((k) => k + 1); if (selected) handleSelect(selected.id) }}
           onCancel={() => setShowForm(false)}
         />
       )}

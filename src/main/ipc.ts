@@ -26,6 +26,11 @@ export function registerIpcHandlers(): void {
     commentSearch?: string
     commentNull?: boolean
     releaseDateNull?: boolean
+    actorCountFrom?: number
+    actorCountTo?: number
+    actorCountNull?: boolean
+    limit?: number
+    offset?: number
   }) => {
     let sql = `
       SELECT DISTINCT w.*, s.name AS studio_name, s.color AS studio_color, m.name AS studio_maker_name, m.color AS studio_maker_color FROM works w
@@ -109,6 +114,17 @@ export function registerIpcHandlers(): void {
     if (params?.releaseDateNull) {
       conditions.push("(w.release_date IS NULL OR TRIM(w.release_date) = '')")
     }
+    if (params?.actorCountFrom !== undefined) {
+      conditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id = w.id) >= ?')
+      bindings.push(params.actorCountFrom)
+    }
+    if (params?.actorCountTo !== undefined) {
+      conditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id = w.id) <= ?')
+      bindings.push(params.actorCountTo)
+    }
+    if (params?.actorCountNull) {
+      conditions.push('NOT EXISTS (SELECT 1 FROM work_actors wa2 WHERE wa2.work_id = w.id)')
+    }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')
@@ -121,6 +137,13 @@ export function registerIpcHandlers(): void {
       const validWorkSortCols = ['product_number', 'rating', 'release_date', 'created_at']
       const sortCol = validWorkSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
       sql += ` ORDER BY w.${sortCol} ${sortDir}`
+    }
+
+    if (params?.limit !== undefined) {
+      sql += ' LIMIT ?'
+      bindings.push(params.limit)
+      sql += ' OFFSET ?'
+      bindings.push(params.offset ?? 0)
     }
 
     const rawList = db().prepare(sql).all(...bindings) as Array<Record<string, unknown>>

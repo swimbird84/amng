@@ -25,7 +25,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [productNumber, setProductNumber] = useState(work?.product_number || '')
   const [releaseDate, setReleaseDate] = useState(work?.release_date || '')
   const [rating, setRating] = useState(work?.rating || 0)
-  const [isFavorite, setIsFavorite] = useState(work?.is_favorite || false)
+  const [isFavorite, setIsFavorite] = useState(work?.is_favorite ? 1 : 0)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(work?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(work?.rep_tags?.map((t) => t.id) || [])
   const [selectedActorIds, setSelectedActorIds] = useState<number[]>(work?.actors?.map((a) => a.id) || [])
