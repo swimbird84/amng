@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
 import type { Tag } from '../types'
-import { workTagsApi, actorTagsApi, workTagLinksApi, actorTagLinksApi } from '../api'
+import {
+  workTagsApi, actorTagsApi,
+  workTagLinksApi, actorTagLinksApi,
+  workTagCategoriesApi, actorTagCategoriesApi,
+} from '../api'
 
 interface Props {
   type: 'work' | 'actor'
@@ -8,7 +12,6 @@ interface Props {
 }
 
 type TagLink = { parent_tag_id: number; child_tag_id: number }
-
 type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: Tag[] }
 
 function groupTags(tagList: Tag[]): Group[] {
@@ -31,15 +34,34 @@ export default function TagLinkModal({ type, onClose }: Props) {
   const [tags, setTags] = useState<Tag[]>([])
   const [links, setLinks] = useState<TagLink[]>([])
   const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
-  const [search, setSearch] = useState('')
-  const [rightSearch, setRightSearch] = useState('')
+
+  // 좌측 상태
+  const [newParentTag, setNewParentTag] = useState('')
+  const [addingParentCatKey, setAddingParentCatKey] = useState<string | null>(null)
+  const [inlineParentName, setInlineParentName] = useState('')
+
+  // 우측 상태
+  const [newChildTag, setNewChildTag] = useState('')
+  const [addingChildCatKey, setAddingChildCatKey] = useState<string | null>(null)
+  const [inlineChildName, setInlineChildName] = useState('')
 
   const tagsApi = type === 'work' ? workTagsApi : actorTagsApi
   const linksApi = type === 'work' ? workTagLinksApi : actorTagLinksApi
+  const tagCatApi = type === 'work' ? workTagCategoriesApi : actorTagCategoriesApi
+
+  const reloadTags = async () => {
+    const t = await tagsApi.list()
+    setTags(t as Tag[])
+  }
+
+  const reloadLinks = async () => {
+    const l = await linksApi.list()
+    setLinks(l as TagLink[])
+  }
 
   useEffect(() => {
-    tagsApi.list().then(t => setTags(t as Tag[]))
-    linksApi.list().then(l => setLinks(l as TagLink[]))
+    reloadTags()
+    reloadLinks()
   }, [])
 
   useEffect(() => {
@@ -54,6 +76,30 @@ export default function TagLinkModal({ type, onClose }: Props) {
   const hasChildren = (tagId: number) =>
     links.some(l => l.parent_tag_id === tagId)
 
+  // ── 부모 태그 생성/선택 ─────────────────────────────────────────
+
+  const handleCreateParent = async () => {
+    const name = newParentTag.trim()
+    if (!name) return
+    const id = await tagsApi.create(name) as number
+    await reloadTags()
+    setSelectedParentId(id)
+    setNewParentTag('')
+  }
+
+  const handleCreateParentInCategory = async (catId: number | null) => {
+    const name = inlineParentName.trim()
+    if (!name) return
+    const id = await tagsApi.create(name) as number
+    if (catId !== null) await tagCatApi.setTagCategory(id, catId)
+    await reloadTags()
+    setSelectedParentId(id)
+    setInlineParentName('')
+    setAddingParentCatKey(null)
+  }
+
+  // ── 자식 태그 토글/생성 ─────────────────────────────────────────
+
   const toggleChild = async (childId: number) => {
     if (selectedParentId == null) return
     const current = childrenOf(selectedParentId)
@@ -61,20 +107,53 @@ export default function TagLinkModal({ type, onClose }: Props) {
       ? current.filter(id => id !== childId)
       : [...current, childId]
     await linksApi.set(selectedParentId, next)
-    const updated = await linksApi.list()
-    setLinks(updated as TagLink[])
+    await reloadLinks()
   }
 
-  const filteredTags = search
-    ? tags.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
-    : tags
+  const handleCreateChild = async () => {
+    if (selectedParentId == null) return
+    const name = newChildTag.trim()
+    if (!name) return
+    const id = await tagsApi.create(name) as number
+    await reloadTags()
+    const current = childrenOf(selectedParentId)
+    if (!current.includes(id)) {
+      await linksApi.set(selectedParentId, [...current, id])
+      await reloadLinks()
+    }
+    setNewChildTag('')
+  }
 
-  const leftGroups = groupTags(filteredTags)
-  const rightFiltered = tags.filter(t =>
-    t.id !== selectedParentId &&
-    (!rightSearch || t.name.toLowerCase().includes(rightSearch.toLowerCase()))
-  )
+  const handleCreateChildInCategory = async (catId: number | null) => {
+    if (selectedParentId == null) return
+    const name = inlineChildName.trim()
+    if (!name) return
+    const id = await tagsApi.create(name) as number
+    if (catId !== null) await tagCatApi.setTagCategory(id, catId)
+    await reloadTags()
+    const current = childrenOf(selectedParentId)
+    if (!current.includes(id)) {
+      await linksApi.set(selectedParentId, [...current, id])
+      await reloadLinks()
+    }
+    setInlineChildName('')
+    setAddingChildCatKey(null)
+  }
+
+  // ── 파생 값 ────────────────────────────────────────────────────
+
+  const leftFiltered = newParentTag
+    ? tags.filter(t => t.name.toLowerCase().includes(newParentTag.toLowerCase()))
+    : tags
+  const leftGroups = groupTags(leftFiltered)
+
+  const rightFiltered = tags.filter(t => {
+    if (t.id === selectedParentId) return false
+    if (newChildTag && !t.name.toLowerCase().includes(newChildTag.toLowerCase())) return false
+    return true
+  })
   const rightGroups = groupTags(rightFiltered)
+
   const selectedChildren = selectedParentId != null ? childrenOf(selectedParentId) : []
   const selectedParentName = tags.find(t => t.id === selectedParentId)?.name ?? ''
 
@@ -89,21 +168,61 @@ export default function TagLinkModal({ type, onClose }: Props) {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* 좌측: 부모 태그 선택 */}
-          <div className="w-[220px] flex flex-col border-r border-gray-700 shrink-0">
-            <div className="p-2 border-b border-gray-700">
+          {/* 좌측: 부모 태그 */}
+          <div className="w-[280px] flex flex-col border-r border-gray-700 shrink-0">
+            <div className="p-2 border-b border-gray-700 flex gap-1">
               <input
                 type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="태그 검색"
-                className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full"
+                value={newParentTag}
+                onChange={e => setNewParentTag(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleCreateParent()}
+                placeholder="태그 검색 또는 신규 입력"
+                className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 min-w-0"
               />
+              <button
+                onClick={handleCreateParent}
+                className="bg-gray-600 hover:bg-gray-500 text-white text-xs px-2 py-1 rounded shrink-0"
+              >
+                추가
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-3">
               {leftGroups.map(g => (
                 <div key={g.catId ?? 'none'}>
-                  <p className="text-xs text-gray-500 mb-1">{g.catName ?? '미분류'}</p>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-xs text-gray-500">{g.catName ?? '미분류'}</span>
+                    <button
+                      onClick={() => {
+                        setAddingParentCatKey(addingParentCatKey === String(g.catId) ? null : String(g.catId))
+                        setInlineParentName('')
+                      }}
+                      className="text-xs text-gray-600 hover:text-white px-1 rounded hover:bg-gray-700"
+                    >
+                      추가
+                    </button>
+                  </div>
+                  {addingParentCatKey === String(g.catId) && (
+                    <div className="flex gap-1 mb-1.5">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={inlineParentName}
+                        onChange={e => setInlineParentName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleCreateParentInCategory(g.catId)
+                          if (e.key === 'Escape') setAddingParentCatKey(null)
+                        }}
+                        placeholder="태그명 입력"
+                        className="bg-gray-600 text-white text-xs px-2 py-1 rounded flex-1 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => handleCreateParentInCategory(g.catId)}
+                        className="bg-gray-500 hover:bg-gray-400 text-white text-xs px-2 py-1 rounded"
+                      >
+                        추가
+                      </button>
+                    </div>
+                  )}
                   <div className="space-y-0.5">
                     {g.tags.map(tag => (
                       <button
@@ -127,7 +246,7 @@ export default function TagLinkModal({ type, onClose }: Props) {
             </div>
           </div>
 
-          {/* 우측: 자식 태그 선택 */}
+          {/* 우측: 자식 태그 */}
           <div className="flex-1 flex flex-col overflow-hidden">
             {selectedParentId == null ? (
               <div className="flex-1 flex items-center justify-center">
@@ -135,25 +254,65 @@ export default function TagLinkModal({ type, onClose }: Props) {
               </div>
             ) : (
               <>
-                <div className="px-3 py-2 border-b border-gray-700 shrink-0 flex items-center gap-3">
-                  <p className="text-xs text-gray-400 shrink-0">
+                <div className="px-3 py-2 border-b border-gray-700 shrink-0 space-y-1.5">
+                  <p className="text-xs text-gray-400">
                     부모: <span className="text-white font-bold">{selectedParentName}</span>
                     <span className="ml-2 text-gray-500">({selectedChildren.length}개 연결됨)</span>
                   </p>
-                  <input
-                    type="text"
-                    value={rightSearch}
-                    onChange={e => setRightSearch(e.target.value)}
-                    placeholder="자식 태그 검색"
-                    className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1"
-                  />
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      value={newChildTag}
+                      onChange={e => setNewChildTag(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateChild()}
+                      placeholder="태그 검색 또는 신규 입력"
+                      className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 min-w-0"
+                    />
+                    <button
+                      onClick={handleCreateChild}
+                      className="bg-gray-600 hover:bg-gray-500 text-white text-xs px-2 py-1 rounded shrink-0"
+                    >
+                      추가
+                    </button>
+                  </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-3">
                   {rightGroups.map(g => (
                     <div key={g.catId ?? 'none'}>
-                      <p className="text-xs text-gray-500 mb-1 border-b border-gray-700 pb-0.5">
-                        {g.catName ?? '미분류'}
-                      </p>
+                      <div className="flex items-center gap-1 mb-1 border-b border-gray-700 pb-0.5">
+                        <span className="text-xs text-gray-500">{g.catName ?? '미분류'}</span>
+                        <button
+                          onClick={() => {
+                            setAddingChildCatKey(addingChildCatKey === String(g.catId) ? null : String(g.catId))
+                            setInlineChildName('')
+                          }}
+                          className="text-xs text-gray-600 hover:text-white px-1 rounded hover:bg-gray-700"
+                        >
+                          추가
+                        </button>
+                      </div>
+                      {addingChildCatKey === String(g.catId) && (
+                        <div className="flex gap-1 mb-1.5">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={inlineChildName}
+                            onChange={e => setInlineChildName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') handleCreateChildInCategory(g.catId)
+                              if (e.key === 'Escape') setAddingChildCatKey(null)
+                            }}
+                            placeholder="태그명 입력"
+                            className="bg-gray-600 text-white text-xs px-2 py-1 rounded flex-1 focus:outline-none"
+                          />
+                          <button
+                            onClick={() => handleCreateChildInCategory(g.catId)}
+                            className="bg-gray-500 hover:bg-gray-400 text-white text-xs px-2 py-1 rounded"
+                          >
+                            추가
+                          </button>
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-1">
                         {g.tags.map(tag => {
                           const isChild = selectedChildren.includes(tag.id)
