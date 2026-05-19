@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work } from '../types'
 import { worksApi, shellApi } from '../api'
 import ImagePreview from './ImagePreview'
@@ -29,9 +30,9 @@ export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zI
   onCloseRef.current = onClose
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => onCloseRef.current()
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [])
 
 

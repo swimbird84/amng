@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import { actorsApi } from '../api'
 import ImagePreview from './ImagePreview'
 
@@ -299,9 +300,9 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   }, [])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => onClose()
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [onClose])
 
   const handleScoreChange = async (actorId: number, key: keyof ActorScores, value: number) => {

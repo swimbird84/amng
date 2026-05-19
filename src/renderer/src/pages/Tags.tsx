@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type React from 'react'
 import type { Work, Actor } from '../types'
 import { workTagsApi, actorTagsApi, workTagCategoriesApi, actorTagCategoriesApi, worksApi, actorsApi } from '../api'
@@ -392,15 +393,15 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
   useEffect(() => { loadWorkTags(); loadActorTags() }, [])
   useEffect(() => {
     if (!workTagModal) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setWorkTagModal(null) }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => setWorkTagModal(null)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [workTagModal])
   useEffect(() => {
     if (!actorTagModal) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setActorTagModal(null) }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => setActorTagModal(null)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [actorTagModal])
 
   const handleWorkTagClick = async (tagId: number, tagName: string) => {

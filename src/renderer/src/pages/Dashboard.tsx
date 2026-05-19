@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 
 import type { Work, Actor } from '../types'
 import { dashboardApi } from '../api'
@@ -212,9 +213,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   useEffect(() => {
     if (!ratingModal) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setRatingModal(null) }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => setRatingModal(null)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [ratingModal])
 
   useEffect(() => {

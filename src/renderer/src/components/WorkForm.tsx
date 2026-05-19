@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work, Tag, Actor, Studio, Maker } from '../types'
 import { worksApi, workTagsApi, workTagCategoriesApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi, workTagLinksApi } from '../api'
 import Rating from './Rating'
@@ -45,6 +46,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [newLabelName, setNewLabelName] = useState('')
   const [studioDropOpen, setStudioDropOpen] = useState(false)
   const [studioSearch, setStudioSearch] = useState('')
+  const [studioHoverIdx, setStudioHoverIdx] = useState(-1)
   const studioDropRef = useRef<HTMLDivElement>(null)
   const studioTriggerRef = useRef<HTMLButtonElement>(null)
   const [studioDropRect, setStudioDropRect] = useState<{ top: number; left: number; width: number } | null>(null)
@@ -65,15 +67,27 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
     return (a.id - b.id) * dir
   }), [allStudios, studioSortBy, studioSortDir])
 
-  const handleStudioDropClose = useCallback(() => { setStudioDropOpen(false); setStudioSearch('') }, [])
+  const handleStudioDropClose = useCallback(() => { setStudioDropOpen(false); setStudioSearch(''); setStudioHoverIdx(-1) }, [])
+
+  useEffect(() => { setStudioHoverIdx(-1) }, [studioSearch])
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel()
-      }
+    if (studioHoverIdx < 0) return
+    studioDropRef.current?.querySelector('[data-studio-hover]')?.scrollIntoView({ block: 'nearest' })
+  }, [studioHoverIdx])
+
+  useEffect(() => {
+    if (!studioDropOpen) return
+    pushEscHandler(handleStudioDropClose)
+    return () => popEscHandler(handleStudioDropClose)
+  }, [studioDropOpen, handleStudioDropClose])
+
+  useEffect(() => {
+    const handler = () => {
+      if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel()
     }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [onCancel])
 
   useEffect(() => {
@@ -351,7 +365,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
               </h2>
               <button
                 type="button"
-                onClick={() => setIsFavorite((v) => !v)}
+                onClick={() => setIsFavorite((v) => v ? 0 : 1)}
                 className="text-2xl leading-none"
                 title={isFavorite ? '찜 해제' : '찜하기'}
               >
@@ -593,6 +607,23 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                           onChange={(e) => setStudioSearch(e.target.value)}
                           placeholder="레이블 검색"
                           autoFocus
+                          onKeyDown={(e) => {
+                            const filteredItems = studioSearch
+                              ? sortedStudios.filter(s => {
+                                  const full = s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name
+                                  return full.toLowerCase().includes(studioSearch.toLowerCase())
+                                })
+                              : sortedStudios
+                            const hasNone = !studioSearch
+                            const total = (hasNone ? 1 : 0) + filteredItems.length
+                            if (e.key === 'ArrowDown') { e.preventDefault(); setStudioHoverIdx(prev => prev >= total - 1 ? 0 : prev + 1) }
+                            else if (e.key === 'ArrowUp') { e.preventDefault(); setStudioHoverIdx(prev => prev <= 0 ? total - 1 : prev - 1) }
+                            else if (e.key === 'Enter' && studioHoverIdx >= 0) {
+                              e.preventDefault()
+                              if (hasNone && studioHoverIdx === 0) { setStudioId(null); handleStudioDropClose() }
+                              else { const s = filteredItems[studioHoverIdx - (hasNone ? 1 : 0)]; if (s) { setStudioId(s.id); handleStudioDropClose() } }
+                            }
+                          }}
                           className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full"
                         />
                       </div>
@@ -601,7 +632,8 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                           <button
                             type="button"
                             onClick={() => { setStudioId(null); handleStudioDropClose() }}
-                            className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === null ? 'text-white font-bold' : 'text-gray-300'}`}
+                            {...(studioHoverIdx === 0 ? { 'data-studio-hover': '' } : {})}
+                            className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioHoverIdx === 0 ? 'bg-gray-700' : ''} ${studioId === null ? 'text-white font-bold' : 'text-gray-300'}`}
                           >
                             없음
                           </button>
@@ -612,17 +644,22 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                             const full = s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name
                             return full.toLowerCase().includes(studioSearch.toLowerCase())
                           })
-                          .map((s) => (
-                            <button
-                              key={s.id}
-                              type="button"
-                              onClick={() => { setStudioId(s.id); handleStudioDropClose() }}
-                              {...(studioId === s.id ? { 'data-studio-selected': '' } : {})}
-                              className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
-                            >
-                              {s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name}
-                            </button>
-                          ))}
+                          .map((s, i) => {
+                            const hoverOffset = studioSearch ? 0 : 1
+                            const isHover = studioHoverIdx === i + hoverOffset
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => { setStudioId(s.id); handleStudioDropClose() }}
+                                {...(studioId === s.id ? { 'data-studio-selected': '' } : {})}
+                                {...(isHover ? { 'data-studio-hover': '' } : {})}
+                                className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${isHover ? 'bg-gray-700' : ''} ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}
+                              >
+                                {s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name}
+                              </button>
+                            )
+                          })}
                       </div>
                     </div>
                   )}

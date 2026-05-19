@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Actor, Tag, Work } from '../types'
 import { actorsApi, actorTagsApi, shellApi } from '../api'
 import SearchBar, { type ActorSearchParams, DEFAULT_ACTOR_SEARCH } from '../components/SearchBar'
@@ -172,9 +173,9 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   }, [])
   useEffect(() => {
     if (!selected) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (tagCloud) setTagCloud(null); else setSelected(null) } }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => { if (tagCloud) setTagCloud(null); else setSelected(null) }
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [selected, tagCloud])
   useEffect(() => {
     if (!openEditId) return

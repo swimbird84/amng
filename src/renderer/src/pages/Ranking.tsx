@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Actor } from '../types'
 import { actorsApi, dashboardApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
@@ -67,9 +68,9 @@ export default function Ranking({ onNavigateToActor }: Props) {
 
   useEffect(() => {
     if (!rankModal) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setRankModal(null) }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => setRankModal(null)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [rankModal])
 
   useEffect(() => {

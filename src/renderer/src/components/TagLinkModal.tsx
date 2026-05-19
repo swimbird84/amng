@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Tag } from '../types'
 import {
   workTagsApi, actorTagsApi,
@@ -65,9 +66,9 @@ export default function TagLinkModal({ type, onClose }: Props) {
   }, [])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => onClose()
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [onClose])
 
   const childrenOf = (parentId: number) =>

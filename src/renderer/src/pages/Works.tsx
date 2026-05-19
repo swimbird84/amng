@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work, Tag, Actor, Studio } from '../types'
 import { worksApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi } from '../api'
 import SearchBar, { type WorkSearchParams, DEFAULT_WORK_SEARCH } from '../components/SearchBar'
@@ -142,9 +143,9 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
   }, [])
   useEffect(() => {
     if (!selected) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null) }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => setSelected(null)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [selected])
   useEffect(() => {
     loadTags()

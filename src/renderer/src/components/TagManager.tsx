@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type { TagCategory } from '../types'
 import { workTagCategoriesApi, actorTagCategoriesApi, workTagsApi, actorTagsApi } from '../api'
 
@@ -39,9 +40,9 @@ export default function TagCategoryManager({ type, onClose }: Props) {
   useEffect(() => { load() }, [type])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => onClose()
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [onClose])
 
   const handleAddCategory = async () => {

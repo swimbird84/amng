@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 import type { Tag, Actor } from '../types'
+import { pushEscHandler, popEscHandler } from '../escManager'
 
 type TagMode = 'and' | 'or'
 
@@ -185,6 +186,13 @@ function StarSelect({ value, onChange }: { value: number | ''; onChange: (v: num
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  useEffect(() => {
+    if (!open) return
+    const handler = () => setOpen(false)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
+  }, [open])
+
   const handleOpen = () => {
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect()
@@ -329,6 +337,16 @@ export default function SearchBar(props: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [advancedOpen, type])
 
+  useEffect(() => {
+    if (!advancedOpen) return
+    const handler = () => {
+      setAdvancedOpen(false)
+      localStorage.setItem(`${type}:advancedOpen`, 'false')
+    }
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
+  }, [advancedOpen, type])
+
   const toggleAdvanced = () => {
     const next = !advancedOpen
     if (next && advancedToggleRef.current && wrapperRef.current) {
@@ -353,7 +371,21 @@ export default function SearchBar(props: Props) {
   const [studioDropPos, setStudioDropPos] = useState({ top: 0, left: 0, width: 0 })
   const studioButtonRef = useRef<HTMLButtonElement>(null)
   const studioDropRef = useRef<HTMLDivElement>(null)
-  const closeStudioDrop = useCallback(() => { setStudioDropOpen(false); setStudioFilter('') }, [])
+  const [studioHoverIdx, setStudioHoverIdx] = useState(-1)
+  const closeStudioDrop = useCallback(() => { setStudioDropOpen(false); setStudioFilter(''); setStudioHoverIdx(-1) }, [])
+
+  useEffect(() => { setStudioHoverIdx(-1) }, [studioFilter])
+
+  useEffect(() => {
+    if (studioHoverIdx < 0) return
+    studioDropRef.current?.querySelector('[data-studio-hover]')?.scrollIntoView({ block: 'nearest' })
+  }, [studioHoverIdx])
+
+  useEffect(() => {
+    if (!studioDropOpen) return
+    pushEscHandler(closeStudioDrop)
+    return () => popEscHandler(closeStudioDrop)
+  }, [studioDropOpen, closeStudioDrop])
 
   useEffect(() => {
     if (!studioDropOpen) return
@@ -370,9 +402,23 @@ export default function SearchBar(props: Props) {
   const [actorDropOpen, setActorDropOpen] = useState(false)
   const [actorFilter, setActorFilter] = useState('')
   const [actorDropPos, setActorDropPos] = useState({ top: 0, left: 0, width: 0 })
+  const [actorHoverIdx, setActorHoverIdx] = useState(-1)
   const actorButtonRef = useRef<HTMLButtonElement>(null)
   const actorDropRef = useRef<HTMLDivElement>(null)
-  const closeActorDrop = useCallback(() => { setActorDropOpen(false); setActorFilter('') }, [])
+  const closeActorDrop = useCallback(() => { setActorDropOpen(false); setActorFilter(''); setActorHoverIdx(-1) }, [])
+
+  useEffect(() => { setActorHoverIdx(-1) }, [actorFilter])
+
+  useEffect(() => {
+    if (!actorDropOpen) return
+    pushEscHandler(closeActorDrop)
+    return () => popEscHandler(closeActorDrop)
+  }, [actorDropOpen, closeActorDrop])
+
+  useEffect(() => {
+    if (actorHoverIdx < 0) return
+    actorDropRef.current?.querySelector('[data-actor-hover]')?.scrollIntoView({ block: 'nearest' })
+  }, [actorHoverIdx])
 
   useEffect(() => {
     if (!actorDropOpen) return
@@ -428,6 +474,13 @@ export default function SearchBar(props: Props) {
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
+  }, [tagOpen])
+
+  useEffect(() => {
+    if (!tagOpen) return
+    const handler = () => setTagOpen(false)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [tagOpen])
 
   const handleToggleTagDropdown = () => {
@@ -590,15 +643,40 @@ export default function SearchBar(props: Props) {
           {actorDropOpen && (
             <div ref={actorDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: actorDropPos.top, left: actorDropPos.left, width: actorDropPos.width, maxHeight: '600px' }}>
               <div className="p-1.5 border-b border-gray-700">
-                <input type="text" value={actorFilter} onChange={e => setActorFilter(e.target.value)} placeholder="배우 검색" autoFocus className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full" />
+                <input
+                  type="text"
+                  value={actorFilter}
+                  onChange={e => setActorFilter(e.target.value)}
+                  placeholder="배우 검색"
+                  autoFocus
+                  className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full"
+                  onKeyDown={e => {
+                    const total = 2 + filteredActors.length
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      setActorHoverIdx(prev => prev >= total - 1 ? 0 : prev + 1)
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      setActorHoverIdx(prev => prev <= 0 ? total - 1 : prev - 1)
+                    } else if (e.key === 'Enter' && actorHoverIdx >= 0) {
+                      e.preventDefault()
+                      if (actorHoverIdx === 0) { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }
+                      else if (actorHoverIdx === 1) { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }
+                      else { const a = filteredActors[actorHoverIdx - 2]; if (a) { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() } }
+                    }
+                  }}
+                />
               </div>
               <div className="overflow-y-auto">
-                <button type="button" onClick={() => { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>배우 전체</button>
-                <button type="button" onClick={() => { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>배우 없음</button>
+                <button type="button" onClick={() => { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }} {...(actorHoverIdx === 0 ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorHoverIdx === 0 ? 'bg-gray-700' : ''} ${actorId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>배우 전체</button>
+                <button type="button" onClick={() => { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }} {...(actorHoverIdx === 1 ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorHoverIdx === 1 ? 'bg-gray-700' : ''} ${actorId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>배우 없음</button>
                 {filteredActors.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
-                {filteredActors.map(a => (
-                  <button key={a.id} type="button" onClick={() => { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() }} {...(actorId === a.id ? { 'data-actor-selected': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${actorId === a.id ? 'text-white font-bold' : 'text-gray-300'}`}>{a.name}</button>
-                ))}
+                {filteredActors.map((a, i) => {
+                  const isHover = actorHoverIdx === i + 2
+                  return (
+                    <button key={a.id} type="button" onClick={() => { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() }} {...(actorId === a.id ? { 'data-actor-selected': '' } : {})} {...(isHover ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${isHover ? 'bg-gray-700' : ''} ${actorId === a.id ? 'text-white font-bold' : 'text-gray-300'}`}>{a.name}</button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -732,15 +810,28 @@ export default function SearchBar(props: Props) {
                     {studioDropOpen && (
                       <div ref={studioDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: studioDropPos.top, left: studioDropPos.left, width: studioDropPos.width, maxHeight: '600px' }}>
                         <div className="p-1.5 border-b border-gray-700">
-                          <input type="text" value={studioFilter} onChange={e => setStudioFilter(e.target.value)} placeholder="레이블 검색" autoFocus className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full" />
+                          <input type="text" value={studioFilter} onChange={e => setStudioFilter(e.target.value)} placeholder="레이블 검색" autoFocus
+                            onKeyDown={e => {
+                              const total = 2 + filteredStudios.length
+                              if (e.key === 'ArrowDown') { e.preventDefault(); setStudioHoverIdx(prev => prev >= total - 1 ? 0 : prev + 1) }
+                              else if (e.key === 'ArrowUp') { e.preventDefault(); setStudioHoverIdx(prev => prev <= 0 ? total - 1 : prev - 1) }
+                              else if (e.key === 'Enter' && studioHoverIdx >= 0) {
+                                e.preventDefault()
+                                if (studioHoverIdx === 0) { onChange({ ...wParams!, studioId: '' } as never); closeStudioDrop() }
+                                else if (studioHoverIdx === 1) { onChange({ ...wParams!, studioId: -1 } as never); closeStudioDrop() }
+                                else { const s = filteredStudios[studioHoverIdx - 2]; if (s) { onChange({ ...wParams!, studioId: s.id } as never); closeStudioDrop() } }
+                              }
+                            }}
+                            className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full" />
                         </div>
                         <div className="overflow-y-auto">
-                          <button type="button" onClick={() => { onChange({ ...wParams, studioId: '' } as never); closeStudioDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>레이블 전체</button>
-                          <button type="button" onClick={() => { onChange({ ...wParams, studioId: -1 } as never); closeStudioDrop() }} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>레이블 없음</button>
+                          <button type="button" onClick={() => { onChange({ ...wParams, studioId: '' } as never); closeStudioDrop() }} {...(studioHoverIdx === 0 ? { 'data-studio-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioHoverIdx === 0 ? 'bg-gray-700' : ''} ${studioId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>레이블 전체</button>
+                          <button type="button" onClick={() => { onChange({ ...wParams, studioId: -1 } as never); closeStudioDrop() }} {...(studioHoverIdx === 1 ? { 'data-studio-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioHoverIdx === 1 ? 'bg-gray-700' : ''} ${studioId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>레이블 없음</button>
                           {filteredStudios.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
-                          {filteredStudios.map(s => {
+                          {filteredStudios.map((s, i) => {
                             const label = s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name
-                            return <button key={s.id} type="button" onClick={() => { onChange({ ...wParams, studioId: s.id } as never); closeStudioDrop() }} {...(studioId === s.id ? { 'data-studio-selected': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}>{label}</button>
+                            const isHover = studioHoverIdx === i + 2
+                            return <button key={s.id} type="button" onClick={() => { onChange({ ...wParams, studioId: s.id } as never); closeStudioDrop() }} {...(studioId === s.id ? { 'data-studio-selected': '' } : {})} {...(isHover ? { 'data-studio-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${isHover ? 'bg-gray-700' : ''} ${studioId === s.id ? 'text-white font-bold' : 'text-gray-300'}`}>{label}</button>
                           })}
                         </div>
                       </div>

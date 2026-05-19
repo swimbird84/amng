@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { pushEscHandler, popEscHandler } from './escManager'
 import { version } from '../../../package.json'
 import Works from './pages/Works'
 import Actors from './pages/Actors'
@@ -43,11 +44,9 @@ function App() {
 
   useEffect(() => {
     if (viewStack.length === 0) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setViewStack([])
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => setViewStack([])
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [viewStack.length])
 
   return (

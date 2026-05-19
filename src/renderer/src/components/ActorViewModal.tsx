@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Actor } from '../types'
 import { actorsApi, shellApi } from '../api'
 import ImagePreview from './ImagePreview'
@@ -33,9 +34,9 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
   onCloseRef.current = onClose
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => onCloseRef.current()
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [])
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
   const [workSortDir, setWorkSortDir] = useState<'asc' | 'desc'>('desc')

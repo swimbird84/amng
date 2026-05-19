@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { pushEscHandler, popEscHandler } from '../escManager'
 import type React from 'react'
 import { studiosApi, studioCodesApi, makersApi } from '../api'
 
@@ -112,9 +113,9 @@ export default function StudioManager({ onClose }: Props) {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => onClose()
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
   }, [onClose])
 
   const makerGroups = useMemo(() => {
