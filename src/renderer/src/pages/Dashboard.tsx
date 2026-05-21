@@ -174,6 +174,30 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="text-white font-bold text-base mb-3">{children}</h2>
 }
 
+// ===== 배우 분포 차트 =====
+type DistBinActor = { id: number; name: string; photo_path: string | null; avg_score: number; value: number; displayValue: string }
+const CUP_ORDER_CHART = ['A','B','C','D','E','F','G','H','I','J','K','L','M']
+const DIST_ITEMS = [
+  { key: 'avg_score',    label: '평점평균' },
+  { key: 'physScore',    label: '피지컬점수' },
+  { key: 'face',         label: '얼굴' },
+  { key: 'score_bust',   label: '가슴' },
+  { key: 'score_hip',    label: '엉덩이' },
+  { key: 'physical',     label: '몸매' },
+  { key: 'skin',         label: '피부' },
+  { key: 'acting',       label: '연기력' },
+  { key: 'sexy',         label: '섹기' },
+  { key: 'charm',        label: '매력' },
+  { key: 'technique',    label: '테크닉' },
+  { key: 'proportions',  label: '비율' },
+  { key: 'height',       label: '키 (cm)' },
+  { key: 'bust',         label: '바스트 (cm)' },
+  { key: 'waist',        label: '웨이스트 (cm)' },
+  { key: 'hip',          label: '힙 (cm)' },
+  { key: 'cup',          label: '컵' },
+] as const
+type DistItemKey = typeof DIST_ITEMS[number]['key']
+
 // ===== 메인 대시보드 =====
 export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props) {
   const [newWorks, setNewWorks] = useState<Work[]>([])
@@ -211,12 +235,22 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [ratingModal, setRatingModal] = useState<{ bucket: number; works: Work[] } | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
+  const [distItem, setDistItem] = useState<DistItemKey>(() => (localStorage.getItem('dashboard:distItem') as DistItemKey) || 'avg_score')
+  const [distActorPopup, setDistActorPopup] = useState<{ label: string; actors: DistBinActor[] } | null>(null)
+
   useEffect(() => {
     if (!ratingModal) return
     const handler = () => setRatingModal(null)
     pushEscHandler(handler)
     return () => popEscHandler(handler)
   }, [ratingModal])
+
+  useEffect(() => {
+    if (!distActorPopup) return
+    const handler = () => setDistActorPopup(null)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
+  }, [distActorPopup])
 
   useEffect(() => {
     dashboardApi.newWorks().then((d) => setNewWorks(d as Work[]))
@@ -315,6 +349,69 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
       )
   , [debutAgeDist, selectedDebutAge])
 
+  const { distBins, distAvg, distTotal, maxCount, distAvgPercent } = useMemo(() => {
+    type Bin = { label: string; lo: number; hi: number; actors: DistBinActor[] }
+    type PhysActor = ActorPhysicalData & { avg_score: number; work_count: number; physScore: number }
+    const SCORE_DETAIL_KEYS = ['face','score_bust','score_hip','physical','skin','acting','sexy','charm','technique','proportions']
+    const PROFILE_CM_KEYS = ['height','bust','waist','hip']
+    const isCup = distItem === 'cup'
+    const isPhysScore = distItem === 'physScore'
+    const isAvgScore = distItem === 'avg_score'
+    const isScoreDetail = SCORE_DETAIL_KEYS.includes(distItem)
+    const isProfileCm = PROFILE_CM_KEYS.includes(distItem)
+
+    let actors: DistBinActor[] = []
+    if (isAvgScore) {
+      actors = scoreDist.map(a => ({ id: a.id, name: a.name, photo_path: (a as any).photo_path ?? null, avg_score: a.avg_score, value: a.avg_score, displayValue: a.avg_score.toFixed(2) }))
+    } else if (isPhysScore) {
+      actors = (physicalDist as PhysActor[]).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: a.physScore, displayValue: a.physScore.toFixed(2) }))
+    } else if (isCup) {
+      actors = (physicalDist as PhysActor[]).filter(a => a.cup && CUP_ORDER_CHART.includes(a.cup)).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: CUP_ORDER_CHART.indexOf(a.cup!), displayValue: a.cup! }))
+    } else {
+      const getVal = (a: PhysActor): number | null => {
+        if (distItem === 'face') return a.face; if (distItem === 'score_bust') return a.score_bust; if (distItem === 'score_hip') return a.score_hip
+        if (distItem === 'physical') return a.physical; if (distItem === 'skin') return a.skin; if (distItem === 'acting') return a.acting
+        if (distItem === 'sexy') return a.sexy; if (distItem === 'charm') return a.charm; if (distItem === 'technique') return a.technique
+        if (distItem === 'proportions') return a.proportions; if (distItem === 'height') return a.height; if (distItem === 'bust') return a.bust
+        if (distItem === 'waist') return a.waist; if (distItem === 'hip') return a.hip; return null
+      }
+      actors = (physicalDist as PhysActor[]).filter(a => getVal(a) !== null).map(a => {
+        const value = getVal(a)!
+        return { id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value, displayValue: isProfileCm ? `${value}cm` : String(value) }
+      })
+    }
+
+    if (actors.length === 0) return { distBins: [], distAvg: null, distTotal: 0, maxCount: 0, distAvgPercent: null }
+    const avg = actors.reduce((s, a) => s + a.value, 0) / actors.length
+    let bins: Bin[] = []
+
+    if (isCup) {
+      const usedIdx = actors.map(a => a.value)
+      const minIdx = Math.min(...usedIdx), maxIdx = Math.max(...usedIdx)
+      for (let i = minIdx; i <= maxIdx; i++) bins.push({ label: CUP_ORDER_CHART[i], lo: i, hi: i + 1, actors: [] })
+      for (const a of actors) { const idx = a.value - minIdx; if (idx >= 0 && idx < bins.length) bins[idx].actors.push(a) }
+    } else {
+      const step = (isAvgScore || isPhysScore) ? 0.5 : isScoreDetail ? 1 : 2
+      const vals = actors.map(a => a.value)
+      const lo = isScoreDetail ? 0 : Math.floor(Math.min(...vals) / step) * step
+      const hiExcl = isScoreDetail ? 13 + step : Math.floor(Math.max(...vals) / step) * step + step
+      for (let s = lo; s < hiExcl - 0.0001; s = Math.round((s + step) * 10000) / 10000) {
+        const e = Math.round((s + step) * 10000) / 10000
+        const label = isScoreDetail ? String(Math.round(s)) : step < 1 ? s.toFixed(1) : `${Math.round(s)}`
+        bins.push({ label, lo: s, hi: e, actors: [] })
+      }
+      for (const a of actors) {
+        const idx = Math.min(Math.floor((a.value - lo) / step + 0.0001), bins.length - 1)
+        if (idx >= 0) bins[idx].actors.push(a)
+      }
+    }
+
+    for (const bin of bins) bin.actors.sort((a, b) => b.value - a.value || b.avg_score - a.avg_score)
+    const maxCount = Math.max(...bins.map(b => b.actors.length), 1)
+    const distAvgPercent = !isCup && bins.length > 0 ? Math.max(0, Math.min(1, (avg - bins[0].lo) / (bins[bins.length - 1].hi - bins[0].lo))) : null
+    return { distBins: bins, distAvg: avg, distTotal: actors.length, maxCount, distAvgPercent }
+  }, [distItem, scoreDist, physicalDist])
+
   const ratingBuckets = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
   const ratingCountMap = new Map(ratingDist.map((r) => [r.bucket, r.count]))
   const today = new Date().toISOString().slice(0, 10)
@@ -376,6 +473,68 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             </div>
           ) : (
             <p className="text-gray-500 text-sm">데뷔일이 등록된 배우가 없습니다</p>
+          )}
+        </div>
+
+        {/* 배우 분포 */}
+        <div>
+          <div className="flex items-center gap-3 mb-3">
+            <h2 className="text-white font-bold text-base">배우 분포</h2>
+            <select
+              value={distItem}
+              onChange={e => { setDistItem(e.target.value as DistItemKey); localStorage.setItem('dashboard:distItem', e.target.value) }}
+              className="bg-gray-700 text-white text-xs px-2 py-1 rounded"
+            >
+              {DIST_ITEMS.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+            </select>
+            <span className="text-xs text-gray-500">집계 대상 {distTotal}명</span>
+            {distAvg !== null && <span className="text-xs text-yellow-400">평균 {distAvg.toFixed(2)}</span>}
+          </div>
+          {distBins.length > 0 ? (
+            <div>
+              <div className="relative" style={{ height: 180 }}>
+                {/* 평균선 */}
+                {distAvgPercent !== null && (
+                  <div className="absolute top-0 bottom-0 pointer-events-none z-10" style={{ left: `${distAvgPercent * 100}%` }}>
+                    <div className="h-full border-l-2 border-dashed border-yellow-400 opacity-70" />
+                  </div>
+                )}
+                {/* 막대 */}
+                <div className="absolute inset-0 flex gap-px">
+                  {distBins.map((bin, i) => {
+                    const pct = bin.actors.length > 0 ? (bin.actors.length / maxCount) * 100 : 0
+                    const isScoreDetail = !['avg_score','physScore','height','bust','waist','hip','cup'].includes(distItem)
+                    const itemLabel = DIST_ITEMS.find(d => d.key === distItem)?.label ?? ''
+                    const rangeStr = distItem === 'cup' ? bin.label : isScoreDetail ? `${bin.label}점` : `${bin.label} ~ ${distBins[i + 1]?.label ?? '+'}`
+                    return (
+                      <div
+                        key={i}
+                        className="relative flex-1 h-full group cursor-pointer"
+                        onClick={() => bin.actors.length > 0 && setDistActorPopup({ label: `${itemLabel} ${rangeStr} (${bin.actors.length}명)`, actors: bin.actors })}
+                      >
+                        <div
+                          className={`absolute bottom-0 left-0 right-0 transition-colors ${bin.actors.length > 0 ? 'bg-blue-600 group-hover:bg-blue-500' : 'bg-gray-700/20'}`}
+                          style={{ height: `${pct}%` }}
+                        />
+                        {bin.actors.length > 0 && (
+                          <div className="absolute left-0 right-0 text-center text-[9px] text-gray-400 leading-none" style={{ bottom: `calc(${pct}% + 2px)` }}>
+                            {bin.actors.length}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              {/* X축 레이블 */}
+              <div className="flex gap-px mt-1">
+                {distBins.map((bin, i) => (
+                  <div key={i} className="flex-1 text-center text-[9px] text-gray-500 truncate">{bin.label}</div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">데이터가 없습니다</p>
           )}
         </div>
 
@@ -890,6 +1049,34 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             ) : (
               <p className="text-gray-500 text-sm">작품이 없습니다</p>
             )}
+          </div>
+        </div>
+      </div>
+    )}
+    {/* 배우 분포 팝업 */}
+    {distActorPopup && (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setDistActorPopup(null)}>
+        <div className="bg-gray-800 rounded-lg w-[480px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 shrink-0">
+            <div>
+              <h3 className="text-white font-bold text-sm">{distActorPopup.label}</h3>
+            </div>
+            <button onClick={() => setDistActorPopup(null)} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-2 space-y-0.5">
+            {distActorPopup.actors.map((a, i) => (
+              <div
+                key={a.id}
+                onClick={() => { onNavigateToActor(a.id); setDistActorPopup(null) }}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700 cursor-pointer"
+              >
+                <span className="text-gray-500 text-xs w-5 text-right shrink-0">{i + 1}</span>
+                <ImagePreview path={a.photo_path} alt={a.name} className="w-8 h-8 rounded shrink-0" objectPosition="center 10%" />
+                <span className="text-white text-sm flex-1 truncate">{a.name}</span>
+                <span className="text-blue-400 text-xs shrink-0">{a.displayValue}</span>
+                <span className="text-yellow-400 text-xs shrink-0">{a.avg_score.toFixed(2)}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

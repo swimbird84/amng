@@ -6,7 +6,7 @@ import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
 import DateInput from './DateInput'
 
-const SCORE_GRADE_LIMITS: Record<number, number> = { 11: 5, 12: 3, 13: 1 }
+import { useScoreDemote, ScoreDemoteModal, SCORE_GRADE_LIMITS, type ActorScoreSnapshot, type PendingDemotion } from './ScoreDemoteModal'
 interface Props {
   actor?: Actor & { tags?: Tag[] }
   onSave: () => void
@@ -48,6 +48,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   const [scores, setScores] = useState<ActorScores>(
     actor?.scores ? { ...actor.scores, charm: actor.scores.charm ?? 0, technique: actor.scores.technique ?? 0, proportions: actor.scores.proportions ?? 0 } : { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
   )
+  const [scoreExcluded, setScoreExcluded] = useState(actor?.score_excluded ?? 0)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(actor?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(actor?.rep_tags?.map((t) => t.id) || [])
   const [allTags, setAllTags] = useState<Tag[]>([])
@@ -71,14 +72,34 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     if (path) setPhotoPath(path)
   }
 
+  const demote = useScoreDemote()
+
   const handleScoreChange = async (key: keyof ActorScores, value: number) => {
     if (value >= 11) {
-      const counts = await actorsApi.scoreGradeCounts(actor?.id)
-      const itemCounts = counts[key]
-      const limit = SCORE_GRADE_LIMITS[value]
-      if ((itemCounts?.[value]?.count ?? 0) >= limit) {
-        const label = SCORE_FIELDS.find(f => f.key === key)?.label ?? key
-        alert(`[${label}] ${value}점 정원이 가득 찼습니다 (한도: ${limit}명)\n현재 ${value}점 배우: ${itemCounts?.[value]?.names || '-'}`)
+      const physData = await actorsApi.physicalData() as ActorScoreSnapshot[]
+      const actorsAtTier = physData.filter(a => a.id !== (actor?.id ?? null) && (
+        key === 'bust' ? a.score_bust : key === 'hip' ? a.score_hip : a[key as keyof ActorScoreSnapshot]
+      ) === value)
+      if ((actorsAtTier.length as number) >= SCORE_GRADE_LIMITS[value]) {
+        demote.start(
+          key,
+          value,
+          { id: actor?.id ?? null, name: name || '새 배우', photo_path: actor?.photo_path ?? null },
+          physData,
+          async (changes: PendingDemotion[]) => {
+            for (const change of changes) {
+              const a = physData.find(x => x.id === change.actorId)!
+              const scores: ActorScores = {
+                face: a.face, bust: a.score_bust, hip: a.score_hip,
+                physical: a.physical, skin: a.skin, acting: a.acting,
+                sexy: a.sexy, charm: a.charm, technique: a.technique, proportions: a.proportions,
+                [change.field]: change.newScore,
+              }
+              await actorsApi.update(change.actorId, { scores })
+            }
+            setScores(prev => ({ ...prev, [key]: value }))
+          }
+        )
         return
       }
     }
@@ -114,6 +135,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
       cup: cup.trim() || null,
       phys_arbitrary: physArbitrary.size > 0 ? [...physArbitrary].join('|') : null,
       comment: comment.trim() || null,
+      score_excluded: scoreExcluded,
       scores,
       tag_ids: selectedTagIds,
       rep_tag_ids: repTagIds,
@@ -152,6 +174,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   }
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg w-[840px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <button
@@ -309,6 +332,15 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                   </div>
                 ))}
               </div>
+              <label className="flex items-center gap-1.5 mt-2 cursor-pointer select-none w-fit">
+                <input
+                  type="checkbox"
+                  checked={!!scoreExcluded}
+                  onChange={e => setScoreExcluded(e.target.checked ? 1 : 0)}
+                  className="accent-blue-500"
+                />
+                <span className="text-xs text-gray-400">점수제외</span>
+              </label>
             </div>
 
           </div>
@@ -342,5 +374,14 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
         </div>
       </div>
     </div>
+    {demote.step && demote.field && (
+      <ScoreDemoteModal
+        step={demote.step}
+        field={demote.field}
+        onSelect={demote.handleSelect}
+        onCancel={demote.cancel}
+      />
+    )}
+    </>
   )
 }

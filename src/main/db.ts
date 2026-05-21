@@ -210,6 +210,9 @@ export function initDatabase(): void {
   if (!actorCols.includes('cup')) {
     db.prepare('ALTER TABLE actors ADD COLUMN cup TEXT').run()
   }
+  if (!actorCols.includes('score_excluded')) {
+    db.prepare('ALTER TABLE actors ADD COLUMN score_excluded INTEGER DEFAULT 0').run()
+  }
 
   // studios color 컬럼 추가 마이그레이션
   const studioCols = (db.prepare("PRAGMA table_info(studios)").all() as { name: string }[]).map(c => c.name)

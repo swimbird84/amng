@@ -136,6 +136,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
       params.sortDir = sortDir
     }
     if (favoriteOnly) params.favoriteOnly = true
+    if (search.scoreExcluded) params.scoreExcluded = true
     const list = await actorsApi.list(params) as Actor[]
     setActors(list)
   }, [search, sortBy, sortDir, favoriteOnly])

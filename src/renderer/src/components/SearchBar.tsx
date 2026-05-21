@@ -60,6 +60,7 @@ interface ActorSearchParams {
   waistNull: boolean
   hipNull: boolean
   cupNull: boolean
+  scoreExcluded: boolean
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
@@ -83,6 +84,7 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   waistFrom: '', waistTo: '', hipFrom: '', hipTo: '',
   cupFrom: '', cupTo: '',
   heightNull: false, bustNull: false, waistNull: false, hipNull: false, cupNull: false,
+  scoreExcluded: false,
 }
 
 export type { WorkSearchParams, ActorSearchParams, TagMode }
@@ -608,6 +610,7 @@ export default function SearchBar(props: Props) {
     if (ap.hipFrom !== '' || ap.hipTo !== '') conditions.push({ label: `힙: ${ap.hipFrom !== '' ? ap.hipFrom : '?'}~${ap.hipTo !== '' ? ap.hipTo : '?'}`, onClear: () => onChange({ ...ap, hipFrom: '', hipTo: '' } as never) })
     if (ap.cupNull) conditions.push({ label: '컵없음', onClear: () => onChange({ ...ap, cupNull: false } as never) })
     if (ap.cupFrom || ap.cupTo) conditions.push({ label: `컵: ${ap.cupFrom || '?'}~${ap.cupTo || '?'}`, onClear: () => onChange({ ...ap, cupFrom: '', cupTo: '' } as never) })
+    if (ap.scoreExcluded) conditions.push({ label: '점수제외', onClear: () => onChange({ ...ap, scoreExcluded: false } as never) })
   }
 
   // ── render ────────────────────────────────────────────────────────
@@ -667,9 +670,11 @@ export default function SearchBar(props: Props) {
                   }}
                 />
               </div>
-              <div className="overflow-y-auto">
+              <div className="border-b border-gray-700">
                 <button type="button" onClick={() => { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }} {...(actorHoverIdx === 0 ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorHoverIdx === 0 ? 'bg-gray-700' : ''} ${actorId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>배우 전체</button>
                 <button type="button" onClick={() => { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }} {...(actorHoverIdx === 1 ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorHoverIdx === 1 ? 'bg-gray-700' : ''} ${actorId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>배우 없음</button>
+              </div>
+              <div className="overflow-y-auto">
                 {filteredActors.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
                 {filteredActors.map((a, i) => {
                   const isHover = actorHoverIdx === i + 2
@@ -681,6 +686,19 @@ export default function SearchBar(props: Props) {
             </div>
           )}
         </div>
+      )}
+
+      {/* score_excluded filter (actors only) */}
+      {type === 'actors' && aParams && (
+        <label className="flex items-center gap-1 cursor-pointer select-none shrink-0 bg-gray-700 px-2 py-1.5 rounded">
+          <input
+            type="checkbox"
+            checked={aParams.scoreExcluded}
+            onChange={e => onChange({ ...aParams, scoreExcluded: e.target.checked } as never)}
+            className="accent-blue-500"
+          />
+          <span className="text-sm text-gray-300">제외</span>
+        </label>
       )}
 
       {/* tag button */}
@@ -824,9 +842,11 @@ export default function SearchBar(props: Props) {
                             }}
                             className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full" />
                         </div>
-                        <div className="overflow-y-auto">
+                        <div className="border-b border-gray-700">
                           <button type="button" onClick={() => { onChange({ ...wParams, studioId: '' } as never); closeStudioDrop() }} {...(studioHoverIdx === 0 ? { 'data-studio-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioHoverIdx === 0 ? 'bg-gray-700' : ''} ${studioId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>레이블 전체</button>
                           <button type="button" onClick={() => { onChange({ ...wParams, studioId: -1 } as never); closeStudioDrop() }} {...(studioHoverIdx === 1 ? { 'data-studio-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${studioHoverIdx === 1 ? 'bg-gray-700' : ''} ${studioId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>레이블 없음</button>
+                        </div>
+                        <div className="overflow-y-auto">
                           {filteredStudios.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
                           {filteredStudios.map((s, i) => {
                             const label = s.maker_name && s.maker_name !== s.name ? `${s.maker_name} ${s.name}` : s.name

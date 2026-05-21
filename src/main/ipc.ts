@@ -409,6 +409,7 @@ export function registerIpcHandlers(): void {
     waistNull?: boolean
     hipNull?: boolean
     cupNull?: boolean
+    scoreExcluded?: boolean
   }) => {
     let sql = `
       WITH stats AS (
@@ -526,6 +527,7 @@ export function registerIpcHandlers(): void {
     if (params?.waistNull) { conditions.push('a.waist IS NULL') }
     if (params?.hipNull) { conditions.push('a.hip IS NULL') }
     if (params?.cupNull) { conditions.push("(a.cup IS NULL OR TRIM(a.cup) = '')") }
+    if (params?.scoreExcluded) { conditions.push('COALESCE(a.score_excluded, 0) = 0') }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')
@@ -673,15 +675,16 @@ export function registerIpcHandlers(): void {
     cup?: string | null
     phys_arbitrary?: string | null
     comment?: string | null
+    score_excluded?: number
     scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
     const result = db().prepare(`
-      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, comment)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, comment, score_excluded)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(data.name, data.photo_path || null, data.birthday || null, data.debut_date || null,
-      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.comment || null)
+      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.comment || null, data.score_excluded ?? 0)
     const actorId = result.lastInsertRowid
 
     const s = data.scores
@@ -718,6 +721,7 @@ export function registerIpcHandlers(): void {
     birthday?: string
     debut_date?: string | null
     is_favorite?: number
+    score_excluded?: number
     height?: number | null
     bust?: number | null
     waist?: number | null
@@ -737,6 +741,7 @@ export function registerIpcHandlers(): void {
     if (data.birthday !== undefined) { fields.push('birthday = ?'); values.push(data.birthday) }
     if (data.debut_date !== undefined) { fields.push('debut_date = ?'); values.push(data.debut_date) }
     if (data.is_favorite !== undefined) { fields.push('is_favorite = ?'); values.push(data.is_favorite) }
+    if (data.score_excluded !== undefined) { fields.push('score_excluded = ?'); values.push(data.score_excluded) }
     if (data.height !== undefined) { fields.push('height = ?'); values.push(data.height) }
     if (data.bust !== undefined) { fields.push('bust = ?'); values.push(data.bust) }
     if (data.waist !== undefined) { fields.push('waist = ?'); values.push(data.waist) }
@@ -1673,6 +1678,7 @@ export function registerIpcHandlers(): void {
       FROM actors a
       LEFT OUTER JOIN stats ON 1=1
       LEFT JOIN actor_scores s ON s.actor_id = a.id
+      WHERE COALESCE(a.score_excluded, 0) = 0
       ORDER BY avg_score ASC, ratio_score ASC
     `).all()
   })
@@ -1697,6 +1703,7 @@ export function registerIpcHandlers(): void {
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
+        AND COALESCE(a.score_excluded, 0) = 0
     `).all()
   })
 
@@ -1780,7 +1787,7 @@ export function registerIpcHandlers(): void {
     return db().prepare(`
       SELECT
         a.id, a.name, a.photo_path,
-        a.height, a.bust, a.waist, a.hip, a.cup, a.phys_arbitrary,
+        a.height, a.bust, a.waist, a.hip, a.cup, a.phys_arbitrary, a.score_excluded,
         COALESCE(s.face, 0)        AS face,
         COALESCE(s.bust, 0)        AS score_bust,
         COALESCE(s.hip, 0)         AS score_hip,

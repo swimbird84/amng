@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import { actorsApi } from '../api'
 import ImagePreview from './ImagePreview'
 
-const SCORE_GRADE_LIMITS: Record<number, number> = { 11: 5, 12: 3, 13: 1 }
+import { useScoreDemote, ScoreDemoteModal, SCORE_GRADE_LIMITS, type ActorScoreSnapshot, type PendingDemotion } from './ScoreDemoteModal'
 const SCORE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 import type { ActorScores } from '../types'
 import CardTooltip, { type TooltipState } from './CardTooltip'
@@ -44,6 +44,7 @@ export interface ActorPhysicalData {
   hip: number | null
   cup: string | null
   phys_arbitrary?: string | null
+  score_excluded: number
   face: number
   score_bust: number
   score_hip: number
@@ -294,10 +295,31 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   const [editingProfile, setEditingProfile] = useState<{ actorId: number; key: ProfileField } | null>(null)
   const [profileInputValue, setProfileInputValue] = useState('')
   const [nameSearch, setNameSearch] = useState('')
+  const [focusMode, setFocusMode] = useState<'fixed' | 'track'>('fixed')
+  const [excludeMode, setExcludeMode] = useState<'include' | 'exclude'>(
+    (localStorage.getItem('ratingCalc:excludeMode') as 'include' | 'exclude') || 'include'
+  )
+  const listRef = useRef<HTMLDivElement>(null)
+  const scrollTopRef = useRef(0)
+  const lastEditedActorIdRef = useRef<number | null>(null)
+  const demote = useScoreDemote()
 
   useEffect(() => {
     actorsApi.physicalData().then(d => setActors(d as ActorPhysicalData[]))
   }, [])
+
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      if (focusMode === 'track' && lastEditedActorIdRef.current != null) {
+        const card = el.querySelector(`[data-actor-id="${lastEditedActorIdRef.current}"]`)
+        card?.scrollIntoView({ block: 'nearest' })
+      } else {
+        el.scrollTop = scrollTopRef.current
+      }
+    })
+  }, [actors, focusMode])
 
   useEffect(() => {
     const handler = () => onClose()
@@ -305,15 +327,44 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
     return () => popEscHandler(handler)
   }, [onClose])
 
+  const saveScore = async (actorId: number, key: keyof ActorScores, value: number, actorsData: ActorPhysicalData[]) => {
+    const a = actorsData.find(x => x.id === actorId)
+    if (!a) return
+    const scores: ActorScores = {
+      face: a.face, bust: a.score_bust, hip: a.score_hip,
+      physical: a.physical, skin: a.skin, acting: a.acting,
+      sexy: a.sexy, charm: a.charm, technique: a.technique, proportions: a.proportions,
+      [key]: value,
+    }
+    await actorsApi.update(actorId, { scores })
+  }
+
   const handleScoreChange = async (actorId: number, key: keyof ActorScores, value: number) => {
     setEditingCell(null)
     if (value >= 11) {
-      const counts = await actorsApi.scoreGradeCounts(actorId)
-      const itemCounts = counts[key]
-      const limit = SCORE_GRADE_LIMITS[value]
-      if ((itemCounts?.[value]?.count ?? 0) >= limit) {
-        const label = EDIT_SCORE_FIELDS.find(f => f.apiKey === key)?.label ?? key
-        alert(`[${label}] ${value}점 정원이 가득 찼습니다 (한도: ${limit}명)\n현재 ${value}점 배우: ${itemCounts?.[value]?.names || '-'}`)
+      const actorsAtTier = actors.filter(a => a.id !== actorId && (
+        key === 'bust' ? a.score_bust : key === 'hip' ? a.score_hip : a[key as keyof ActorPhysicalData]
+      ) === value)
+      if (actorsAtTier.length >= SCORE_GRADE_LIMITS[value]) {
+        const actor = actors.find(a => a.id === actorId)
+        if (!actor) return
+        demote.start(
+          key,
+          value,
+          { id: actorId, name: actor.name, photo_path: actor.photo_path },
+          actors as ActorScoreSnapshot[],
+          async (changes: PendingDemotion[]) => {
+            for (const change of changes) {
+              await saveScore(change.actorId, change.field, change.newScore, actors)
+            }
+            await saveScore(actorId, key, value, actors)
+            lastEditedActorIdRef.current = actorId
+            scrollTopRef.current = listRef.current?.scrollTop ?? 0
+            const data = await actorsApi.physicalData()
+            setActors(data as ActorPhysicalData[])
+            window.dispatchEvent(new Event('actorScoresUpdated'))
+          }
+        )
         return
       }
     }
@@ -326,9 +377,19 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
       [key]: value,
     }
     await actorsApi.update(actorId, { scores })
+    lastEditedActorIdRef.current = actorId
+    scrollTopRef.current = listRef.current?.scrollTop ?? 0
     const data = await actorsApi.physicalData()
     setActors(data as ActorPhysicalData[])
     window.dispatchEvent(new Event('actorScoresUpdated'))
+  }
+
+  const handleDeleteActor = async (actorId: number, actorName: string) => {
+    if (!confirm(`"${actorName}" 배우를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return
+    scrollTopRef.current = listRef.current?.scrollTop ?? 0
+    await actorsApi.delete(actorId)
+    const data = await actorsApi.physicalData()
+    setActors(data as ActorPhysicalData[])
   }
 
   const handleProfileChange = async (actorId: number, key: ProfileField, rawValue: string) => {
@@ -351,6 +412,8 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
       updateData.phys_arbitrary = [...arSet].join('|')
     }
     await actorsApi.update(actorId, updateData)
+    lastEditedActorIdRef.current = actorId
+    scrollTopRef.current = listRef.current?.scrollTop ?? 0
     const data = await actorsApi.physicalData()
     setActors(data as ActorPhysicalData[])
   }
@@ -387,19 +450,25 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
         : false
     const effectiveDir = isNeg ? (rankSortDir === 'desc' ? 'asc' : 'desc') : rankSortDir
 
+    const isProfileSort = ['height', 'bust', 'waist', 'hip', 'cup'].includes(rankBy)
+
     return actors
       .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
-      .filter(a => a.physScore != null && getVal(a) != null)
+      .filter(a => a.physScore != null && (isProfileSort || getVal(a) != null))
+      .filter(a => excludeMode === 'include' || !a.score_excluded)
       .sort((a, b) => {
-        const av = getVal(a)!
-        const bv = getVal(b)!
+        const av = getVal(a)
+        const bv = getVal(b)
+        if (av == null && bv == null) return 0
+        if (av == null) return 1
+        if (bv == null) return -1
         const primary = effectiveDir === 'desc' ? bv - av : av - bv
         if (primary !== 0) return primary
         const secondary = rankSortDir === 'desc' ? avgScore(b) - avgScore(a) : avgScore(a) - avgScore(b)
         if (secondary !== 0) return secondary
         return rankSortDir === 'desc' ? b.work_count - a.work_count : a.work_count - b.work_count
       })
-  }, [actors, settings, stats, rankSortDir, rankBy])
+  }, [actors, settings, stats, rankSortDir, rankBy, excludeMode])
 
   const update = (s: PhysicalSettings) => {
     setSettings(s)
@@ -587,15 +656,37 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
               >
                 {rankSortDir === 'desc' ? '↓' : '↑'}
               </button>
-              <input
-                type="text"
-                value={nameSearch}
-                onChange={e => setNameSearch(e.target.value)}
-                placeholder="배우 이름"
-                className="ml-auto bg-gray-700 text-white text-xs px-2 py-0.5 rounded w-56 placeholder-gray-500"
-              />
+              <div className="flex">
+                <button
+                  onClick={() => { setExcludeMode('include'); localStorage.setItem('ratingCalc:excludeMode', 'include') }}
+                  className={`text-xs px-2 py-0.5 rounded-l border-r border-gray-600 ${excludeMode === 'include' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >포함</button>
+                <button
+                  onClick={() => { setExcludeMode('exclude'); localStorage.setItem('ratingCalc:excludeMode', 'exclude') }}
+                  className={`text-xs px-2 py-0.5 rounded-r ${excludeMode === 'exclude' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >제외</button>
+              </div>
+              <div className="ml-auto flex items-center gap-1.5">
+                <div className="flex">
+                  <button
+                    onClick={() => setFocusMode('fixed')}
+                    className={`text-xs px-2 py-0.5 rounded-l border-r border-gray-600 ${focusMode === 'fixed' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >고정</button>
+                  <button
+                    onClick={() => setFocusMode('track')}
+                    className={`text-xs px-2 py-0.5 rounded-r ${focusMode === 'track' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >추적</button>
+                </div>
+                <input
+                  type="text"
+                  value={nameSearch}
+                  onChange={e => setNameSearch(e.target.value)}
+                  placeholder="배우 이름"
+                  className="bg-gray-700 text-white text-xs px-2 py-0.5 rounded w-40 placeholder-gray-500"
+                />
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-1 [scrollbar-gutter:stable]">
+            <div ref={listRef} className="flex-1 overflow-y-auto space-y-1 [scrollbar-gutter:stable]">
               {ranked
                 .map((a, i) => ({ ...a, _rank: i }))
                 .filter(a => !nameSearch || a.name.toLowerCase().includes(nameSearch.toLowerCase()))
@@ -603,14 +694,30 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                 const avgScore = (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 13
                 const _ar = new Set((a.phys_arbitrary ?? '').split('|').filter(Boolean))
                 return (
-                  <div key={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
+                  <div key={a.id} data-actor-id={a.id} className="flex items-stretch gap-2 bg-gray-700/60 rounded pl-1 pr-3 py-2">
                     <span className="text-gray-400 text-sm w-5 text-right shrink-0 self-center">{rankSortDir === 'desc' ? a._rank + 1 : ranked.length - a._rank}</span>
                     <div onClick={() => onViewActor?.(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} className={`w-[90px] h-[90px] shrink-0 rounded overflow-hidden ${onViewActor ? 'cursor-pointer' : ''}`}>
                       <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-full" objectPosition="center 10%" />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
                       <div className="flex items-center justify-between gap-1">
-                        <p className="text-white text-sm font-bold truncate pl-1.5">{a.name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0 pl-1.5">
+                          <p className="text-white text-sm font-bold truncate">{a.name}</p>
+                          <label className="flex items-center gap-0.5 cursor-pointer select-none text-xs text-gray-400 hover:text-gray-200 shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={!!a.score_excluded}
+                              onChange={async (e) => {
+                                const val = e.target.checked ? 1 : 0
+                                await actorsApi.update(a.id, { score_excluded: val })
+                                const data = await actorsApi.physicalData()
+                                setActors(data as ActorPhysicalData[])
+                              }}
+                              className="accent-blue-500"
+                            />
+                            점수제외
+                          </label>
+                        </div>
                         <p className="text-yellow-400 text-xs font-bold shrink-0 leading-tight">{avgScore.toFixed(2)}점</p>
                       </div>
                       <div className="flex items-center justify-between gap-2">
@@ -661,7 +768,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                             <div key={label} className="w-9 text-center text-gray-500 text-xs leading-tight">{label}</div>
                           ))}
                         </div>
-                        <div className="flex gap-0.5">
+                        <div className="flex gap-0.5 items-center">
                           {EDIT_SCORE_FIELDS.map(({ label, getValue, apiKey }) => {
                             const isEditing = editingCell?.actorId === a.id && editingCell?.key === apiKey
                             const currentVal = getValue(a)
@@ -686,6 +793,10 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                               </button>
                             )
                           })}
+                          <button
+                            onClick={() => handleDeleteActor(a.id, a.name)}
+                            className="ml-auto bg-gray-600 hover:bg-gray-500 text-gray-400 hover:text-gray-200 text-xs px-2 py-0.5 rounded shrink-0"
+                          >삭제</button>
                         </div>
                       </div>
                     </div>
@@ -700,6 +811,14 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
         </div>
       </div>
       {tooltip && <CardTooltip tooltip={tooltip} />}
+      {demote.step && demote.field && (
+        <ScoreDemoteModal
+          step={demote.step}
+          field={demote.field}
+          onSelect={demote.handleSelect}
+          onCancel={demote.cancel}
+        />
+      )}
     </div>
   )
 }
