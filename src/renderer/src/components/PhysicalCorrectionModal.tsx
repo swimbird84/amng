@@ -294,18 +294,31 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   const [editingCell, setEditingCell] = useState<{ actorId: number; key: keyof ActorScores } | null>(null)
   const [editingProfile, setEditingProfile] = useState<{ actorId: number; key: ProfileField } | null>(null)
   const [profileInputValue, setProfileInputValue] = useState('')
-  const [nameSearch, setNameSearch] = useState('')
-  const [focusMode, setFocusMode] = useState<'fixed' | 'track'>('fixed')
+  const [nameSearch, setNameSearch] = useState(() => localStorage.getItem('ratingCalc:nameSearch') ?? '')
+  const [focusMode, setFocusMode] = useState<'fixed' | 'track'>(
+    (localStorage.getItem('ratingCalc:focusMode') as 'fixed' | 'track') || 'fixed'
+  )
   const [excludeMode, setExcludeMode] = useState<'include' | 'exclude'>(
     (localStorage.getItem('ratingCalc:excludeMode') as 'include' | 'exclude') || 'include'
   )
   const listRef = useRef<HTMLDivElement>(null)
-  const scrollTopRef = useRef(0)
+  const scrollTopRef = useRef<number>(parseInt(localStorage.getItem('ratingCalc:scrollTop') ?? '0', 10) || 0)
   const lastEditedActorIdRef = useRef<number | null>(null)
   const demote = useScoreDemote()
 
   useEffect(() => {
     actorsApi.physicalData().then(d => setActors(d as ActorPhysicalData[]))
+  }, [])
+
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const handleScroll = () => {
+      scrollTopRef.current = el.scrollTop
+      localStorage.setItem('ratingCalc:scrollTop', String(el.scrollTop))
+    }
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => el.removeEventListener('scroll', handleScroll)
   }, [])
 
   useEffect(() => {
@@ -501,7 +514,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg w-[820px] h-[95vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 shrink-0">
           <h2 className="text-white font-bold text-base">평점 계산기</h2>
@@ -669,21 +682,29 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
               <div className="ml-auto flex items-center gap-1.5">
                 <div className="flex">
                   <button
-                    onClick={() => setFocusMode('fixed')}
+                    onClick={() => { setFocusMode('fixed'); localStorage.setItem('ratingCalc:focusMode', 'fixed') }}
                     className={`text-xs px-2 py-0.5 rounded-l border-r border-gray-600 ${focusMode === 'fixed' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                   >고정</button>
                   <button
-                    onClick={() => setFocusMode('track')}
+                    onClick={() => { setFocusMode('track'); localStorage.setItem('ratingCalc:focusMode', 'track') }}
                     className={`text-xs px-2 py-0.5 rounded-r ${focusMode === 'track' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                   >추적</button>
                 </div>
+                <button
+                  onClick={() => { if (listRef.current) { listRef.current.scrollTop = 0; scrollTopRef.current = 0; localStorage.setItem('ratingCalc:scrollTop', '0') } }}
+                  className="text-xs px-1.5 py-0.5 rounded bg-gray-600 hover:bg-gray-500 text-gray-300"
+                >T</button>
                 <input
                   type="text"
                   value={nameSearch}
-                  onChange={e => setNameSearch(e.target.value)}
+                  onChange={e => { setNameSearch(e.target.value); localStorage.setItem('ratingCalc:nameSearch', e.target.value) }}
                   placeholder="배우 이름"
-                  className="bg-gray-700 text-white text-xs px-2 py-0.5 rounded w-40 placeholder-gray-500"
+                  className="bg-gray-700 text-white text-xs px-2 py-0.5 rounded w-30 placeholder-gray-500"
                 />
+                <button
+                  onClick={() => { setNameSearch(''); localStorage.removeItem('ratingCalc:nameSearch') }}
+                  className="text-xs px-1.5 py-0.5 rounded bg-gray-600 hover:bg-gray-500 text-gray-300"
+                >C</button>
               </div>
             </div>
             <div ref={listRef} className="flex-1 overflow-y-auto space-y-1 [scrollbar-gutter:stable]">

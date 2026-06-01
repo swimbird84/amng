@@ -236,6 +236,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   const [distItem, setDistItem] = useState<DistItemKey>(() => (localStorage.getItem('dashboard:distItem') as DistItemKey) || 'avg_score')
+  const [distExcludeMode, setDistExcludeMode] = useState<'include' | 'exclude'>(() => (localStorage.getItem('dashboard:distExcludeMode') as 'include' | 'exclude') || 'include')
   const [distActorPopup, setDistActorPopup] = useState<{ label: string; actors: DistBinActor[] } | null>(null)
 
   useEffect(() => {
@@ -258,8 +259,15 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.releaseYears().then((d) => setYears(d as { year: string; count: number }[]))
     dashboardApi.ageDist().then((d) => setAgeDist(d as (Actor & { age: number; avg_score: number })[]))
     dashboardApi.debutAgeDist().then((d) => setDebutAgeDist(d as (Actor & { debut_age: number; avg_score: number })[]))
-    dashboardApi.actorScoreDist().then((d) => setScoreDist(d as (Actor & { avg_score: number; work_count: number; ratio_score?: number })[]))
-    dashboardApi.actorPhysicalDist().then((raw) => {
+    dashboardApi.actorCupDist().then((d) => setCupDist(d as (Actor & { avg_score: number; work_count: number })[]))
+    dashboardApi.ratingDist().then((d) => setRatingDist(d as { bucket: number; count: number }[]))
+    dashboardApi.debutYears().then((d) => setDebutYears(d as { year: string; count: number }[]))
+  }, [])
+
+  useEffect(() => {
+    const excludeFilter = distExcludeMode === 'exclude'
+    dashboardApi.actorScoreDist(excludeFilter).then((d) => setScoreDist(d as (Actor & { avg_score: number; work_count: number; ratio_score?: number })[]))
+    dashboardApi.actorPhysicalDist(excludeFilter).then((raw) => {
       const data = raw as (ActorPhysicalData & { avg_score: number; work_count: number })[]
       const settings = loadSettings()
       const stats = computeStats(data)
@@ -269,10 +277,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           .filter(a => a.physScore >= 0)
       )
     })
-    dashboardApi.actorCupDist().then((d) => setCupDist(d as (Actor & { avg_score: number; work_count: number })[]))
-    dashboardApi.ratingDist().then((d) => setRatingDist(d as { bucket: number; count: number }[]))
-    dashboardApi.debutYears().then((d) => setDebutYears(d as { year: string; count: number }[]))
-  }, [])
+  }, [distExcludeMode])
 
 
   const handleSelectYear = async (year: string) => {
@@ -487,6 +492,16 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             >
               {DIST_ITEMS.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
             </select>
+            <div className="flex">
+              <button
+                onClick={() => { setDistExcludeMode('include'); localStorage.setItem('dashboard:distExcludeMode', 'include') }}
+                className={`text-xs px-2 py-0.5 rounded-l border-r border-gray-600 ${distExcludeMode === 'include' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >포함</button>
+              <button
+                onClick={() => { setDistExcludeMode('exclude'); localStorage.setItem('dashboard:distExcludeMode', 'exclude') }}
+                className={`text-xs px-2 py-0.5 rounded-r ${distExcludeMode === 'exclude' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >제외</button>
+            </div>
             <span className="text-xs text-gray-500">집계 대상 {distTotal}명</span>
             {distAvg !== null && <span className="text-xs text-yellow-400">평균 {distAvg.toFixed(2)}</span>}
           </div>

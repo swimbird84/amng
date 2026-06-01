@@ -1649,7 +1649,8 @@ export function registerIpcHandlers(): void {
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-score-dist', () => {
+  ipcMain.handle('dashboard:actor-score-dist', (_e, excludeFilter: boolean) => {
+    const where = excludeFilter ? 'WHERE COALESCE(a.score_excluded, 0) = 0' : ''
     return db().prepare(`
       WITH stats AS (
         SELECT
@@ -1678,12 +1679,13 @@ export function registerIpcHandlers(): void {
       FROM actors a
       LEFT OUTER JOIN stats ON 1=1
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE COALESCE(a.score_excluded, 0) = 0
+      ${where}
       ORDER BY avg_score ASC, ratio_score ASC
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-physical-dist', () => {
+  ipcMain.handle('dashboard:actor-physical-dist', (_e, excludeFilter: boolean) => {
+    const extraWhere = excludeFilter ? 'AND COALESCE(a.score_excluded, 0) = 0' : ''
     return db().prepare(`
       SELECT
         a.id, a.name, a.photo_path,
@@ -1703,7 +1705,7 @@ export function registerIpcHandlers(): void {
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
-        AND COALESCE(a.score_excluded, 0) = 0
+        ${extraWhere}
     `).all()
   })
 
