@@ -8,10 +8,11 @@ import Dashboard from './pages/Dashboard'
 import Ranking from './pages/Ranking'
 import Tags from './pages/Tags'
 import Labels from './pages/Labels'
+import Worldcup from './pages/Worldcup'
 import ActorViewModal from './components/ActorViewModal'
 import WorkViewModal from './components/WorkViewModal'
 
-type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'labels' | 'tags'
+type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'labels' | 'tags' | 'worldcup'
 type ViewEntry = { type: 'actor'; id: number } | { type: 'work'; id: number }
 
 function App() {
@@ -70,16 +71,6 @@ function App() {
             대시보드
           </button>
           <button
-            onClick={() => setTabAndSave('ranking')}
-            className={`px-4 py-3 text-sm border-b-2 transition ${
-              tab === 'ranking'
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            랭킹
-          </button>
-          <button
             onClick={() => setTabAndSave('works')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'works'
@@ -118,6 +109,26 @@ function App() {
             }`}
           >
             태그
+          </button>
+          <button
+              onClick={() => setTabAndSave('ranking')}
+              className={`px-4 py-3 text-sm border-b-2 transition ${
+                  tab === 'ranking'
+                      ? 'border-blue-500 text-white'
+                      : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+          >
+            랭킹
+          </button>
+          <button
+              onClick={() => setTabAndSave('worldcup')}
+              className={`px-4 py-3 text-sm border-b-2 transition ${
+                  tab === 'worldcup'
+                      ? 'border-blue-500 text-white'
+                      : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+          >
+            월드컵
           </button>
         </nav>
       </header>
@@ -158,6 +169,12 @@ function App() {
             onNavigateToActor={handleNavigateToActor}
             onEditWork={handleEditWork}
             onEditActor={handleEditActor}
+          />
+        )}
+        {tab === 'worldcup' && (
+          <Worldcup
+            onNavigateToActor={handleNavigateToActor}
+            onNavigateToWork={handleNavigateToWork}
           />
         )}
       </main>

@@ -56,6 +56,7 @@ export interface ActorPhysicalData {
   technique: number
   proportions: number
   work_count: number
+  fav_work_count: number
 }
 
 export interface PhysicalStats {
@@ -638,7 +639,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
           {/* 우측: 실시간 랭킹 미리보기 */}
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center gap-2 mb-2 shrink-0">
-              <p className="text-sm text-gray-300 font-bold">점수 랭킹</p>
+              <p className="text-sm text-gray-300 font-bold">배우 목록</p>
               <span className="text-xs text-gray-500">{ranked.length}명</span>
               <select
                 value={rankBy}

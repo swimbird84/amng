@@ -22,6 +22,7 @@ interface WorkSearchParams {
   actorCountFrom: number | ''
   actorCountTo: number | ''
   actorCountNull: boolean
+  favoriteOnly: boolean
 }
 
 interface ActorSearchParams {
@@ -61,6 +62,7 @@ interface ActorSearchParams {
   hipNull: boolean
   cupNull: boolean
   scoreExcluded: boolean
+  favoriteOnly: boolean
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
@@ -68,6 +70,7 @@ export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
   releaseDateFrom: '', releaseDateTo: '', releaseDateNull: false, ratingFrom: '', ratingTo: '',
   titleSearch: '', titleNull: false, commentSearch: '', commentNull: false,
   actorCountFrom: '', actorCountTo: '', actorCountNull: false,
+  favoriteOnly: false,
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
@@ -85,6 +88,7 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   cupFrom: '', cupTo: '',
   heightNull: false, bustNull: false, waistNull: false, hipNull: false, cupNull: false,
   scoreExcluded: false,
+  favoriteOnly: false,
 }
 
 export type { WorkSearchParams, ActorSearchParams, TagMode }
@@ -577,6 +581,7 @@ export default function SearchBar(props: Props) {
     if (wp.releaseDateNull) conditions.push({ label: '발매일없음', onClear: () => onChange({ ...wp, releaseDateNull: false } as never) })
     if (wp.commentSearch) conditions.push({ label: `코멘트: ${wp.commentSearch}`, onClear: () => onChange({ ...wp, commentSearch: '' } as never) })
     if (wp.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...wp, commentNull: false } as never) })
+    if (wp.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...wp, favoriteOnly: false } as never) })
   }
 
   if (type === 'actors' && aParams) {
@@ -611,11 +616,12 @@ export default function SearchBar(props: Props) {
     if (ap.cupNull) conditions.push({ label: '컵없음', onClear: () => onChange({ ...ap, cupNull: false } as never) })
     if (ap.cupFrom || ap.cupTo) conditions.push({ label: `컵: ${ap.cupFrom || '?'}~${ap.cupTo || '?'}`, onClear: () => onChange({ ...ap, cupFrom: '', cupTo: '' } as never) })
     if (ap.scoreExcluded) conditions.push({ label: '점수제외', onClear: () => onChange({ ...ap, scoreExcluded: false } as never) })
+    if (ap.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...ap, favoriteOnly: false } as never) })
   }
 
   // ── render ────────────────────────────────────────────────────────
   return (
-    <div ref={wrapperRef} className="flex items-center gap-2 flex-1 min-w-0">
+    <div ref={wrapperRef} className="flex items-center gap-1 flex-1 min-w-0">
       {/* keyword */}
       <input
         type="text"
@@ -768,6 +774,14 @@ export default function SearchBar(props: Props) {
         )}
       </div>
 
+      {/* favorite button */}
+      <button
+        onClick={() => onChange({ ...params, favoriteOnly: !params.favoriteOnly } as never)}
+        className={`px-2 py-1.5 rounded text-sm shrink-0 bg-gray-700 hover:bg-gray-600 ${params.favoriteOnly ? 'text-red-400' : 'text-gray-500 hover:text-red-400'}`}
+      >
+        {params.favoriteOnly ? '♥' : '♡'}
+      </button>
+
       {/* result count */}
       {resultCount !== undefined && (
         <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 whitespace-nowrap">
@@ -807,7 +821,8 @@ export default function SearchBar(props: Props) {
             {/* ── works ─────────────────────────────────────────── */}
             {type === 'works' && wParams && (
               <>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap items-center">
+                  <span className="text-xs text-gray-400 w-12 shrink-0">레이블</span>
                   {/* studio dropdown */}
                   <div className="relative">
                     <button
@@ -986,7 +1001,7 @@ export default function SearchBar(props: Props) {
                     <NumInput value={aParams.avgRatingTo} onChange={v => onChange({ ...aParams, avgRatingTo: v } as never)} />
                     <button type="button" onClick={() => onChange({ ...aParams, avgRatingFrom: 0, avgRatingTo: 0 } as never)} className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0">평점 0점</button>
                   </div>
-                  <div className="grid grid-cols-[repeat(5,auto)] gap-x-6 gap-y-1.5 w-fit">
+                  <div className="grid grid-cols-[repeat(5,auto)] gap-x-6 gap-y-1.5 w-fit ml-16">
                     {SCORE_FIELDS_ADV.map(({ fromKey, toKey, label }) => (
                       <div key={label}>
                         <div className="flex items-center justify-between gap-1 mb-0.5">
@@ -994,9 +1009,9 @@ export default function SearchBar(props: Props) {
                           <button type="button" onClick={() => onChange({ ...aParams, [fromKey]: 0, [toKey]: 0 } as never)} className="text-xs px-1 py-0 rounded bg-gray-700 text-gray-400 hover:bg-gray-600 leading-4">0점</button>
                         </div>
                         <div className="flex items-center gap-0.5 justify-center">
-                          <NumInput value={aParams[fromKey as keyof ActorSearchParams] as number | ''} onChange={v => onChange({ ...aParams, [fromKey]: v } as never)} />
+                          <NumInput value={aParams[fromKey as keyof ActorSearchParams] as number | ''} onChange={v => onChange({ ...aParams, [fromKey]: v } as never)} className="!w-10" />
                           <span className="text-gray-500 text-xs">~</span>
-                          <NumInput value={aParams[toKey as keyof ActorSearchParams] as number | ''} onChange={v => onChange({ ...aParams, [toKey]: v } as never)} />
+                          <NumInput value={aParams[toKey as keyof ActorSearchParams] as number | ''} onChange={v => onChange({ ...aParams, [toKey]: v } as never)} className="!w-10" />
                         </div>
                       </div>
                     ))}
@@ -1012,7 +1027,7 @@ export default function SearchBar(props: Props) {
                     <NumInput value={aParams.ratioScoreTo} onChange={v => onChange({ ...aParams, ratioScoreTo: v } as never)} />
                     <button type="button" onClick={() => onChange({ ...aParams, ratioScoreFrom: 0, ratioScoreTo: 0 } as never)} className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0">피지컬 0점</button>
                   </div>
-                  <div className="grid grid-cols-[repeat(5,auto)] gap-x-6 gap-y-1.5 w-fit">
+                  <div className="grid grid-cols-[repeat(5,auto)] gap-x-6 gap-y-1.5 w-fit ml-16">
                     {[
                       { label: '키', from: aParams.heightFrom, to: aParams.heightTo, fk: 'heightFrom', tk: 'heightTo', cup: false },
                       { label: '바스트', from: aParams.bustFrom, to: aParams.bustTo, fk: 'bustFrom', tk: 'bustTo', cup: false },
@@ -1035,12 +1050,12 @@ export default function SearchBar(props: Props) {
                           <div className="flex items-center gap-0.5 justify-center">
                             {cup
                               ? <CupInput value={from as string} onChange={v => onChange({ ...aParams, [fk]: v, [nullKey]: false } as never)} />
-                              : <NumInput value={from as number | ''} onChange={v => onChange({ ...aParams, [fk]: v, [nullKey]: false } as never)} />
+                              : <NumInput value={from as number | ''} onChange={v => onChange({ ...aParams, [fk]: v, [nullKey]: false } as never)} className="!w-10" />
                             }
                             <span className="text-gray-500 text-xs">~</span>
                             {cup
                               ? <CupInput value={to as string} onChange={v => onChange({ ...aParams, [tk]: v, [nullKey]: false } as never)} />
-                              : <NumInput value={to as number | ''} onChange={v => onChange({ ...aParams, [tk]: v, [nullKey]: false } as never)} />
+                              : <NumInput value={to as number | ''} onChange={v => onChange({ ...aParams, [tk]: v, [nullKey]: false } as never)} className="!w-10" />
                             }
                           </div>
                         </div>

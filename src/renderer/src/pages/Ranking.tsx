@@ -1,20 +1,66 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { pushEscHandler, popEscHandler } from '../escManager'
-import type { Actor } from '../types'
-import { actorsApi, dashboardApi } from '../api'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { actorsApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
-import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
+import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData, type PhysicalSettings } from '../components/PhysicalCorrectionModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
+
+type RankBy =
+  | 'work_count' | 'fav_work_count' | 'avg_score' | 'physScore'
+  | 'height' | 'bust' | 'waist' | 'hip' | 'cup'
+  | 'face' | 'score_bust' | 'score_hip' | 'physical' | 'skin'
+  | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions'
+
+type ExcludeMode = 'include' | 'exclude'
+
+const RANK_ITEMS: { value: RankBy; label: string }[] = [
+  { value: 'work_count',     label: '작품수' },
+  { value: 'fav_work_count', label: '찜' },
+  { value: 'avg_score',      label: '평점' },
+  { value: 'physScore',      label: '피지컬' },
+  { value: 'height',         label: '키' },
+  { value: 'bust',           label: '바스트' },
+  { value: 'waist',          label: '웨이스트' },
+  { value: 'hip',            label: '힙' },
+  { value: 'cup',            label: '컵' },
+  { value: 'face',           label: '얼굴' },
+  { value: 'score_bust',     label: '가슴' },
+  { value: 'score_hip',      label: '엉덩이' },
+  { value: 'physical',       label: '몸매' },
+  { value: 'skin',           label: '피부' },
+  { value: 'acting',         label: '연기력' },
+  { value: 'sexy',           label: '섹기' },
+  { value: 'charm',          label: '매력' },
+  { value: 'technique',      label: '테크닉' },
+  { value: 'proportions',    label: '비율' },
+]
+
+const CUP_ORDER = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z']
+function cupToNum(cup: string): number { return CUP_ORDER.indexOf(cup.toUpperCase()) }
+
+const profileKeyMap: Partial<Record<RankBy, keyof PhysicalSettings['profile']>> = {
+  height: 'height', bust: 'bust', waist: 'waist', hip: 'hip', cup: 'cup',
+}
+const scoreKeyMap: Partial<Record<RankBy, keyof PhysicalSettings['score']>> = {
+  face: 'face', score_bust: 'bust', score_hip: 'hip', physical: 'physical',
+  skin: 'skin', acting: 'acting', sexy: 'sexy', charm: 'charm',
+  technique: 'technique', proportions: 'proportions',
+}
+
+function avgScore(a: ActorPhysicalData): number {
+  return (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 13
+}
 
 interface Props {
   onNavigateToActor: (id: number) => void
 }
 
-function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick, onMouseMove, onMouseLeave }: {
-  actor: Actor & { avg_score?: number; work_count?: number }
+type ScoredActor = ActorPhysicalData & { physScore: number | null }
+
+function ActorRankCard({ actor, rank, subtitle, imgClassName = 'w-full h-20', onClick, onMouseMove, onMouseLeave }: {
+  actor: ScoredActor
   rank: number
   subtitle: string
-  showRank?: boolean
+  imgClassName?: string
   onClick: () => void
   onMouseMove?: (e: React.MouseEvent) => void
   onMouseLeave?: () => void
@@ -22,8 +68,8 @@ function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick, onMous
   return (
     <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <div className="relative" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
-        {showRank && <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-sm px-1.5 py-0.5 rounded z-10 leading-tight font-bold">{rank}</span>}
-        <ImagePreview path={actor.photo_path} alt={actor.name} className="w-full h-20" objectPosition="center 10%" />
+        <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-sm px-1.5 py-0.5 rounded z-10 leading-tight font-bold">{rank}</span>
+        <ImagePreview path={actor.photo_path} alt={actor.name} className={imgClassName} objectPosition="center 10%" />
       </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{actor.name}</p>
@@ -34,187 +80,183 @@ function ActorRankCard({ actor, rank, subtitle, showRank = true, onClick, onMous
 }
 
 export default function Ranking({ onNavigateToActor }: Props) {
-  const [scoreRanking, setScoreRanking] = useState<Actor[]>([])
-  const [workCountRanking, setWorkCountRanking] = useState<Actor[]>([])
-  const [bustRanking, setBustRanking] = useState<Actor[]>([])
-  const [hipRanking, setHipRanking] = useState<Actor[]>([])
-  const [waistRanking, setWaistRanking] = useState<Actor[]>([])
-  const [heightRanking, setHeightRanking] = useState<Actor[]>([])
-  const [physicalRankingAll, setPhysicalRankingAll] = useState<Array<Actor & { ratio_score: number; total_count: number }>>([])
-
-  const [favoriteRanking, setFavoriteRanking] = useState<Actor[]>([])
-
-  const [reversedRankings, setReversedRankings] = useState<Set<string>>(new Set())
-  const [reversedData, setReversedData] = useState<Record<string, Actor[]>>({})
-
-  const [rankModal, setRankModal] = useState<{ title: string; actors: Actor[]; subtitle: (a: Actor) => string; reversed: boolean } | null>(null)
+  const [actors, setActors] = useState<ActorPhysicalData[]>([])
+  const [settings, setSettings] = useState<PhysicalSettings>(loadSettings())
+  const [rankBy, setRankBy] = useState<RankBy>(() => {
+    const idx = parseInt(sessionStorage.getItem('ranking:rotateIndex') ?? '-1')
+    const next = (idx + 1) % RANK_ITEMS.length
+    sessionStorage.setItem('ranking:rotateIndex', String(next))
+    return RANK_ITEMS[next].value
+  })
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
+    () => (localStorage.getItem('ranking:sortDir') as 'asc' | 'desc') || 'desc'
+  )
+  const [excludeMode, setExcludeMode] = useState<ExcludeMode>(
+    () => (localStorage.getItem('ranking:excludeMode') as ExcludeMode) || 'include'
+  )
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
-  const computePhysicalRanking = useCallback(async () => {
+  const loadData = useCallback(async () => {
     const data = await actorsApi.physicalData() as ActorPhysicalData[]
-    const settings = loadSettings()
-    const stats = computeStats(data)
-    const scored = data
-      .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
-      .filter((a): a is typeof a & { physScore: number } => a.physScore !== null)
-      .sort((a, b) => b.physScore - a.physScore)
-    const total = scored.length
-    setPhysicalRankingAll(
-      scored.map(a => ({ ...a, ratio_score: a.physScore, total_count: total })) as unknown as Array<Actor & { ratio_score: number; total_count: number }>
-    )
-    setReversedData(prev => { const next = { ...prev }; delete next['피지컬 랭킹 TOP 10']; return next })
-    setReversedRankings(prev => { const next = new Set(prev); next.delete('피지컬 랭킹 TOP 10'); return next })
+    setActors(data)
   }, [])
 
   useEffect(() => {
-    if (!rankModal) return
-    const handler = () => setRankModal(null)
-    pushEscHandler(handler)
-    return () => popEscHandler(handler)
-  }, [rankModal])
+    loadData()
+    const handler = () => setSettings(loadSettings())
+    window.addEventListener('physicalSettingsChange', handler)
+    return () => window.removeEventListener('physicalSettingsChange', handler)
+  }, [loadData])
 
-  useEffect(() => {
-    dashboardApi.actorScoreRanking(10).then((d) => setScoreRanking(d as Actor[]))
-    dashboardApi.actorWorkCountRanking(10).then((d) => setWorkCountRanking(d as Actor[]))
-    dashboardApi.actorBustRanking(10).then((d) => setBustRanking(d as Actor[]))
-    dashboardApi.actorHipRanking(10).then((d) => setHipRanking(d as Actor[]))
-    dashboardApi.actorWaistRanking(10).then((d) => setWaistRanking(d as Actor[]))
-    dashboardApi.actorHeightRanking(10).then((d) => setHeightRanking(d as Actor[]))
-    dashboardApi.actorFavoriteRanking(10).then((d) => setFavoriteRanking(d as Actor[]))
-    computePhysicalRanking()
+  const stats = useMemo(() => computeStats(actors), [actors])
 
-    window.addEventListener('physicalSettingsChange', computePhysicalRanking)
-    return () => window.removeEventListener('physicalSettingsChange', computePhysicalRanking)
-  }, [computePhysicalRanking])
+  const ranked = useMemo((): ScoredActor[] => {
+    const isNeg = profileKeyMap[rankBy]
+      ? settings.profile[profileKeyMap[rankBy]!].dir === 'N'
+      : scoreKeyMap[rankBy]
+        ? settings.score[scoreKeyMap[rankBy]!].dir === 'N'
+        : false
+    const effectiveDir = isNeg ? (sortDir === 'desc' ? 'asc' : 'desc') : sortDir
 
-  const toggleReverse = async (
-    title: string,
-    fetcher: (reverse: boolean, limit?: number) => Promise<unknown>
-  ) => {
-    const next = new Set(reversedRankings)
-    const isNowReversed = !next.has(title)
-    if (isNowReversed) {
-      next.add(title)
-      if (!reversedData[title]) {
-        const data = await fetcher(true, 10) as Actor[]
-        setReversedData((prev) => ({ ...prev, [title]: data }))
-      }
-    } else {
-      next.delete(title)
+    const getVal = (a: ScoredActor): number | null => {
+      if (rankBy === 'work_count')     return a.work_count
+      if (rankBy === 'fav_work_count') return a.fav_work_count
+      if (rankBy === 'avg_score')      return avgScore(a)
+      if (rankBy === 'physScore')      return a.physScore
+      if (rankBy === 'height')         return a.height
+      if (rankBy === 'bust')           return a.bust
+      if (rankBy === 'waist')          return a.waist
+      if (rankBy === 'hip')            return a.hip
+      if (rankBy === 'cup')            return a.cup ? cupToNum(a.cup) : null
+      return a[rankBy as keyof ActorPhysicalData] as number
     }
-    setReversedRankings(next)
+
+    return actors
+      .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
+      .filter(a => rankBy !== 'physScore' || a.physScore != null)
+      .filter(a => excludeMode === 'include' || !a.score_excluded)
+      .sort((a, b) => {
+        const av = getVal(a)
+        const bv = getVal(b)
+        if (av == null && bv == null) return 0
+        if (av == null) return 1
+        if (bv == null) return -1
+        const primary = effectiveDir === 'desc' ? bv - av : av - bv
+        if (primary !== 0) return primary
+        const secondary = sortDir === 'desc' ? avgScore(b) - avgScore(a) : avgScore(a) - avgScore(b)
+        if (secondary !== 0) return secondary
+        return sortDir === 'desc' ? b.work_count - a.work_count : a.work_count - b.work_count
+      })
+  }, [actors, settings, stats, rankBy, sortDir, excludeMode])
+
+  const getSubtitle = (a: ScoredActor): string => {
+    if (rankBy === 'work_count')     return `${a.work_count}편`
+    if (rankBy === 'fav_work_count') return `♥ ${a.fav_work_count}편`
+    if (rankBy === 'avg_score')      return `${avgScore(a).toFixed(2)}점`
+    if (rankBy === 'physScore')      return `${(a.physScore ?? 0).toFixed(2)}점`
+    if (rankBy === 'height')         return `${a.height ?? '-'}cm`
+    if (rankBy === 'bust')           return `${a.bust ?? '-'}cm`
+    if (rankBy === 'waist')          return `${a.waist ?? '-'}cm`
+    if (rankBy === 'hip')            return `${a.hip ?? '-'}cm`
+    if (rankBy === 'cup')            return `${a.cup ?? '-'}`
+    return `${(a[rankBy as keyof ActorPhysicalData] as number) ?? '-'}점`
   }
 
-  const handleShowRankAll = async (
-    title: string,
-    fetcher: (reverse?: boolean, limit?: number) => Promise<unknown>,
-    subtitle: (a: Actor) => string,
-    reversed: boolean
-  ) => {
-    const actors = await fetcher(reversed) as Actor[]
-    setRankModal({ title, actors, subtitle, reversed })
-  }
+  const currentLabel = RANK_ITEMS.find(i => i.value === rankBy)?.label ?? ''
+  const title = `${currentLabel} 랭킹`
+  const top5 = ranked.slice(0, 5)
+  const rest = ranked.slice(5)
 
   return (
-    <>
-    <div className="h-full overflow-y-auto">
-      <div className="p-4 space-y-8">
-
-        {[
-          { title: '출연작 랭킹 TOP 10', data: workCountRanking, subtitle: (a: Actor & { work_count?: number }) => `${a.work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWorkCountRanking(l, r) },
-          { title: '찜 랭킹 TOP 10', data: favoriteRanking, subtitle: (a: Actor & { fav_work_count?: number }) => `♥ ${a.fav_work_count ?? 0}편`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorFavoriteRanking(l, r) },
-          { title: '평점 랭킹 TOP 10', data: scoreRanking, subtitle: (a: Actor & { avg_score?: number }) => `${(a.avg_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorScoreRanking(l, r) },
-          { title: '피지컬 랭킹 TOP 10', data: physicalRankingAll.slice(0, 10), subtitle: (a: Actor & { ratio_score?: number }) => `${(a.ratio_score ?? 0).toFixed(2)}점`, fetcher: (r?: boolean, l?: number) => { const sorted = r ? [...physicalRankingAll].reverse() : physicalRankingAll; return Promise.resolve(l !== undefined ? sorted.slice(0, l) : sorted) } },
-          { title: '바스트 랭킹 TOP 10', data: bustRanking, subtitle: (a: Actor) => `${a.bust ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorBustRanking(l, r) },
-          { title: '힙 랭킹 TOP 10', data: hipRanking, subtitle: (a: Actor) => `${a.hip ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorHipRanking(l, r) },
-          { title: '웨이스트 랭킹 TOP 10', data: waistRanking, subtitle: (a: Actor) => `${a.waist ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorWaistRanking(l, r) },
-          { title: '키 랭킹 TOP 10', data: heightRanking, subtitle: (a: Actor) => `${a.height ?? '-'}cm`, fetcher: (r?: boolean, l?: number) => dashboardApi.actorHeightRanking(l, r) },
-        ].map(({ title, data, subtitle, fetcher }) => {
-          const isReversed = reversedRankings.has(title)
-          const displayData = isReversed ? (reversedData[title] ?? []) : data
-          return (
-          <div key={title}>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-white font-bold text-base">{title}</h2>
-              {data.length > 0 && (
-                <>
-                  <button
-                    onClick={() => toggleReverse(title, fetcher)}
-                    className={`text-xs px-2 py-0.5 rounded ${isReversed ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >
-                    {isReversed ? '역순 ↑' : '정순 ↓'}
-                  </button>
-                  <button
-                    onClick={() => handleShowRankAll(title, fetcher, subtitle as (a: Actor) => string, isReversed)}
-                    className="text-xs text-gray-400 hover:text-gray-200 bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded"
-                  >
-                    전체보기
-                  </button>
-                </>
-              )}
-            </div>
-            {displayData.length > 0 ? (
-              <div className="grid grid-cols-10 gap-2">
-                {displayData.map((a, i) => {
-                  const rank = isReversed
-                    ? ((a as any).total_count ?? displayData.length) - i
-                    : i + 1
-                  return (
-                    <ActorRankCard
-                      key={a.id}
-                      actor={a}
-                      rank={rank}
-                      subtitle={subtitle(a as any)}
-                      onClick={() => onNavigateToActor(a.id)}
-                      onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
-                      onMouseLeave={() => setTooltip(null)}
-                    />
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">데이터가 없습니다</p>
-            )}
+    <div className="h-full flex flex-col">
+      {/* 정렬바 */}
+      <div className="p-4 pb-2">
+        <div className="flex items-center">
+        <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
+          <select
+            value={rankBy}
+            onChange={e => {
+              const v = e.target.value as RankBy
+              setRankBy(v)
+              localStorage.setItem('ranking:rankBy', v)
+            }}
+            className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded"
+          >
+            {RANK_ITEMS.map(item => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+          <div className="flex">
+            <button
+              onClick={() => { setExcludeMode('include'); localStorage.setItem('ranking:excludeMode', 'include') }}
+              className={`text-sm px-3 py-1.5 rounded-l border-r border-gray-600 ${excludeMode === 'include' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >포함</button>
+            <button
+              onClick={() => { setExcludeMode('exclude'); localStorage.setItem('ranking:excludeMode', 'exclude') }}
+              className={`text-sm px-3 py-1.5 rounded-r ${excludeMode === 'exclude' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >제외</button>
           </div>
-          )
-        })}
-
-      </div>
-    </div>
-
-    {/* 랭킹 전체보기 모달 */}
-    {rankModal && (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setRankModal(null)}>
-        <div className="bg-gray-800 rounded-lg w-[95vw] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => setRankModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
-          <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b border-gray-700">
-            <h2 className="text-lg font-bold text-white">{rankModal.title.replace('TOP 10', '전체')}</h2>
-            <p className="text-sm text-gray-400 mt-0.5">{rankModal.actors.length}명</p>
-          </div>
-          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-6 py-4">
-            <div className="grid grid-cols-10 gap-2">
-              {rankModal.actors.map((a, i) => {
-                const rank = rankModal.reversed
-                  ? ((a as any).total_count ?? rankModal.actors.length) - i
-                  : i + 1
-                return (
-                  <ActorRankCard
-                    key={a.id}
-                    actor={a}
-                    rank={rank}
-                    subtitle={rankModal.subtitle(a)}
-                    onClick={() => onNavigateToActor(a.id)}
-                    onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
-                    onMouseLeave={() => setTooltip(null)}
-                  />
-                )
-              })}
-            </div>
-          </div>
+          <button
+            onClick={() => {
+              const next = sortDir === 'desc' ? 'asc' : 'desc'
+              setSortDir(next)
+              localStorage.setItem('ranking:sortDir', next)
+            }}
+            className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-2 py-1.5 rounded"
+          >
+            {sortDir === 'desc' ? '↓정순' : '↑역순'}
+          </button>
+        </div>
         </div>
       </div>
-    )}
-    {tooltip && <CardTooltip tooltip={tooltip} />}
-    </>
+
+      {/* 타이틀 */}
+      <div className="px-4 pb-3 flex items-center gap-2">
+        <h2 className="text-white font-bold text-base">{title}</h2>
+        <span className="text-xs text-gray-500">{ranked.length}명</span>
+      </div>
+
+      {/* 랭킹 목록 */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
+        {ranked.length === 0 && (
+          <p className="text-gray-500 text-sm">데이터가 없습니다</p>
+        )}
+        {/* 1~5위: 5-grid */}
+        {top5.length > 0 && (
+          <div className="grid grid-cols-5 gap-2">
+            {top5.map((a, i) => (
+              <ActorRankCard
+                key={a.id}
+                actor={a}
+                rank={i + 1}
+                subtitle={getSubtitle(a)}
+                imgClassName="w-full h-40"
+                onClick={() => onNavigateToActor(a.id)}
+                onMouseMove={e => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+              />
+            ))}
+          </div>
+        )}
+        {/* 6위~: 10-grid */}
+        {rest.length > 0 && (
+          <div className="grid grid-cols-10 gap-2">
+            {rest.map((a, i) => (
+              <ActorRankCard
+                key={a.id}
+                actor={a}
+                rank={i + 6}
+                subtitle={getSubtitle(a)}
+                onClick={() => onNavigateToActor(a.id)}
+                onMouseMove={e => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {tooltip && <CardTooltip tooltip={tooltip} />}
+    </div>
   )
 }

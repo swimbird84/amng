@@ -319,7 +319,7 @@ export default function Labels({ onNavigateToWork }: Props) {
               {sortDir === 'asc' ? '↑' : '↓'}
             </button>
           </div>
-          <div className="w-[38rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+          <div className="w-[38rem] shrink-0 flex items-center gap-1 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
             <input
               type="text"
               value={makerKeyword}

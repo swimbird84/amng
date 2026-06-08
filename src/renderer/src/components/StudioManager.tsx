@@ -89,7 +89,6 @@ export default function StudioManager({ onClose }: Props) {
     (localStorage.getItem('studiomanager:sortDir') as 'asc' | 'desc') || 'desc'
   )
   const [collapsedMakerIds, setCollapsedMakerIds] = useState<Set<string>>(new Set())
-  const [showSearch, setShowSearch] = useState(false)
   const [makerKeyword, setMakerKeyword] = useState('')
   const [labelKeyword, setLabelKeyword] = useState('')
 
@@ -485,7 +484,7 @@ export default function StudioManager({ onClose }: Props) {
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
         </div>
 
-        <div className="flex gap-1.5 mb-3 items-center">
+        <div className="flex gap-1 mb-3 items-center">
           {([
             { key: 'name' as const, label: '이름' },
             { key: 'count' as const, label: '작품수' },
@@ -501,16 +500,8 @@ export default function StudioManager({ onClose }: Props) {
               </button>
             )
           })}
-          <div className="flex-1" />
-          <button
-            onClick={() => { setShowSearch(v => !v); setMakerKeyword(''); setLabelKeyword('') }}
-            className={`px-2.5 py-1 rounded text-xs ${showSearch ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-          >
-            검색
-          </button>
         </div>
-        {showSearch && (
-          <div className="flex gap-1.5 mb-3">
+        <div className="flex gap-1 mb-3">
             <input
               type="text"
               value={makerKeyword}
@@ -532,7 +523,6 @@ export default function StudioManager({ onClose }: Props) {
               초기화
             </button>
           </div>
-        )}
 
         <div className="flex-1 overflow-y-auto space-y-1 min-h-0 [scrollbar-gutter:stable]">
           {studios.length === 0 && (

@@ -378,7 +378,7 @@ export function registerIpcHandlers(): void {
     ageTo?: number
     ratingFrom?: number
     ratingTo?: number
-    sortBy?: 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score'
+    sortBy?: 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
     debutDateFrom?: string
@@ -540,6 +540,10 @@ export function registerIpcHandlers(): void {
       sql += ` ORDER BY avg_score ${sortDir}`
     } else if (params?.sortBy === 'ratio_score') {
       sql += ` ORDER BY ratio_score IS NULL ASC, ratio_score ${sortDir}`
+    } else if (params?.sortBy === 'work_release_date') {
+      sql += ` ORDER BY (SELECT MAX(w.release_date) FROM works w JOIN work_actors wa ON wa.work_id = w.id WHERE wa.actor_id = a.id) IS NULL ASC, (SELECT MAX(w.release_date) FROM works w JOIN work_actors wa ON wa.work_id = w.id WHERE wa.actor_id = a.id) ${sortDir}`
+    } else if (params?.sortBy === 'work_created_at') {
+      sql += ` ORDER BY (SELECT MAX(w.created_at) FROM works w JOIN work_actors wa ON wa.work_id = w.id WHERE wa.actor_id = a.id) IS NULL ASC, (SELECT MAX(w.created_at) FROM works w JOIN work_actors wa ON wa.work_id = w.id WHERE wa.actor_id = a.id) ${sortDir}`
     } else {
       const validActorSortCols = ['name', 'birthday', 'created_at', 'debut_date']
       const sortCol = validActorSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
@@ -1649,8 +1653,8 @@ export function registerIpcHandlers(): void {
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-score-dist', (_e, excludeFilter: boolean) => {
-    const where = excludeFilter ? 'WHERE COALESCE(a.score_excluded, 0) = 0' : ''
+  ipcMain.handle('dashboard:actor-score-dist', () => {
+    const where = ''
     return db().prepare(`
       WITH stats AS (
         SELECT
@@ -1684,11 +1688,10 @@ export function registerIpcHandlers(): void {
     `).all()
   })
 
-  ipcMain.handle('dashboard:actor-physical-dist', (_e, excludeFilter: boolean) => {
-    const extraWhere = excludeFilter ? 'AND COALESCE(a.score_excluded, 0) = 0' : ''
+  ipcMain.handle('dashboard:actor-physical-dist', () => {
     return db().prepare(`
       SELECT
-        a.id, a.name, a.photo_path,
+        a.id, a.name, a.photo_path, a.score_excluded,
         a.height, a.bust, a.waist, a.hip, a.cup,
         COALESCE(s.face, 0)        AS face,
         COALESCE(s.bust, 0)        AS score_bust,
@@ -1705,7 +1708,6 @@ export function registerIpcHandlers(): void {
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
       WHERE a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
-        ${extraWhere}
     `).all()
   })
 
@@ -1800,7 +1802,8 @@ export function registerIpcHandlers(): void {
         COALESCE(s.charm, 0)       AS charm,
         COALESCE(s.technique, 0)   AS technique,
         COALESCE(s.proportions, 0) AS proportions,
-        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
+        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
+        (SELECT COUNT(*) FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id AND w2.is_favorite = 1 WHERE wa2.actor_id = a.id) AS fav_work_count
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
     `).all()
@@ -1814,6 +1817,400 @@ export function registerIpcHandlers(): void {
     const ext = path.extname(filePath).slice(1).toLowerCase()
     const mime = ext === 'jpg' ? 'jpeg' : ext
     return `data:image/${mime};base64,${data.toString('base64')}`
+  })
+
+  // ========== 월드컵 ==========
+
+  ipcMain.handle('worldcup:categories', () => {
+    return db().prepare(`SELECT * FROM worldcup_categories ORDER BY sort_order, id`).all()
+  })
+
+  ipcMain.handle('worldcup:get-session', (_e, categoryId: number) => {
+    const session = db().prepare(`
+      SELECT * FROM worldcup_sessions WHERE category_id = ? AND status = 'in_progress' ORDER BY id DESC LIMIT 1
+    `).get(categoryId) as { id: number; category_id: number; round_total: number; status: string; winner_id: number | null } | undefined
+    if (!session) return null
+    const matches = db().prepare(`SELECT * FROM worldcup_matches WHERE session_id = ? ORDER BY round DESC, match_index`).all(session.id)
+    return { session, matches }
+  })
+
+  ipcMain.handle('worldcup:start', (_e, params: { categoryId: number; roundTotal: number; exclude?: boolean }) => {
+    const { categoryId, roundTotal, exclude } = params
+    const category = db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string } | undefined
+    if (!category) throw new Error('카테고리를 찾을 수 없습니다')
+
+    // 기존 in_progress 세션 삭제
+    const existing = db().prepare(`SELECT id FROM worldcup_sessions WHERE category_id = ? AND status = 'in_progress'`).get(categoryId) as { id: number } | undefined
+    if (existing) {
+      db().prepare(`DELETE FROM worldcup_sessions WHERE id = ?`).run(existing.id)
+    }
+
+    // 후보 항목 조회 (appearance_count 낮은 순 우선)
+    let items: { id: number }[]
+    if (category.type === 'actor') {
+      const excludeWhere = exclude ? `AND (a.score_excluded IS NULL OR a.score_excluded = 0)` : ''
+      items = db().prepare(`
+        SELECT a.id, COALESCE(ws.appearance_count, 0) AS appearance_count
+        FROM actors a
+        LEFT JOIN worldcup_stats ws ON ws.item_id = a.id AND ws.category_id = ?
+        WHERE 1=1 ${excludeWhere}
+        ORDER BY appearance_count ASC, RANDOM()
+      `).all(categoryId) as { id: number }[]
+    } else {
+      items = db().prepare(`
+        SELECT w.id, COALESCE(ws.appearance_count, 0) AS appearance_count
+        FROM works w
+        LEFT JOIN worldcup_stats ws ON ws.item_id = w.id AND ws.category_id = ?
+        ORDER BY appearance_count ASC, RANDOM()
+      `).all(categoryId) as { id: number }[]
+    }
+
+    // 라운드 크기 결정
+    let participants: { id: number }[]
+    if (roundTotal === 0) {
+      // 전체
+      participants = items
+    } else {
+      participants = items.slice(0, roundTotal)
+    }
+
+    if (participants.length < 2) throw new Error('참가 항목이 2개 미만입니다')
+
+    // 첫 라운드: 2의 거듭제곱으로 맞춤 (부전승 처리)
+    const totalCount = participants.length
+    const naturalRoundSize = Math.pow(2, Math.ceil(Math.log2(totalCount)))
+    let roundSize = roundTotal === 0 ? naturalRoundSize : Math.min(roundTotal, naturalRoundSize)
+
+    // 세션 생성
+    const sessionResult = db().prepare(`
+      INSERT INTO worldcup_sessions (category_id, round_total, status) VALUES (?, ?, 'in_progress')
+    `).run(categoryId, roundTotal)
+    const sessionId = sessionResult.lastInsertRowid as number
+
+    // 첫 라운드 매치 생성
+    const byeCount = roundSize - totalCount
+    const shuffled = [...participants]
+    // 부전승 항목은 앞쪽에 배치
+    const insertMatch = db().prepare(`
+      INSERT INTO worldcup_matches (session_id, round, match_index, item1_id, item2_id, winner_id, is_bye)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `)
+    const insertMatchMany = db().transaction((matches: { round: number; idx: number; item1: number; item2: number | null; winner: number | null; isBye: number }[]) => {
+      for (const m of matches) {
+        insertMatch.run(sessionId, m.round, m.idx, m.item1, m.item2, m.winner, m.isBye)
+      }
+    })
+
+    const firstRoundMatches: { round: number; idx: number; item1: number; item2: number | null; winner: number | null; isBye: number }[] = []
+    let matchIdx = 0
+    // 부전승 처리: byeCount개 항목은 단독 진출
+    for (let i = 0; i < byeCount; i++) {
+      firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: null, winner: shuffled[i].id, isBye: 1 })
+    }
+    // 나머지 항목들은 1:1 매치
+    for (let i = byeCount; i < totalCount; i += 2) {
+      firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: shuffled[i + 1]?.id ?? null, winner: null, isBye: 0 })
+    }
+    insertMatchMany(firstRoundMatches)
+
+    // appearance_count 증가
+    const upsertStat = db().prepare(`
+      INSERT INTO worldcup_stats (category_id, item_id, appearance_count)
+      VALUES (?, ?, 1)
+      ON CONFLICT(category_id, item_id) DO UPDATE SET appearance_count = appearance_count + 1
+    `)
+    const upsertStats = db().transaction(() => {
+      for (const p of participants) upsertStat.run(categoryId, p.id)
+    })
+    upsertStats()
+
+    const session = db().prepare(`SELECT * FROM worldcup_sessions WHERE id = ?`).get(sessionId)
+    const matches = db().prepare(`SELECT * FROM worldcup_matches WHERE session_id = ? ORDER BY round DESC, match_index`).all(sessionId)
+    return { session, matches }
+  })
+
+  ipcMain.handle('worldcup:pick', (_e, params: { matchId: number; winnerId: number }) => {
+    const { matchId, winnerId } = params
+    const match = db().prepare(`SELECT * FROM worldcup_matches WHERE id = ?`).get(matchId) as {
+      id: number; session_id: number; round: number; match_index: number; item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number
+    } | undefined
+    if (!match) throw new Error('매치를 찾을 수 없습니다')
+    if (match.winner_id !== null) throw new Error('이미 결과가 있는 매치입니다')
+
+    const loserId = match.item1_id === winnerId ? match.item2_id : match.item1_id
+
+    // 매치 결과 저장
+    db().prepare(`UPDATE worldcup_matches SET winner_id = ? WHERE id = ?`).run(winnerId, matchId)
+
+    // stats 업데이트 (승/패)
+    const session = db().prepare(`SELECT * FROM worldcup_sessions WHERE id = ?`).get(match.session_id) as { category_id: number } | undefined
+    if (session && loserId !== null) {
+      db().prepare(`
+        INSERT INTO worldcup_stats (category_id, item_id, total_matches, match_wins)
+        VALUES (?, ?, 1, 1)
+        ON CONFLICT(category_id, item_id) DO UPDATE SET total_matches = total_matches + 1, match_wins = match_wins + 1
+      `).run(session.category_id, winnerId)
+      db().prepare(`
+        INSERT INTO worldcup_stats (category_id, item_id, total_matches)
+        VALUES (?, ?, 1)
+        ON CONFLICT(category_id, item_id) DO UPDATE SET total_matches = total_matches + 1
+      `).run(session.category_id, loserId)
+    }
+
+    // 현재 라운드의 모든 매치가 완료됐는지 확인
+    const sessionMatches = db().prepare(`SELECT * FROM worldcup_matches WHERE session_id = ?`).all(match.session_id) as {
+      round: number; match_index: number; winner_id: number | null; is_bye: number; item1_id: number
+    }[]
+    const currentRoundMatches = sessionMatches.filter(m => m.round === match.round)
+    const allDone = currentRoundMatches.every(m => m.winner_id !== null)
+
+    if (allDone) {
+      const winners = currentRoundMatches.map(m => m.winner_id!)
+      if (winners.length === 1) {
+        // 결승 완료 → 세션 종료
+        db().prepare(`UPDATE worldcup_sessions SET status = 'completed', winner_id = ?, updated_at = datetime('now') WHERE id = ?`).run(winners[0], match.session_id)
+        return { done: true, winnerId: winners[0] }
+      }
+      // 다음 라운드 생성
+      const nextRound = Math.floor(match.round / 2) === 0 ? match.round / 2 : Math.floor(match.round / 2)
+      // 실제로는 winners.length 기준
+      const nextRoundSize = winners.length
+      const insertNext = db().prepare(`
+        INSERT INTO worldcup_matches (session_id, round, match_index, item1_id, item2_id, winner_id, is_bye)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      const insertNextMany = db().transaction(() => {
+        for (let i = 0; i < winners.length; i += 2) {
+          if (i + 1 < winners.length) {
+            insertNext.run(match.session_id, nextRoundSize, i / 2, winners[i], winners[i + 1], null, 0)
+          } else {
+            // 홀수면 부전승
+            insertNext.run(match.session_id, nextRoundSize, i / 2, winners[i], null, winners[i], 1)
+          }
+        }
+      })
+      insertNextMany()
+    }
+
+    const updatedMatches = db().prepare(`SELECT * FROM worldcup_matches WHERE session_id = ? ORDER BY round DESC, match_index`).all(match.session_id)
+    return { done: false, matches: updatedMatches }
+  })
+
+  ipcMain.handle('worldcup:complete', (_e, params: { sessionId: number }) => {
+    const { sessionId } = params
+    const session = db().prepare(`SELECT * FROM worldcup_sessions WHERE id = ?`).get(sessionId) as {
+      category_id: number; winner_id: number | null; status: string
+    } | undefined
+    if (!session || session.status !== 'completed') throw new Error('완료된 세션이 아닙니다')
+
+    // session_wins / total_sessions 업데이트
+    const categoryId = session.category_id
+    const winnerId = session.winner_id
+
+    // 이 세션에 참가한 모든 항목의 total_sessions 증가
+    const participants = db().prepare(`
+      SELECT DISTINCT item1_id AS item_id FROM worldcup_matches WHERE session_id = ?
+      UNION SELECT DISTINCT item2_id FROM worldcup_matches WHERE session_id = ? AND item2_id IS NOT NULL
+    `).all(sessionId, sessionId) as { item_id: number }[]
+
+    const updateTotalSessions = db().transaction(() => {
+      for (const p of participants) {
+        db().prepare(`
+          INSERT INTO worldcup_stats (category_id, item_id, total_sessions)
+          VALUES (?, ?, 1)
+          ON CONFLICT(category_id, item_id) DO UPDATE SET total_sessions = total_sessions + 1
+        `).run(categoryId, p.item_id)
+      }
+      if (winnerId !== null) {
+        db().prepare(`
+          INSERT INTO worldcup_stats (category_id, item_id, session_wins)
+          VALUES (?, ?, 1)
+          ON CONFLICT(category_id, item_id) DO UPDATE SET session_wins = session_wins + 1
+        `).run(categoryId, winnerId)
+      }
+    })
+    updateTotalSessions()
+
+    // 순위 계산 및 rank_history 기록
+    const stats = db().prepare(`
+      SELECT item_id,
+        CASE WHEN total_sessions > 0 THEN ROUND(CAST(session_wins AS REAL) / total_sessions * 100, 2) ELSE 0 END AS win_rate,
+        CASE WHEN total_matches > 0 THEN ROUND(CAST(match_wins AS REAL) / total_matches * 100, 2) ELSE 0 END AS match_win_rate
+      FROM worldcup_stats WHERE category_id = ?
+      ORDER BY win_rate DESC, match_win_rate DESC
+    `).all(categoryId) as { item_id: number }[]
+
+    const insertHistory = db().prepare(`INSERT INTO worldcup_rank_history (category_id, item_id, rank) VALUES (?, ?, ?)`)
+    const insertHistoryMany = db().transaction(() => {
+      stats.forEach((s, i) => insertHistory.run(categoryId, s.item_id, i + 1))
+    })
+    insertHistoryMany()
+
+    // 현재 세션 외 완료된 이전 세션의 matches 정리
+    db().prepare(`
+      DELETE FROM worldcup_matches
+      WHERE session_id IN (
+        SELECT id FROM worldcup_sessions
+        WHERE category_id = ? AND status = 'completed' AND id != ?
+      )
+    `).run(categoryId, sessionId)
+
+    return { ok: true }
+  })
+
+  ipcMain.handle('worldcup:rankings', (_e, params: { categoryId: number; limit: number; offset: number }) => {
+    const { categoryId, limit, offset } = params
+    const category = db().prepare(`SELECT type FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string } | undefined
+    if (!category) return { rows: [], total: 0 }
+
+    const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM worldcup_stats WHERE category_id = ?`).get(categoryId) as { cnt: number }).cnt
+
+    let rows: unknown[]
+    if (category.type === 'actor') {
+      rows = db().prepare(`
+        SELECT
+          ROW_NUMBER() OVER (ORDER BY
+            CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL) / ws.total_sessions ELSE 0 END DESC,
+            CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC
+          ) AS rank,
+          a.id, a.name, a.photo_path,
+          ws.total_sessions, ws.session_wins, ws.total_matches, ws.match_wins, ws.appearance_count,
+          CASE WHEN ws.total_sessions > 0 THEN ROUND(CAST(ws.session_wins AS REAL) / ws.total_sessions * 100, 2) ELSE 0 END AS win_rate,
+          CASE WHEN ws.total_matches > 0 THEN ROUND(CAST(ws.match_wins AS REAL) / ws.total_matches * 100, 2) ELSE 0 END AS match_win_rate
+        FROM worldcup_stats ws
+        JOIN actors a ON a.id = ws.item_id
+        WHERE ws.category_id = ?
+        ORDER BY win_rate DESC, match_win_rate DESC
+        LIMIT ? OFFSET ?
+      `).all(categoryId, limit, offset)
+    } else {
+      rows = db().prepare(`
+        SELECT
+          ROW_NUMBER() OVER (ORDER BY
+            CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL) / ws.total_sessions ELSE 0 END DESC,
+            CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC
+          ) AS rank,
+          w.id, w.title, w.product_number, w.cover_path,
+          ws.total_sessions, ws.session_wins, ws.total_matches, ws.match_wins, ws.appearance_count,
+          CASE WHEN ws.total_sessions > 0 THEN ROUND(CAST(ws.session_wins AS REAL) / ws.total_sessions * 100, 2) ELSE 0 END AS win_rate,
+          CASE WHEN ws.total_matches > 0 THEN ROUND(CAST(ws.match_wins AS REAL) / ws.total_matches * 100, 2) ELSE 0 END AS match_win_rate
+        FROM worldcup_stats ws
+        JOIN works w ON w.id = ws.item_id
+        WHERE ws.category_id = ?
+        ORDER BY win_rate DESC, match_win_rate DESC
+        LIMIT ? OFFSET ?
+      `).all(categoryId, limit, offset)
+    }
+    return { rows, total }
+  })
+
+  ipcMain.handle('worldcup:rank-history', (_e, params: { categoryId: number; itemId: number }) => {
+    return db().prepare(`
+      SELECT rank, recorded_at FROM worldcup_rank_history
+      WHERE category_id = ? AND item_id = ?
+      ORDER BY recorded_at ASC
+    `).all(params.categoryId, params.itemId)
+  })
+
+  ipcMain.handle('worldcup:delete-session', (_e, sessionId: number) => {
+    db().prepare(`DELETE FROM worldcup_sessions WHERE id = ?`).run(sessionId)
+    return { ok: true }
+  })
+
+  ipcMain.handle('worldcup:last-session-rankings', (_e, params: { categoryId: number; limit?: number; offset?: number }) => {
+    const { categoryId, limit = 20, offset = 0 } = params
+    const category = db().prepare(`SELECT type FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string } | undefined
+    if (!category) return null
+
+    const session = db().prepare(`
+      SELECT id, winner_id, round_total, created_at FROM worldcup_sessions
+      WHERE category_id = ? AND status = 'completed'
+      ORDER BY updated_at DESC LIMIT 1
+    `).get(categoryId) as { id: number; winner_id: number; round_total: number; created_at: string } | undefined
+    if (!session) return null
+
+    const matches = db().prepare(`
+      SELECT item1_id, item2_id, winner_id, round, is_bye
+      FROM worldcup_matches WHERE session_id = ?
+    `).all(session.id) as { item1_id: number; item2_id: number | null; winner_id: number; round: number; is_bye: number }[]
+
+    // 탈락 라운드 맵 구성
+    const elimRound: Record<number, number> = {}
+    const participantIds = new Set<number>()
+    for (const m of matches) {
+      participantIds.add(m.item1_id)
+      if (m.item2_id !== null) participantIds.add(m.item2_id)
+      if (!m.is_bye && m.item2_id !== null && m.winner_id !== null) {
+        const loserId = m.winner_id === m.item1_id ? m.item2_id : m.item1_id
+        elimRound[loserId] = m.round
+      }
+    }
+
+    // 탈락 라운드로 정렬 (우승자 먼저, 나머지는 elim 오름차순: 낮은 라운드=오래 생존)
+    const sorted = [...participantIds]
+      .map(id => ({ id, elim: id === session.winner_id ? Infinity : (elimRound[id] ?? 0) }))
+      .sort((a, b) => {
+        if (a.elim === Infinity) return -1
+        if (b.elim === Infinity) return 1
+        return a.elim - b.elim
+      })
+
+    // Dense rank 부여 (같은 탈락 라운드 = 같은 순위, 다음 그룹은 +1)
+    const ranked: { id: number; rank: number; elim_round: number | null }[] = []
+    let currentRank = 1
+    for (let i = 0; i < sorted.length; i++) {
+      if (i > 0 && sorted[i].elim !== sorted[i - 1].elim) currentRank++
+      ranked.push({ id: sorted[i].id, rank: currentRank, elim_round: sorted[i].elim === Infinity ? null : sorted[i].elim })
+    }
+
+    const total = ranked.length
+    const paged = ranked.slice(offset, offset + limit)
+
+    // 항목 정보 JOIN
+    let rows: unknown[]
+    if (category.type === 'actor') {
+      rows = paged.map(r => {
+        const a = db().prepare(`SELECT id, name, photo_path FROM actors WHERE id = ?`).get(r.id) as { id: number; name: string; photo_path: string | null } | undefined
+        return { ...r, ...a }
+      })
+    } else {
+      rows = paged.map(r => {
+        const w = db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id = ?`).get(r.id) as { id: number; title: string | null; product_number: string | null; cover_path: string | null } | undefined
+        return { ...r, ...w }
+      })
+    }
+    return { rows, total, session }
+  })
+
+  ipcMain.handle('worldcup:last-winner', (_e, params: { categoryId: number; type: 'actor' | 'work' }) => {
+    const session = db().prepare(`
+      SELECT winner_id FROM worldcup_sessions
+      WHERE category_id = ? AND status = 'completed'
+      ORDER BY updated_at DESC LIMIT 1
+    `).get(params.categoryId) as { winner_id: number } | undefined
+    if (!session) return null
+    if (params.type === 'actor') {
+      return db().prepare(`SELECT id, name, photo_path FROM actors WHERE id = ?`).get(session.winner_id)
+    } else {
+      return db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id = ?`).get(session.winner_id)
+    }
+  })
+
+  ipcMain.handle('worldcup:create-category', (_e, params: { name: string; type: 'actor' | 'work' }) => {
+    const { name, type } = params
+    const maxOrder = (db().prepare(`SELECT COALESCE(MAX(sort_order), -1) AS m FROM worldcup_categories`).get() as { m: number }).m
+    const result = db().prepare(`INSERT INTO worldcup_categories (type, name, sort_order) VALUES (?, ?, ?)`).run(type, name, maxOrder + 1)
+    return db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(result.lastInsertRowid)
+  })
+
+  ipcMain.handle('worldcup:update-category', (_e, params: { id: number; name: string }) => {
+    db().prepare(`UPDATE worldcup_categories SET name = ? WHERE id = ?`).run(params.name, params.id)
+    return db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(params.id)
+  })
+
+  ipcMain.handle('worldcup:delete-category', (_e, id: number) => {
+    db().prepare(`DELETE FROM worldcup_categories WHERE id = ?`).run(id)
+    return { ok: true }
   })
 
 }

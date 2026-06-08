@@ -36,7 +36,6 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   const [tags, setTags] = useState<Tag[]>([])
   const [selected, setSelected] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [editActor, setEditActor] = useState<(Actor & { tags?: Tag[] }) | undefined>(undefined)
   const [search, setSearch] = useState<ActorSearchParams>(() => {
     try {
@@ -46,8 +45,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
       return DEFAULT_ACTOR_SEARCH
     }
   })
-  const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score'>(
-    (localStorage.getItem('actors:sortBy') as 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score') || 'avg_score'
+  const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at'>(
+    (localStorage.getItem('actors:sortBy') as 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at') || 'avg_score'
   )
   const [showPhysical, setShowPhysical] = useState(false)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
@@ -135,11 +134,11 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
       params.sortBy = sortBy
       params.sortDir = sortDir
     }
-    if (favoriteOnly) params.favoriteOnly = true
+    if (search.favoriteOnly) params.favoriteOnly = true
     if (search.scoreExcluded) params.scoreExcluded = true
     const list = await actorsApi.list(params) as Actor[]
     setActors(list)
-  }, [search, sortBy, sortDir, favoriteOnly])
+  }, [search, sortBy, sortDir])
 
   const displayActors = useMemo(() => {
     const ratioFrom = search.ratioScoreFrom !== '' ? Number(search.ratioScoreFrom) : null
@@ -295,6 +294,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                 <option value="birthday">생년월일</option>
                 <option value="debut_date">데뷔일</option>
                 <option value="work_count">작품수</option>
+                <option value="work_release_date">작품발매일</option>
+                <option value="work_created_at">작품등록일</option>
               </select>
               <button
                 onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('actors:sortDir', next); return next })}
@@ -318,12 +319,6 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                 className="bg-fuchsia-700 hover:bg-fuchsia-600 text-white px-3 py-1.5 rounded text-sm"
               >
                 평점 계산기
-              </button>
-              <button
-                onClick={() => setFavoriteOnly((v) => !v)}
-                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
-              >
-                {favoriteOnly ? '♥' : '♡'}
               </button>
               {deleteMode ? (
                 <>

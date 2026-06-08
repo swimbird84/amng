@@ -327,4 +327,59 @@ export function initDatabase(): void {
     db.prepare("ALTER TABLE actor_tags_master ADD COLUMN created_at TEXT").run()
     db.prepare("UPDATE actor_tags_master SET created_at = datetime('now') WHERE created_at IS NULL").run()
   }
+
+  // 월드컵 테이블 마이그레이션
+  const wcCategoriesTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='worldcup_categories'").get()
+  if (!wcCategoriesTable) {
+    db.exec(`
+      CREATE TABLE worldcup_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE worldcup_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id INTEGER NOT NULL REFERENCES worldcup_categories(id) ON DELETE CASCADE,
+        round_total INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'in_progress',
+        winner_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE worldcup_matches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL REFERENCES worldcup_sessions(id) ON DELETE CASCADE,
+        round INTEGER NOT NULL,
+        match_index INTEGER NOT NULL,
+        item1_id INTEGER NOT NULL,
+        item2_id INTEGER,
+        winner_id INTEGER,
+        is_bye INTEGER DEFAULT 0
+      );
+      CREATE TABLE worldcup_stats (
+        category_id INTEGER NOT NULL REFERENCES worldcup_categories(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        total_sessions INTEGER DEFAULT 0,
+        session_wins INTEGER DEFAULT 0,
+        total_matches INTEGER DEFAULT 0,
+        match_wins INTEGER DEFAULT 0,
+        appearance_count INTEGER DEFAULT 0,
+        PRIMARY KEY (category_id, item_id)
+      );
+      CREATE TABLE worldcup_rank_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id INTEGER NOT NULL REFERENCES worldcup_categories(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        rank INTEGER NOT NULL,
+        recorded_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_worldcup_sessions_category ON worldcup_sessions(category_id);
+      CREATE INDEX idx_worldcup_matches_session ON worldcup_matches(session_id);
+      CREATE INDEX idx_worldcup_rank_history_category_item ON worldcup_rank_history(category_id, item_id);
+    `)
+    db.prepare("INSERT INTO worldcup_categories (type, name, sort_order) VALUES ('actor', '배우 월드컵', 0)").run()
+    db.prepare("INSERT INTO worldcup_categories (type, name, sort_order) VALUES ('work', '작품 월드컵', 1)").run()
+  }
 }

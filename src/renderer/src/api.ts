@@ -143,8 +143,8 @@ export const dashboardApi = {
   actorFavoriteRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-favorite-ranking', limit, reverse),
   workTagDist: () => api.invoke('dashboard:work-tag-dist'),
   actorTagDist: () => api.invoke('dashboard:actor-tag-dist'),
-  actorScoreDist: (excludeFilter: boolean) => api.invoke('dashboard:actor-score-dist', excludeFilter),
-  actorPhysicalDist: (excludeFilter: boolean) => api.invoke('dashboard:actor-physical-dist', excludeFilter),
+  actorScoreDist: () => api.invoke('dashboard:actor-score-dist'),
+  actorPhysicalDist: () => api.invoke('dashboard:actor-physical-dist'),
   actorCupDist: () => api.invoke('dashboard:actor-cup-dist'),
   ratingWorks: (bucket: number) => api.invoke('dashboard:rating-works', bucket),
   debutAgeDist: () => api.invoke('dashboard:debut-age-dist'),
@@ -158,4 +158,21 @@ export const dashboardApi = {
 export const imageApi = {
   copy: (src: string, type: 'works' | 'actors', id: number) => api.invoke('image:copy', src, type, id),
   read: (path: string) => api.invoke('image:read', path),
+}
+
+// 월드컵
+export const worldcupApi = {
+  categories: () => api.invoke('worldcup:categories'),
+  getSession: (categoryId: number) => api.invoke('worldcup:get-session', categoryId),
+  start: (categoryId: number, roundTotal: number, exclude?: boolean) => api.invoke('worldcup:start', { categoryId, roundTotal, exclude }),
+  pick: (matchId: number, winnerId: number) => api.invoke('worldcup:pick', { matchId, winnerId }),
+  complete: (sessionId: number) => api.invoke('worldcup:complete', { sessionId }),
+  rankings: (categoryId: number, limit: number, offset: number) => api.invoke('worldcup:rankings', { categoryId, limit, offset }),
+  rankHistory: (categoryId: number, itemId: number) => api.invoke('worldcup:rank-history', { categoryId, itemId }),
+  deleteSession: (sessionId: number) => api.invoke('worldcup:delete-session', sessionId),
+  lastSessionRankings: (categoryId: number, limit: number, offset: number) => api.invoke('worldcup:last-session-rankings', { categoryId, limit, offset }),
+  lastWinner: (categoryId: number, type: 'actor' | 'work') => api.invoke('worldcup:last-winner', { categoryId, type }),
+  createCategory: (name: string, type: 'actor' | 'work') => api.invoke('worldcup:create-category', { name, type }),
+  updateCategory: (id: number, name: string) => api.invoke('worldcup:update-category', { id, name }),
+  deleteCategory: (id: number) => api.invoke('worldcup:delete-category', id),
 }

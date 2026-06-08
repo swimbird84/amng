@@ -34,7 +34,6 @@ export default function Works({ onNavigateToActor, openEditId, onEditHandled }: 
   const [selected, setSelected] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [showForm, setShowForm] = useState(false)
-const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [editWork, setEditWork] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | undefined>(undefined)
   const [search, setSearch] = useState<WorkSearchParams>(() => {
     try {
@@ -86,7 +85,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     if (search.actorCountNull) params.actorCountNull = true
     params.sortBy = sortBy
     params.sortDir = sortDir
-    if (favoriteOnly) params.favoriteOnly = true
+    if (search.favoriteOnly) params.favoriteOnly = true
     params.limit = limit
     params.offset = offset
     const result = await worksApi.list(params) as { items: Work[]; total: number }
@@ -98,7 +97,7 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
     hasMoreRef.current = more
     setIsLoadingMore(false)
     isLoadingMoreRef.current = false
-  }, [search, sortBy, sortDir, favoriteOnly])
+  }, [search, sortBy, sortDir])
 
   const refreshWorks = useCallback((extraCount = 0) => {
     const count = Math.max(worksCountRef.current + extraCount, BATCH_SIZE)
@@ -374,12 +373,6 @@ const [favoriteOnly, setFavoriteOnly] = useState(false)
                 className="bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded text-sm"
               >
                 폴더 스캔
-              </button>
-<button
-                onClick={() => setFavoriteOnly((v) => !v)}
-                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-sm"
-              >
-                {favoriteOnly ? '♥' : '♡'}
               </button>
               {deleteMode ? (
                 <>

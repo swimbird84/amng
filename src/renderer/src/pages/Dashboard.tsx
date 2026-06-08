@@ -175,7 +175,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 // ===== 배우 분포 차트 =====
-type DistBinActor = { id: number; name: string; photo_path: string | null; avg_score: number; value: number; displayValue: string }
+type DistBinActor = { id: number; name: string; photo_path: string | null; avg_score: number; value: number; displayValue: string; score_excluded: number }
 const CUP_ORDER_CHART = ['A','B','C','D','E','F','G','H','I','J','K','L','M']
 const DIST_ITEMS = [
   { key: 'avg_score',    label: '평점평균' },
@@ -220,10 +220,6 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   const [scoreDist, setScoreDist] = useState<(Actor & { avg_score: number; work_count: number; ratio_score?: number })[]>([])
   const [physicalDist, setPhysicalDist] = useState<(ActorPhysicalData & { avg_score: number; work_count: number; physScore: number })[]>([])
-  const [cupDist, setCupDist] = useState<(Actor & { avg_score: number; work_count: number; ratio_score?: number })[]>([])
-  const [selectedCup, setSelectedCup] = useState<string | null>(null)
-  const [selectedScoreBucket, setSelectedScoreBucket] = useState<{ base: number; half: 'early' | 'late' } | null>(null)
-  const [selectedPhysicalBucket, setSelectedPhysicalBucket] = useState<{ base: number; half: 'early' | 'late' } | null>(null)
 
   const [debutYears, setDebutYears] = useState<{ year: string; count: number }[]>([])
   const [selectedDebutYear, setSelectedDebutYear] = useState<string | null>(null)
@@ -259,15 +255,13 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.releaseYears().then((d) => setYears(d as { year: string; count: number }[]))
     dashboardApi.ageDist().then((d) => setAgeDist(d as (Actor & { age: number; avg_score: number })[]))
     dashboardApi.debutAgeDist().then((d) => setDebutAgeDist(d as (Actor & { debut_age: number; avg_score: number })[]))
-    dashboardApi.actorCupDist().then((d) => setCupDist(d as (Actor & { avg_score: number; work_count: number })[]))
     dashboardApi.ratingDist().then((d) => setRatingDist(d as { bucket: number; count: number }[]))
     dashboardApi.debutYears().then((d) => setDebutYears(d as { year: string; count: number }[]))
   }, [])
 
   useEffect(() => {
-    const excludeFilter = distExcludeMode === 'exclude'
-    dashboardApi.actorScoreDist(excludeFilter).then((d) => setScoreDist(d as (Actor & { avg_score: number; work_count: number; ratio_score?: number })[]))
-    dashboardApi.actorPhysicalDist(excludeFilter).then((raw) => {
+    dashboardApi.actorScoreDist().then((d) => setScoreDist(d as (Actor & { avg_score: number; work_count: number; ratio_score?: number })[]))
+    dashboardApi.actorPhysicalDist().then((raw) => {
       const data = raw as (ActorPhysicalData & { avg_score: number; work_count: number })[]
       const settings = loadSettings()
       const stats = computeStats(data)
@@ -277,7 +271,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           .filter(a => a.physScore >= 0)
       )
     })
-  }, [distExcludeMode])
+  }, [])
 
 
   const handleSelectYear = async (year: string) => {
@@ -367,11 +361,11 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
     let actors: DistBinActor[] = []
     if (isAvgScore) {
-      actors = scoreDist.map(a => ({ id: a.id, name: a.name, photo_path: (a as any).photo_path ?? null, avg_score: a.avg_score, value: a.avg_score, displayValue: a.avg_score.toFixed(2) }))
+      actors = scoreDist.map(a => ({ id: a.id, name: a.name, photo_path: (a as any).photo_path ?? null, avg_score: a.avg_score, value: a.avg_score, displayValue: a.avg_score.toFixed(2), score_excluded: a.score_excluded }))
     } else if (isPhysScore) {
-      actors = (physicalDist as PhysActor[]).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: a.physScore, displayValue: a.physScore.toFixed(2) }))
+      actors = (physicalDist as PhysActor[]).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: a.physScore, displayValue: a.physScore.toFixed(2), score_excluded: a.score_excluded }))
     } else if (isCup) {
-      actors = (physicalDist as PhysActor[]).filter(a => a.cup && CUP_ORDER_CHART.includes(a.cup)).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: CUP_ORDER_CHART.indexOf(a.cup!), displayValue: a.cup! }))
+      actors = (physicalDist as PhysActor[]).filter(a => a.cup && CUP_ORDER_CHART.includes(a.cup)).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: CUP_ORDER_CHART.indexOf(a.cup!), displayValue: a.cup!, score_excluded: a.score_excluded }))
     } else {
       const getVal = (a: PhysActor): number | null => {
         if (distItem === 'face') return a.face; if (distItem === 'score_bust') return a.score_bust; if (distItem === 'score_hip') return a.score_hip
@@ -382,8 +376,12 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
       }
       actors = (physicalDist as PhysActor[]).filter(a => getVal(a) !== null).map(a => {
         const value = getVal(a)!
-        return { id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value, displayValue: isProfileCm ? `${value}cm` : String(value) }
+        return { id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value, displayValue: isProfileCm ? `${value}cm` : String(value), score_excluded: a.score_excluded }
       })
+    }
+
+    if (distExcludeMode === 'exclude') {
+      actors = actors.filter(a => !a.score_excluded)
     }
 
     if (actors.length === 0) return { distBins: [], distAvg: null, distTotal: 0, maxCount: 0, distAvgPercent: null }
@@ -415,7 +413,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     const maxCount = Math.max(...bins.map(b => b.actors.length), 1)
     const distAvgPercent = !isCup && bins.length > 0 ? Math.max(0, Math.min(1, (avg - bins[0].lo) / (bins[bins.length - 1].hi - bins[0].lo))) : null
     return { distBins: bins, distAvg: avg, distTotal: actors.length, maxCount, distAvgPercent }
-  }, [distItem, scoreDist, physicalDist])
+  }, [distItem, scoreDist, physicalDist, distExcludeMode])
 
   const ratingBuckets = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
   const ratingCountMap = new Map(ratingDist.map((r) => [r.bucket, r.count]))
@@ -481,10 +479,10 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           )}
         </div>
 
-        {/* 배우 분포 */}
+        {/* 배우 분포 차트 */}
         <div>
           <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-white font-bold text-base">배우 분포</h2>
+            <h2 className="text-white font-bold text-base">배우 분포 차트</h2>
             <select
               value={distItem}
               onChange={e => { setDistItem(e.target.value as DistItemKey); localStorage.setItem('dashboard:distItem', e.target.value) }}
@@ -858,189 +856,6 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           )}
         </div>
 
-        {/* 배우 평점 분포 */}
-        <div>
-          <SectionTitle>배우 평점 분포</SectionTitle>
-          {scoreDist.length > 0 ? (
-            <>
-              <div className="grid grid-cols-10 gap-1.5 mb-4">
-                {Array.from({ length: 10 }, (_, i) => i).flatMap((base) =>
-                  (['early', 'late'] as const).map((half) => {
-                    const actors = scoreDist.filter((a) =>
-                      half === 'early'
-                        ? a.avg_score >= base && a.avg_score < base + 0.5
-                        : base === 9
-                          ? a.avg_score >= base + 0.5 && a.avg_score <= 10
-                          : a.avg_score >= base + 0.5 && a.avg_score < base + 1
-                    )
-                    if (actors.length === 0) return null
-                    const isSelected = selectedScoreBucket?.base === base && selectedScoreBucket?.half === half
-                    return (
-                      <button
-                        key={`${base}-${half}`}
-                        onClick={() => setSelectedScoreBucket(isSelected ? null : { base, half })}
-                        className={`py-1.5 rounded text-center ${isSelected ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                      >
-                        <p className="text-xs font-bold">{base}점대 {half === 'early' ? '초반' : '후반'}</p>
-                        <p className="text-xs">{actors.length}명</p>
-                      </button>
-                    )
-                  })
-                )}
-              </div>
-              {selectedScoreBucket !== null && (() => {
-                const { base, half } = selectedScoreBucket
-                const lo = half === 'early' ? base : base + 0.5
-                const isNineLate = base === 9 && half === 'late'
-                const steps = isNineLate
-                  ? [9.5, 9.6, 9.7, 9.8, 9.9, 10.0]
-                  : Array.from({ length: 5 }, (_, i) => Math.round((lo + i * 0.1) * 10) / 10)
-                return (
-                  <div className="space-y-4 border border-gray-700 rounded-lg p-4">
-                    {steps.map((step) => {
-                      const actors = scoreDist
-                        .filter((a) => {
-                          const s = Math.round(a.avg_score * 10) / 10
-                          return s === step
-                        })
-                        .sort((a, b) => a.avg_score - b.avg_score || ((a.ratio_score ?? -1) - (b.ratio_score ?? -1)))
-                      return (
-                        <div key={step} className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-400 flex-shrink-0">{step.toFixed(1)}점</span>
-                            <div className="flex-1 border-t border-gray-700" />
-                          </div>
-                          {actors.length > 0 ? (
-                            <div className="grid grid-cols-10 gap-2">
-                              {actors.map((a, i) => (
-                                <ActorRankCard key={a.id} actor={a} rank={i + 1} subtitle={`${(a.avg_score ?? 0).toFixed(2)}점`} showRank={false} onClick={() => onNavigateToActor(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-gray-600 text-sm">-</span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
-            </>
-          ) : (
-            <p className="text-gray-500 text-sm">데이터가 없습니다</p>
-          )}
-        </div>
-
-        {/* 배우 피지컬 분포 */}
-        <div>
-          <SectionTitle>배우 피지컬 분포</SectionTitle>
-          {physicalDist.length > 0 ? (
-            <>
-              <div className="grid grid-cols-10 gap-1.5 mb-4">
-                {Array.from({ length: 10 }, (_, i) => i).flatMap((base) =>
-                  (['early', 'late'] as const).map((half) => {
-                    const actors = physicalDist.filter((a) =>
-                      half === 'early'
-                        ? a.physScore >= base && a.physScore < base + 0.5
-                        : base === 9
-                          ? a.physScore >= base + 0.5 && a.physScore <= 10
-                          : a.physScore >= base + 0.5 && a.physScore < base + 1
-                    )
-                    if (actors.length === 0) return null
-                    const isSelected = selectedPhysicalBucket?.base === base && selectedPhysicalBucket?.half === half
-                    return (
-                      <button
-                        key={`${base}-${half}`}
-                        onClick={() => setSelectedPhysicalBucket(isSelected ? null : { base, half })}
-                        className={`py-1.5 rounded text-center ${isSelected ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                      >
-                        <p className="text-xs font-bold">{base}점대 {half === 'early' ? '초반' : '후반'}</p>
-                        <p className="text-xs">{actors.length}명</p>
-                      </button>
-                    )
-                  })
-                )}
-              </div>
-              {selectedPhysicalBucket !== null && (() => {
-                const { base, half } = selectedPhysicalBucket
-                const lo = half === 'early' ? base : base + 0.5
-                const isNineLate = base === 9 && half === 'late'
-                const steps = isNineLate
-                  ? [9.5, 9.6, 9.7, 9.8, 9.9, 10.0]
-                  : Array.from({ length: 5 }, (_, i) => Math.round((lo + i * 0.1) * 10) / 10)
-                return (
-                  <div className="space-y-4 border border-gray-700 rounded-lg p-4">
-                    {steps.map((step) => {
-                      const actors = physicalDist
-                        .filter((a) => {
-                          const s = Math.round(a.physScore * 10) / 10
-                          return s === step
-                        })
-                        .sort((a, b) => a.physScore - b.physScore || a.avg_score - b.avg_score)
-                      return (
-                        <div key={step} className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-400 flex-shrink-0">{step.toFixed(1)}점</span>
-                            <div className="flex-1 border-t border-gray-700" />
-                          </div>
-                          {actors.length > 0 ? (
-                            <div className="grid grid-cols-10 gap-2">
-                              {actors.map((a, i) => (
-                                <ActorRankCard key={a.id} actor={a as unknown as Actor} rank={i + 1} subtitle={`${a.physScore.toFixed(2)}점`} showRank={false} onClick={() => onNavigateToActor(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-gray-600 text-sm">-</span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
-            </>
-          ) : (
-            <p className="text-gray-500 text-sm">피지컬 데이터가 있는 배우가 없습니다</p>
-          )}
-        </div>
-
-        {/* 배우 컵 분포 */}
-        {cupDist.length > 0 && (() => {
-          const cups = Array.from(new Set(cupDist.map((a) => a.cup as string))).sort()
-          return (
-            <div>
-              <SectionTitle>배우 컵 분포</SectionTitle>
-              <div className="grid grid-cols-10 gap-1.5 mb-4">
-                {cups.map((cup) => {
-                  const actors = cupDist.filter((a) => a.cup === cup)
-                  const isSelected = selectedCup === cup
-                  return (
-                    <button
-                      key={cup}
-                      onClick={() => setSelectedCup(isSelected ? null : cup)}
-                      className={`py-1.5 px-3 rounded text-center ${isSelected ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >
-                      <p className="text-xs font-bold">{cup}컵</p>
-                      <p className="text-xs">{actors.length}명</p>
-                    </button>
-                  )
-                })}
-              </div>
-              {selectedCup !== null && (
-                <div className="border border-gray-700 rounded-lg p-4">
-                  <div className="grid grid-cols-10 gap-2">
-                    {cupDist.filter((a) => a.cup === selectedCup).map((a) => (
-                      <ActorCupCard key={a.id} actor={a} onClick={() => onNavigateToActor(a.id)} onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
-
-
 
       </div>
     </div>
@@ -1068,7 +883,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         </div>
       </div>
     )}
-    {/* 배우 분포 팝업 */}
+    {/* 배우 분포 차트 팝업 */}
     {distActorPopup && (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setDistActorPopup(null)}>
         <div className="bg-gray-800 rounded-lg w-[480px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
