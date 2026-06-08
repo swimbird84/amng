@@ -90,9 +90,11 @@ function GameCard({ itemId, type, onPick, onNavigate, onMouseMove, onMouseLeave,
   const imgPath   = type === 'actor' ? info?.photo_path : info?.cover_path
   const firstFile = info?.files?.[0]
 
-  const handlePlay = (e: React.MouseEvent) => {
+  const handlePlay = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (firstFile) shellApi.openPath(firstFile.file_path)
+    if (!firstFile) return
+    if (firstFile.type === 'url') shellApi.openExternal(firstFile.file_path)
+    else await shellApi.openPath(firstFile.file_path)
   }
 
   return (
@@ -176,7 +178,17 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
   const [catSessions, setCatSessions] = useState<Record<number, { session: WcSession; matches: WcMatch[] } | null>>({})
   const [catWinners, setCatWinners]   = useState<Record<number, { id: number; photo_path?: string | null; cover_path?: string | null; name?: string; title?: string | null; product_number?: string | null } | null>>({})
   const [cardRounds, setCardRounds]   = useState<Record<number, number>>({})
-  const [cardExclude, setCardExclude] = useState<Record<number, boolean>>({})
+  const [cardExclude, setCardExclude] = useState<Record<number, boolean>>(() => {
+    const result: Record<number, boolean> = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('worldcup:exclude:')) {
+        const catId = parseInt(key.replace('worldcup:exclude:', ''))
+        result[catId] = localStorage.getItem(key) === 'true'
+      }
+    }
+    return result
+  })
 
   // 검색/정렬
   const [wcSearch,     setWcSearch]     = useState(() => localStorage.getItem('worldcup:search') ?? '')
@@ -474,7 +486,11 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                       </select>
                       {cat.type === 'actor' && (
                         <label className="flex items-center gap-1 cursor-pointer select-none shrink-0 bg-gray-700 px-2 py-1.5 rounded">
-                          <input type="checkbox" checked={excl} onChange={e => setCardExclude(prev => ({ ...prev, [cat.id]: e.target.checked }))} className="accent-blue-500" />
+                          <input type="checkbox" checked={excl} onChange={e => {
+                            const v = e.target.checked
+                            setCardExclude(prev => ({ ...prev, [cat.id]: v }))
+                            localStorage.setItem(`worldcup:exclude:${cat.id}`, String(v))
+                          }} className="accent-blue-500" />
                           <span className="text-xs text-gray-300">제외</span>
                         </label>
                       )}
@@ -566,7 +582,12 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
           {winnerInfo && (
             <>
               <div className="cursor-pointer" onClick={() => selCategory?.type === 'actor' ? onNavigateToActor(winnerInfo.id) : onNavigateToWork(winnerInfo.id)}>
-                <ImagePreview path={winnerInfo.imgPath} alt={winnerInfo.label} className="w-48 h-64 rounded-xl border-2 border-yellow-500" objectPosition="center 10%" />
+                <ImagePreview
+                  path={winnerInfo.imgPath}
+                  alt={winnerInfo.label}
+                  className={`h-64 rounded-xl border-2 border-yellow-500 ${selCategory?.type === 'actor' ? 'w-64' : 'w-[379px]'}`}
+                  objectPosition="center 10%"
+                />
               </div>
               <p className="text-white font-bold text-lg">{winnerInfo.label}</p>
               <div className="w-full max-w-md flex flex-col gap-2">
