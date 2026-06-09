@@ -542,7 +542,6 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                   <div className="p-3 flex flex-col gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <p className="text-white font-bold text-sm truncate flex-1">{cat.name}</p>
-                      {(() => { const fc = countActiveFilters(cat.filter_json ? JSON.parse(cat.filter_json) : null); return fc > 0 ? <span className="text-xs text-blue-400 shrink-0">필터 {fc}개</span> : null })()}
                     </div>
                     {/* 라운드 + 제외 */}
                     <div className="flex gap-1.5 items-center">
