@@ -2003,7 +2003,7 @@ export function registerIpcHandlers(): void {
     let matchIdx = 0
     // 부전승 처리: byeCount개 항목은 단독 진출
     for (let i = 0; i < byeCount; i++) {
-      firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: null, winner: shuffled[i].id, isBye: 1 })
+      firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: null, winner: null, isBye: 1 })
     }
     // 나머지 항목들은 1:1 매치
     for (let i = byeCount; i < totalCount; i += 2) {
@@ -2083,7 +2083,7 @@ export function registerIpcHandlers(): void {
             insertNext.run(match.session_id, nextRoundSize, i / 2, winners[i], winners[i + 1], null, 0)
           } else {
             // 홀수면 부전승
-            insertNext.run(match.session_id, nextRoundSize, i / 2, winners[i], null, winners[i], 1)
+            insertNext.run(match.session_id, nextRoundSize, i / 2, winners[i], null, null, 1)
           }
         }
       })
@@ -2131,18 +2131,18 @@ export function registerIpcHandlers(): void {
 
     // 순위 계산 및 rank_history 기록
     const stats = db().prepare(`
-      SELECT item_id,
+      SELECT item_id, total_matches,
         CASE WHEN total_sessions > 0 THEN ROUND(CAST(session_wins AS REAL) / total_sessions * 100, 2) ELSE 0 END AS win_rate,
         CASE WHEN total_matches > 0 THEN ROUND(CAST(match_wins AS REAL) / total_matches * 100, 2) ELSE 0 END AS match_win_rate
       FROM worldcup_stats WHERE category_id = ?
-      ORDER BY win_rate DESC, match_win_rate DESC
-    `).all(categoryId) as { item_id: number; win_rate: number; match_win_rate: number }[]
+      ORDER BY win_rate DESC, match_win_rate DESC, total_matches DESC
+    `).all(categoryId) as { item_id: number; win_rate: number; match_win_rate: number; total_matches: number }[]
 
     const insertHistory = db().prepare(`INSERT INTO worldcup_rank_history (category_id, item_id, rank) VALUES (?, ?, ?)`)
     const insertHistoryMany = db().transaction(() => {
       let currentRank = 1
       stats.forEach((s, i) => {
-        if (i > 0 && (s.win_rate !== stats[i - 1].win_rate || s.match_win_rate !== stats[i - 1].match_win_rate)) {
+        if (i > 0 && (s.win_rate !== stats[i - 1].win_rate || s.match_win_rate !== stats[i - 1].match_win_rate || s.total_matches !== stats[i - 1].total_matches)) {
           currentRank++
         }
         insertHistory.run(categoryId, s.item_id, currentRank)
@@ -2175,7 +2175,8 @@ export function registerIpcHandlers(): void {
         SELECT
           DENSE_RANK() OVER (ORDER BY
             CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL) / ws.total_sessions ELSE 0 END DESC,
-            CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC
+            CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC,
+            ws.total_matches DESC
           ) AS rank,
           a.id, a.name, a.photo_path,
           ws.total_sessions, ws.session_wins, ws.total_matches, ws.match_wins, ws.appearance_count,
@@ -2184,7 +2185,7 @@ export function registerIpcHandlers(): void {
         FROM worldcup_stats ws
         JOIN actors a ON a.id = ws.item_id
         WHERE ws.category_id = ?
-        ORDER BY win_rate DESC, match_win_rate DESC
+        ORDER BY win_rate DESC, match_win_rate DESC, ws.total_matches DESC
         LIMIT ? OFFSET ?
       `).all(categoryId, limit, offset)
     } else {
@@ -2192,7 +2193,8 @@ export function registerIpcHandlers(): void {
         SELECT
           DENSE_RANK() OVER (ORDER BY
             CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL) / ws.total_sessions ELSE 0 END DESC,
-            CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC
+            CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC,
+            ws.total_matches DESC
           ) AS rank,
           w.id, w.title, w.product_number, w.cover_path,
           ws.total_sessions, ws.session_wins, ws.total_matches, ws.match_wins, ws.appearance_count,
@@ -2201,7 +2203,7 @@ export function registerIpcHandlers(): void {
         FROM worldcup_stats ws
         JOIN works w ON w.id = ws.item_id
         WHERE ws.category_id = ?
-        ORDER BY win_rate DESC, match_win_rate DESC
+        ORDER BY win_rate DESC, match_win_rate DESC, ws.total_matches DESC
         LIMIT ? OFFSET ?
       `).all(categoryId, limit, offset)
     }

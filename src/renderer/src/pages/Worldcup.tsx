@@ -104,11 +104,19 @@ function GameCard({ itemId, type, onPick, onNavigate, onMouseMove, onMouseLeave,
     photo_path?: string | null; cover_path?: string | null
     files?: { id: number; file_path: string; type: string }[]
   } | null>(null)
+  const [fileExists, setFileExists] = useState(false)
 
   useEffect(() => {
     if (type === 'actor') actorsApi.get(itemId).then(d => setInfo(d as typeof info))
     else worksApi.get(itemId).then(d => setInfo(d as typeof info))
   }, [itemId, type])
+
+  useEffect(() => {
+    const first = info?.files?.[0]
+    if (!first) { setFileExists(false); return }
+    if (first.type === 'url') { setFileExists(true); return }
+    shellApi.fileExists(first.file_path).then(setFileExists)
+  }, [info])
 
   const imgPath   = type === 'actor' ? info?.photo_path : info?.cover_path
   const firstFile = info?.files?.[0]
@@ -142,21 +150,24 @@ function GameCard({ itemId, type, onPick, onNavigate, onMouseMove, onMouseLeave,
         onClick={onNavigate}
       >
         {type === 'actor' ? (
-          <p className="text-sm font-bold text-white truncate">{info?.name ?? '...'}</p>
+          <p className="text-[2.625rem] font-bold text-white text-center">{info?.name ?? '...'}</p>
         ) : (
-          <>
-            <p className="text-xs text-gray-400 truncate">{info?.product_number ?? '...'}</p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-sm font-bold text-white truncate flex-1">{info?.title ?? info?.product_number ?? '...'}</p>
-              {firstFile && (
-                <button
-                  onClick={handlePlay}
-                  className="shrink-0 text-green-400 hover:text-green-300 text-base leading-none"
-                  title="재생"
-                >▶</button>
-              )}
+          <div className="flex items-start gap-2 min-h-[195px]">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-gray-400">{info?.product_number ?? '...'}</p>
+              <p className="text-sm font-bold text-white mt-0.5 line-clamp-6">{info?.title ?? info?.product_number ?? '...'}</p>
             </div>
-          </>
+            {firstFile && (
+              <button
+                onClick={handlePlay}
+                disabled={!fileExists}
+                className={`shrink-0 w-8 h-8 rounded flex items-center justify-center transition ${fileExists ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
+                title="재생"
+              >
+                <span className="text-white text-sm">▶</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -250,6 +261,14 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
     ? matches.filter(m => m.round === cur.round && !m.is_bye).sort((a, b) => a.match_index - b.match_index)
     : []
   const matchNumber = cur ? curRoundNonBye.findIndex(m => m.id === cur.id) + 1 : 0
+
+  // 브래킷 라벨 (선택강 ≠ 실제 참가자수일 때 "256강(200강)" 형식)
+  const firstRound = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0
+  const firstRoundByeCount = matches.filter(m => m.round === firstRound && m.is_bye).length
+  const participantCount = firstRound > 0 ? firstRound - firstRoundByeCount : 0
+  const bracketLabel = firstRound > 0 && participantCount > 0 && participantCount !== firstRound
+    ? `${roundLabel(firstRound)}(${participantCount}강)`
+    : cur ? roundLabel(cur.round) : ''
 
   // ── 데이터 로드 ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -485,7 +504,13 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
               const exCurMatch  = existing ? currentMatch(existing.matches) : null
               const exNonBye    = exCurMatch ? existing!.matches.filter(m => m.round === exCurMatch.round && !m.is_bye).sort((a, b) => a.match_index - b.match_index) : []
               const exMatchNum  = exCurMatch ? exNonBye.findIndex(m => m.id === exCurMatch.id) + 1 : 0
-              const progressLabel = exCurMatch ? `${roundLabel(exCurMatch.round)}-${exMatchNum}경기` : null
+              const exFirstRound = existing ? Math.max(...existing.matches.map(m => m.round)) : 0
+              const exByeCount = existing ? existing.matches.filter(m => m.round === exFirstRound && m.is_bye).length : 0
+              const exParticipantCount = exFirstRound - exByeCount
+              const exBracketPrefix = exFirstRound > 0 && exParticipantCount > 0 && exParticipantCount !== exFirstRound
+                ? `${roundLabel(exFirstRound)}(${exParticipantCount}강)`
+                : exCurMatch ? roundLabel(exCurMatch.round) : ''
+              const progressLabel = exCurMatch ? `${exBracketPrefix}-${exMatchNum}경기` : null
               const winner = catWinners[cat.id]
               const winnerImg = cat.type === 'actor' ? winner?.photo_path : winner?.cover_path
               return (
@@ -554,36 +579,55 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
             {/* 헤더 */}
             <div className="flex items-center justify-between px-6 py-3 border-b border-gray-700 shrink-0">
               <button onClick={() => setSubView('home')} className="text-gray-400 hover:text-white text-sm">← 홈</button>
-              <p className="text-white font-bold">{roundLabel(cur.round)} — {matchNumber}경기</p>
+              <p className="text-white font-bold">{bracketLabel} — {matchNumber}경기</p>
               <div className="w-16" />
             </div>
 
             {/* 카드 영역 */}
-            <div className={`flex-1 flex justify-center items-center gap-4 p-6 min-h-0 transition-opacity duration-500 ${cardsVisible ? 'opacity-100' : 'opacity-0'}`}>
-              {/* 카드 1 */}
-              <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${
-                picking?.loserId === cur.item1_id ? 'w-0 opacity-0'
-                : picking?.fadeOut && picking?.winnerId === cur.item1_id ? 'w-[40%] opacity-0'
-                : 'w-[40%] opacity-100'
-              }`}>
-                <GameCard
-                  itemId={cur.item1_id}
-                  type={selCategory?.type ?? 'actor'}
-                  onPick={() => handleCardPick(cur.id, cur.item1_id, cur.item2_id)}
-                  onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item1_id) : onNavigateToWork(cur.item1_id)}
-                  onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item1_id, x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setTooltip(null)}
-                  disabled={!!picking}
-                />
+            {cur.item2_id === null ? (
+              /* 부전승 — 카드 1장 가운데 */
+              <div className={`flex-1 flex flex-col justify-center items-center gap-3 p-6 min-h-0 transition-opacity duration-500 ${cardsVisible ? 'opacity-100' : 'opacity-0'}`}>
+                <p className="text-gray-400 text-sm">부전승 — 클릭하여 다음 라운드로 진출</p>
+                <div className={`w-[40%] overflow-hidden ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${
+                  picking?.fadeOut ? 'opacity-0' : 'opacity-100'
+                }`}>
+                  <GameCard
+                    itemId={cur.item1_id}
+                    type={selCategory?.type ?? 'actor'}
+                    onPick={() => handleCardPick(cur.id, cur.item1_id, null)}
+                    onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item1_id) : onNavigateToWork(cur.item1_id)}
+                    onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item1_id, x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setTooltip(null)}
+                    disabled={!!picking}
+                  />
+                </div>
               </div>
+            ) : (
+              /* 일반 매치 — 카드 2장 */
+              <div className={`flex-1 flex justify-center items-center gap-4 p-6 min-h-0 transition-opacity duration-500 ${cardsVisible ? 'opacity-100' : 'opacity-0'}`}>
+                {/* 카드 1 */}
+                <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${
+                  picking?.loserId === cur.item1_id ? 'w-0 opacity-0'
+                  : picking?.fadeOut && picking?.winnerId === cur.item1_id ? 'w-[40%] opacity-0'
+                  : 'w-[40%] opacity-100'
+                }`}>
+                  <GameCard
+                    itemId={cur.item1_id}
+                    type={selCategory?.type ?? 'actor'}
+                    onPick={() => handleCardPick(cur.id, cur.item1_id, cur.item2_id)}
+                    onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item1_id) : onNavigateToWork(cur.item1_id)}
+                    onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item1_id, x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setTooltip(null)}
+                    disabled={!!picking}
+                  />
+                </div>
 
-              {/* VS */}
-              <div className={`flex items-center justify-center shrink-0 overflow-hidden ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${picking ? 'w-0 opacity-0' : 'w-10 opacity-100'}`}>
-                <span className="text-gray-500 font-bold text-xl">VS</span>
-              </div>
+                {/* VS */}
+                <div className={`flex items-center justify-center shrink-0 overflow-hidden ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${picking ? 'w-0 opacity-0' : 'w-10 opacity-100'}`}>
+                  <span className="text-gray-500 font-bold text-xl">VS</span>
+                </div>
 
-              {/* 카드 2 */}
-              {cur.item2_id !== null ? (
+                {/* 카드 2 */}
                 <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${
                   picking?.loserId === cur.item2_id ? 'w-0 opacity-0'
                   : picking?.fadeOut && picking?.winnerId === cur.item2_id ? 'w-[40%] opacity-0'
@@ -599,10 +643,8 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                     disabled={!!picking}
                   />
                 </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-gray-600">부전승</div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex items-center justify-center h-full">
@@ -687,6 +729,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                     <col style={{ width: '8%' }} />
                     {selCategory?.type === 'work' && <col style={{ width: '10%' }} />}
                     <col />
+                    <col style={{ width: '12%' }} />
                     <col style={{ width: selCategory?.type === 'work' ? '8%' : '10%' }} />
                     <col style={{ width: selCategory?.type === 'work' ? '8%' : '10%' }} />
                     <col style={{ width: '15%' }} />
@@ -697,7 +740,8 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                       <th className="py-2 text-left">썸네일</th>
                       {selCategory?.type === 'work' && <th className="py-2 text-left">품번</th>}
                       <th className="py-2 text-left">{selCategory?.type === 'work' ? '타이틀' : '이름'}</th>
-                      <th className="py-2 text-right">우승비율</th>
+                      <th className="py-2 text-right">매치수</th>
+                      <th className="py-2 text-right">우승률</th>
                       <th className="py-2 text-right">승률</th>
                       <th className="py-2 text-center">순위추이</th>
                     </tr>
@@ -731,6 +775,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                               >{label}</span>
                             </div>
                           </td>
+                          <td className="px-2 text-right text-gray-400 text-xs">{row.total_sessions}/{row.total_matches}</td>
                           <td className="px-2 text-right text-yellow-400">{row.win_rate.toFixed(1)}%</td>
                           <td className="px-2 text-right text-blue-400">{row.match_win_rate.toFixed(1)}%</td>
                           <td className="px-2 cursor-pointer" onClick={() => setTrendModal({ id: row.id, label: label ?? '', imgPath: imgPath ?? null })}>
