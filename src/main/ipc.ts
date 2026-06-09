@@ -1836,7 +1836,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('worldcup:start', (_e, params: { categoryId: number; roundTotal: number; exclude?: boolean }) => {
     const { categoryId, roundTotal, exclude } = params
-    const category = db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string } | undefined
+    const category = db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string; filter_json?: string | null } | undefined
     if (!category) throw new Error('카테고리를 찾을 수 없습니다')
 
     // 기존 in_progress 세션 삭제
@@ -1846,24 +1846,122 @@ export function registerIpcHandlers(): void {
     }
 
     // 후보 항목 조회 (appearance_count 낮은 순 우선)
-    let items: { id: number }[]
+    let items: { id: number; appearance_count: number }[]
     if (category.type === 'actor') {
       const excludeWhere = exclude ? `AND (a.score_excluded IS NULL OR a.score_excluded = 0)` : ''
+      const filter = category.filter_json ? JSON.parse(category.filter_json) as Record<string, unknown> : null
+      let extraJoins = ''
+      const extraConditions: string[] = []
+      const extraBindings: unknown[] = []
+      if (filter) {
+        const tagIds = filter.tagIds as number[] | undefined
+        if (tagIds?.length) {
+          const ph = tagIds.map(() => '?').join(',')
+          extraJoins += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
+          extraConditions.push(`at2.tag_id IN (${ph})`)
+          extraBindings.push(...tagIds)
+          if (filter.tagMode === 'and') {
+            extraConditions.push(`(SELECT COUNT(DISTINCT at3.tag_id) FROM actor_tags at3 WHERE at3.actor_id = a.id AND at3.tag_id IN (${ph})) = ?`)
+            extraBindings.push(...tagIds, tagIds.length)
+          }
+        }
+        const actorIds = filter.actorIds as number[] | undefined
+        if (actorIds?.length) {
+          const ph = actorIds.map(() => '?').join(',')
+          extraConditions.push(`a.id IN (${ph})`)
+          extraBindings.push(...actorIds)
+        }
+        if (filter.favoriteOnly) extraConditions.push('a.is_favorite = 1')
+        if (filter.ratingFrom !== undefined || filter.ratingTo !== undefined) {
+          extraJoins += ` LEFT JOIN actor_scores asc_f ON asc_f.actor_id = a.id`
+          if (filter.ratingFrom !== undefined) { extraConditions.push(`COALESCE((asc_f.face + asc_f.bust + asc_f.hip + asc_f.physical + asc_f.skin + asc_f.acting + asc_f.sexy + asc_f.charm + asc_f.technique + asc_f.proportions) / 13.0, 0) >= ?`); extraBindings.push(filter.ratingFrom) }
+          if (filter.ratingTo !== undefined) { extraConditions.push(`COALESCE((asc_f.face + asc_f.bust + asc_f.hip + asc_f.physical + asc_f.skin + asc_f.acting + asc_f.sexy + asc_f.charm + asc_f.technique + asc_f.proportions) / 13.0, 0) <= ?`); extraBindings.push(filter.ratingTo) }
+        }
+        if (filter.workCountFrom !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id) >= ?'); extraBindings.push(filter.workCountFrom) }
+        if (filter.workCountTo !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id) <= ?'); extraBindings.push(filter.workCountTo) }
+        if (filter.heightFrom !== undefined) { extraConditions.push('a.height >= ?'); extraBindings.push(filter.heightFrom) }
+        if (filter.heightTo !== undefined) { extraConditions.push('a.height <= ?'); extraBindings.push(filter.heightTo) }
+        if (filter.bustFrom !== undefined) { extraConditions.push('a.bust >= ?'); extraBindings.push(filter.bustFrom) }
+        if (filter.bustTo !== undefined) { extraConditions.push('a.bust <= ?'); extraBindings.push(filter.bustTo) }
+        if (filter.waistFrom !== undefined) { extraConditions.push('a.waist >= ?'); extraBindings.push(filter.waistFrom) }
+        if (filter.waistTo !== undefined) { extraConditions.push('a.waist <= ?'); extraBindings.push(filter.waistTo) }
+        if (filter.hipFrom !== undefined) { extraConditions.push('a.hip >= ?'); extraBindings.push(filter.hipFrom) }
+        if (filter.hipTo !== undefined) { extraConditions.push('a.hip <= ?'); extraBindings.push(filter.hipTo) }
+        if (filter.cupFrom) { extraConditions.push('a.cup >= ?'); extraBindings.push(filter.cupFrom) }
+        if (filter.cupTo) { extraConditions.push('a.cup <= ?'); extraBindings.push(filter.cupTo) }
+      }
+      const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
       items = db().prepare(`
-        SELECT a.id, COALESCE(ws.appearance_count, 0) AS appearance_count
+        SELECT DISTINCT a.id, COALESCE(ws.appearance_count, 0) AS appearance_count
         FROM actors a
         LEFT JOIN worldcup_stats ws ON ws.item_id = a.id AND ws.category_id = ?
-        WHERE 1=1 ${excludeWhere}
-        ORDER BY appearance_count ASC, RANDOM()
-      `).all(categoryId) as { id: number }[]
+        ${extraJoins}
+        WHERE 1=1 ${excludeWhere}${filterWhere}
+        ORDER BY appearance_count ASC
+      `).all(categoryId, ...extraBindings) as { id: number; appearance_count: number }[]
     } else {
+      const filter = category.filter_json ? JSON.parse(category.filter_json) as Record<string, unknown> : null
+      let extraJoins = ''
+      const extraConditions: string[] = []
+      const extraBindings: unknown[] = []
+      if (filter) {
+        const tagIds = filter.tagIds as number[] | undefined
+        if (tagIds?.length) {
+          const ph = tagIds.map(() => '?').join(',')
+          extraJoins += ` JOIN work_tags wt ON wt.work_id = w.id`
+          extraConditions.push(`wt.tag_id IN (${ph})`)
+          extraBindings.push(...tagIds)
+          if (filter.tagMode === 'and') {
+            extraConditions.push(`(SELECT COUNT(DISTINCT wt2.tag_id) FROM work_tags wt2 WHERE wt2.work_id = w.id AND wt2.tag_id IN (${ph})) = ?`)
+            extraBindings.push(...tagIds, tagIds.length)
+          }
+        }
+        const workActorIds = filter.actorIds as number[] | undefined
+        if (workActorIds?.length) {
+          const ph = workActorIds.map(() => '?').join(',')
+          extraConditions.push(`EXISTS (SELECT 1 FROM work_actors wa_f WHERE wa_f.work_id = w.id AND wa_f.actor_id IN (${ph}))`)
+          extraBindings.push(...workActorIds)
+        }
+        if (filter.favoriteOnly) extraConditions.push('w.is_favorite = 1')
+        if (filter.ratingFrom !== undefined) { extraConditions.push('w.rating >= ?'); extraBindings.push(filter.ratingFrom) }
+        if (filter.ratingTo !== undefined) { extraConditions.push('w.rating <= ?'); extraBindings.push(filter.ratingTo) }
+        const studioIds = filter.studioIds as number[] | undefined
+        if (studioIds?.length) {
+          const ph = studioIds.map(() => '?').join(',')
+          extraConditions.push(`w.studio_id IN (${ph})`)
+          extraBindings.push(...studioIds)
+        }
+        if (filter.releaseDateFrom) { extraConditions.push('w.release_date >= ?'); extraBindings.push(filter.releaseDateFrom) }
+        if (filter.releaseDateTo) { extraConditions.push('w.release_date <= ?'); extraBindings.push(filter.releaseDateTo) }
+        if (filter.actorCountFrom !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id = w.id) >= ?'); extraBindings.push(filter.actorCountFrom) }
+        if (filter.actorCountTo !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id = w.id) <= ?'); extraBindings.push(filter.actorCountTo) }
+      }
+      const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
       items = db().prepare(`
-        SELECT w.id, COALESCE(ws.appearance_count, 0) AS appearance_count
+        SELECT DISTINCT w.id, COALESCE(ws.appearance_count, 0) AS appearance_count
         FROM works w
         LEFT JOIN worldcup_stats ws ON ws.item_id = w.id AND ws.category_id = ?
-        ORDER BY appearance_count ASC, RANDOM()
-      `).all(categoryId) as { id: number }[]
+        ${extraJoins}
+        WHERE 1=1${filterWhere}
+        ORDER BY appearance_count ASC
+      `).all(categoryId, ...extraBindings) as { id: number; appearance_count: number }[]
     }
+
+    // appearance_count 그룹 내 Fisher-Yates 셔플
+    const groupShuffled: { id: number; appearance_count: number }[] = []
+    let gi = 0
+    while (gi < items.length) {
+      let gj = gi
+      while (gj < items.length && items[gj].appearance_count === items[gi].appearance_count) gj++
+      const group = items.slice(gi, gj)
+      for (let k = group.length - 1; k > 0; k--) {
+        const r = Math.floor(Math.random() * (k + 1))
+        ;[group[k], group[r]] = [group[r], group[k]]
+      }
+      groupShuffled.push(...group)
+      gi = gj
+    }
+    items = groupShuffled
 
     // 라운드 크기 결정
     let participants: { id: number }[]
@@ -2038,11 +2136,17 @@ export function registerIpcHandlers(): void {
         CASE WHEN total_matches > 0 THEN ROUND(CAST(match_wins AS REAL) / total_matches * 100, 2) ELSE 0 END AS match_win_rate
       FROM worldcup_stats WHERE category_id = ?
       ORDER BY win_rate DESC, match_win_rate DESC
-    `).all(categoryId) as { item_id: number }[]
+    `).all(categoryId) as { item_id: number; win_rate: number; match_win_rate: number }[]
 
     const insertHistory = db().prepare(`INSERT INTO worldcup_rank_history (category_id, item_id, rank) VALUES (?, ?, ?)`)
     const insertHistoryMany = db().transaction(() => {
-      stats.forEach((s, i) => insertHistory.run(categoryId, s.item_id, i + 1))
+      let currentRank = 1
+      stats.forEach((s, i) => {
+        if (i > 0 && (s.win_rate !== stats[i - 1].win_rate || s.match_win_rate !== stats[i - 1].match_win_rate)) {
+          currentRank++
+        }
+        insertHistory.run(categoryId, s.item_id, currentRank)
+      })
     })
     insertHistoryMany()
 
@@ -2069,7 +2173,7 @@ export function registerIpcHandlers(): void {
     if (category.type === 'actor') {
       rows = db().prepare(`
         SELECT
-          ROW_NUMBER() OVER (ORDER BY
+          DENSE_RANK() OVER (ORDER BY
             CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL) / ws.total_sessions ELSE 0 END DESC,
             CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC
           ) AS rank,
@@ -2086,7 +2190,7 @@ export function registerIpcHandlers(): void {
     } else {
       rows = db().prepare(`
         SELECT
-          ROW_NUMBER() OVER (ORDER BY
+          DENSE_RANK() OVER (ORDER BY
             CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL) / ws.total_sessions ELSE 0 END DESC,
             CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC
           ) AS rank,
@@ -2196,15 +2300,19 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle('worldcup:create-category', (_e, params: { name: string; type: 'actor' | 'work' }) => {
-    const { name, type } = params
+  ipcMain.handle('worldcup:create-category', (_e, params: { name: string; type: 'actor' | 'work'; filter?: object | null }) => {
+    const { name, type, filter } = params
     const maxOrder = (db().prepare(`SELECT COALESCE(MAX(sort_order), -1) AS m FROM worldcup_categories`).get() as { m: number }).m
-    const result = db().prepare(`INSERT INTO worldcup_categories (type, name, sort_order) VALUES (?, ?, ?)`).run(type, name, maxOrder + 1)
+    const result = db().prepare(`INSERT INTO worldcup_categories (type, name, sort_order, filter_json) VALUES (?, ?, ?, ?)`).run(type, name, maxOrder + 1, filter ? JSON.stringify(filter) : null)
     return db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(result.lastInsertRowid)
   })
 
-  ipcMain.handle('worldcup:update-category', (_e, params: { id: number; name: string }) => {
-    db().prepare(`UPDATE worldcup_categories SET name = ? WHERE id = ?`).run(params.name, params.id)
+  ipcMain.handle('worldcup:update-category', (_e, params: { id: number; name: string; filter?: object | null }) => {
+    if (params.filter !== undefined) {
+      db().prepare(`UPDATE worldcup_categories SET name = ?, filter_json = ? WHERE id = ?`).run(params.name, params.filter ? JSON.stringify(params.filter) : null, params.id)
+    } else {
+      db().prepare(`UPDATE worldcup_categories SET name = ? WHERE id = ?`).run(params.name, params.id)
+    }
     return db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(params.id)
   })
 

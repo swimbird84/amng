@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { worldcupApi, actorsApi, worksApi, shellApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
+import WorldcupFilterModal, { countActiveFilters, type WcFilter } from '../components/WorldcupFilterModal'
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type WcCategory = { id: number; type: 'actor' | 'work'; name: string; sort_order: number }
+type WcCategory = { id: number; type: 'actor' | 'work'; name: string; sort_order: number; filter_json?: string | null }
 type WcSession  = { id: number; category_id: number; round_total: number; status: string; winner_id: number | null }
 type WcMatch    = { id: number; session_id: number; round: number; match_index: number; item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number }
 type WcRankRow  = {
@@ -42,6 +43,28 @@ function currentMatch(matches: WcMatch[]): WcMatch | null {
   return matches
     .filter(m => !m.is_bye && m.winner_id === null)
     .sort((a, b) => b.round - a.round || a.match_index - b.match_index)[0] ?? null
+}
+
+// ── Pagination ─────────────────────────────────────────────────────────────
+function Pagination({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (p: number) => void }) {
+  const CHUNK = 10
+  const chunk = Math.floor(page / CHUNK)
+  const start = chunk * CHUNK
+  const end = Math.min(start + CHUNK, totalPages)
+  const btn = 'px-2.5 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded disabled:opacity-40 disabled:cursor-not-allowed'
+  const active = 'px-2.5 py-1 bg-blue-600 text-white text-sm rounded'
+  return (
+    <div className="flex items-center justify-center gap-1 py-3 border-t border-gray-700 shrink-0 flex-wrap">
+      <button onClick={() => onPageChange(0)} disabled={page === 0} className={btn}>«</button>
+      <button onClick={() => onPageChange((chunk - 1) * CHUNK)} disabled={chunk === 0} className={btn}>‹</button>
+      {Array.from({ length: end - start }, (_, i) => start + i).map(p => (
+        <button key={p} onClick={() => onPageChange(p)} className={p === page ? active : btn}>{p + 1}</button>
+      ))}
+      {end < totalPages && <span className="text-gray-500 text-sm px-1">...</span>}
+      <button onClick={() => onPageChange((chunk + 1) * CHUNK)} disabled={end >= totalPages} className={btn}>›</button>
+      <button onClick={() => onPageChange(totalPages - 1)} disabled={page === totalPages - 1} className={btn}>»</button>
+    </div>
+  )
 }
 
 // ── RankTrendChart (외부 컴포넌트 — 안정적) ────────────────────────────────
@@ -200,11 +223,14 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
   const [showAddModal,  setShowAddModal]  = useState(false)
   const [addName,       setAddName]       = useState('')
   const [addType,       setAddType]       = useState<'actor' | 'work'>('actor')
+  const [addFilter,     setAddFilter]     = useState<WcFilter | null>(null)
+  const [showAddFilter, setShowAddFilter] = useState(false)
 
-  // 월드컵 수정/삭제 모달
+  // 월드컵 수정/삭제/필터 모달
   const [editCat,       setEditCat]       = useState<WcCategory | null>(null)
   const [editName,      setEditName]      = useState('')
   const [deleteCat,     setDeleteCat]     = useState<WcCategory | null>(null)
+  const [filterCat,     setFilterCat]     = useState<WcCategory | null>(null)
 
   const selCategory = categories.find(c => c.id === selCatId) ?? null
   const cur         = currentMatch(matches)
@@ -358,9 +384,9 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
 
   const handleAddCategory = async () => {
     if (!addName.trim()) return
-    const newCat = await worldcupApi.createCategory(addName.trim(), addType) as WcCategory
+    const newCat = await worldcupApi.createCategory(addName.trim(), addType, addFilter as object | null) as WcCategory
     setCategories(prev => [...prev, newCat])
-    setAddName(''); setShowAddModal(false)
+    setAddName(''); setAddFilter(null); setShowAddModal(false)
   }
 
   const handleUpdateCategory = async () => {
@@ -375,6 +401,12 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
     await worldcupApi.deleteCategory(deleteCat.id)
     setCategories(prev => prev.filter(c => c.id !== deleteCat.id))
     setDeleteCat(null)
+  }
+
+  const handleUpdateFilter = async (cat: WcCategory, filter: WcFilter | null) => {
+    const updated = await worldcupApi.updateCategory(cat.id, cat.name, filter as object | null) as WcCategory
+    setCategories(prev => prev.map(c => c.id === updated.id ? updated : c))
+    setFilterCat(null)
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -437,7 +469,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
               {/* 월드컵 추가 */}
               <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
                 <button
-                  onClick={() => { setAddName(''); setAddType('actor'); setShowAddModal(true) }}
+                  onClick={() => { setAddName(''); setAddType('actor'); setAddFilter(null); setShowAddModal(true) }}
                   className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded"
                 >+ 월드컵 추가</button>
               </div>
@@ -474,7 +506,10 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                   </div>
                   {/* 내용 */}
                   <div className="p-3 flex flex-col gap-2">
-                    <p className="text-white font-bold text-sm truncate">{cat.name}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-white font-bold text-sm truncate flex-1">{cat.name}</p>
+                      {(() => { const fc = countActiveFilters(cat.filter_json ? JSON.parse(cat.filter_json) : null); return fc > 0 ? <span className="text-xs text-blue-400 shrink-0">필터 {fc}개</span> : null })()}
+                    </div>
                     {/* 라운드 + 제외 */}
                     <div className="flex gap-1.5 items-center">
                       <select
@@ -500,6 +535,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                       <button onClick={() => handleStartRequest(cat.id, curRound, excl)} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1.5 rounded transition">시작하기</button>
                       <button onClick={() => { setSelCatId(cat.id); setRankPage(0); setSubView('rankings') }} className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1.5 rounded transition">순위보기</button>
                       <button onClick={e => { e.stopPropagation(); setEditCat(cat); setEditName(cat.name) }} className="bg-gray-700 hover:bg-gray-500 text-gray-400 text-xs px-1.5 py-1.5 rounded">M</button>
+                      <button onClick={e => { e.stopPropagation(); setFilterCat(cat) }} className={`bg-gray-700 hover:bg-gray-500 text-xs px-1.5 py-1.5 rounded ${countActiveFilters(cat.filter_json ? JSON.parse(cat.filter_json) : null) > 0 ? 'text-blue-400' : 'text-gray-400'}`}>F</button>
                       <button onClick={e => { e.stopPropagation(); setDeleteCat(cat) }} className="bg-gray-700 hover:bg-gray-500 text-gray-400 text-xs px-1.5 py-1.5 rounded">X</button>
                     </div>
                   </div>
@@ -767,18 +803,10 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
             )}
           </div>
           {rankMode === 'overall' && totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-700 shrink-0">
-              <button onClick={() => setRankPage(p => Math.max(0, p - 1))} disabled={rankPage === 0} className="px-3 py-1 bg-gray-700 text-white text-sm rounded disabled:opacity-40">‹</button>
-              <span className="text-gray-400 text-sm">{rankPage + 1} / {totalPages}</span>
-              <button onClick={() => setRankPage(p => Math.min(totalPages - 1, p + 1))} disabled={rankPage >= totalPages - 1} className="px-3 py-1 bg-gray-700 text-white text-sm rounded disabled:opacity-40">›</button>
-            </div>
+            <Pagination page={rankPage} totalPages={totalPages} onPageChange={setRankPage} />
           )}
           {rankMode === 'last' && Math.ceil(lastRankTotal / rankLimit) > 1 && (
-            <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-700 shrink-0">
-              <button onClick={() => setLastRankPage(p => Math.max(0, p - 1))} disabled={lastRankPage === 0} className="px-3 py-1 bg-gray-700 text-white text-sm rounded disabled:opacity-40">‹</button>
-              <span className="text-gray-400 text-sm">{lastRankPage + 1} / {Math.ceil(lastRankTotal / rankLimit)}</span>
-              <button onClick={() => setLastRankPage(p => Math.min(Math.ceil(lastRankTotal / rankLimit) - 1, p + 1))} disabled={lastRankPage >= Math.ceil(lastRankTotal / rankLimit) - 1} className="px-3 py-1 bg-gray-700 text-white text-sm rounded disabled:opacity-40">›</button>
-            </div>
+            <Pagination page={lastRankPage} totalPages={Math.ceil(lastRankTotal / rankLimit)} onPageChange={setLastRankPage} />
           )}
         </div>
       )}
@@ -851,13 +879,23 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
               {(['actor', 'work'] as const).map((v, i) => (
                 <button
                   key={v}
-                  onClick={() => setAddType(v)}
+                  onClick={() => { setAddType(v); setAddFilter(null) }}
                   className={`flex-1 text-sm py-1.5 rounded ${i === 0 ? 'rounded-l' : 'rounded-r'} ${addType === v ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                 >
                   {v === 'actor' ? '배우' : '작품'}
                 </button>
               ))}
             </div>
+            <button
+              onClick={() => setShowAddFilter(true)}
+              className={`flex items-center justify-between text-sm px-3 py-2 rounded border ${countActiveFilters(addFilter) > 0 ? 'border-blue-500 text-blue-400 bg-blue-500/10' : 'border-gray-600 text-gray-400 bg-gray-700 hover:bg-gray-600'}`}
+            >
+              <span>필터 설정</span>
+              {countActiveFilters(addFilter) > 0
+                ? <span className="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded-full">{countActiveFilters(addFilter)}</span>
+                : <span className="text-xs text-gray-500">없음</span>
+              }
+            </button>
             <div className="flex gap-2">
               <button onClick={handleAddCategory} disabled={!addName.trim()} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm py-2 rounded">추가</button>
               <button onClick={() => setShowAddModal(false)} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded">취소</button>
@@ -928,6 +966,26 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
           </div>
         )
       })()}
+
+      {/* ── 추가 시 필터 모달 ── */}
+      {showAddFilter && (
+        <WorldcupFilterModal
+          type={addType}
+          filter={addFilter}
+          onSave={f => { setAddFilter(f); setShowAddFilter(false) }}
+          onClose={() => setShowAddFilter(false)}
+        />
+      )}
+
+      {/* ── 필터 모달 ── */}
+      {filterCat && (
+        <WorldcupFilterModal
+          type={filterCat.type}
+          filter={filterCat.filter_json ? JSON.parse(filterCat.filter_json) as WcFilter : null}
+          onSave={filter => handleUpdateFilter(filterCat, filter)}
+          onClose={() => setFilterCat(null)}
+        />
+      )}
 
       {tooltip && <CardTooltip tooltip={tooltip} />}
     </div>

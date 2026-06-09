@@ -172,7 +172,7 @@ export const worldcupApi = {
   deleteSession: (sessionId: number) => api.invoke('worldcup:delete-session', sessionId),
   lastSessionRankings: (categoryId: number, limit: number, offset: number) => api.invoke('worldcup:last-session-rankings', { categoryId, limit, offset }),
   lastWinner: (categoryId: number, type: 'actor' | 'work') => api.invoke('worldcup:last-winner', { categoryId, type }),
-  createCategory: (name: string, type: 'actor' | 'work') => api.invoke('worldcup:create-category', { name, type }),
-  updateCategory: (id: number, name: string) => api.invoke('worldcup:update-category', { id, name }),
+  createCategory: (name: string, type: 'actor' | 'work', filter?: object | null) => api.invoke('worldcup:create-category', { name, type, filter }),
+  updateCategory: (id: number, name: string, filter?: object | null) => api.invoke('worldcup:update-category', { id, name, ...(filter !== undefined && { filter }) }),
   deleteCategory: (id: number) => api.invoke('worldcup:delete-category', id),
 }

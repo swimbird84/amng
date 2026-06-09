@@ -382,4 +382,17 @@ export function initDatabase(): void {
     db.prepare("INSERT INTO worldcup_categories (type, name, sort_order) VALUES ('actor', '배우 월드컵', 0)").run()
     db.prepare("INSERT INTO worldcup_categories (type, name, sort_order) VALUES ('work', '작품 월드컵', 1)").run()
   }
+
+  // worldcup_categories filter_json 컬럼 마이그레이션
+  const wcCatCols = (db.prepare("PRAGMA table_info(worldcup_categories)").all() as { name: string }[]).map(c => c.name)
+  if (!wcCatCols.includes('filter_json')) {
+    db.prepare("ALTER TABLE worldcup_categories ADD COLUMN filter_json TEXT").run()
+  }
+
+  // rank_history dense rank 마이그레이션: 기존 sequential rank 데이터 초기화
+  const rankHistoryMigrated = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='_rank_history_migrated'").get()
+  if (!rankHistoryMigrated) {
+    db.prepare("DELETE FROM worldcup_rank_history").run()
+    db.exec("CREATE TABLE _rank_history_migrated (done INTEGER)")
+  }
 }
