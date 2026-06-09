@@ -129,17 +129,16 @@ function GameCard({ itemId, type, onPick, onNavigate, onMouseMove, onMouseLeave,
   }
 
   return (
-    <div className="flex flex-col rounded-xl overflow-hidden border-2 border-gray-700 bg-gray-800 w-full">
+    <div className="flex flex-col rounded-xl overflow-hidden border-[5px] border-gray-700 hover:border-blue-500 bg-gray-800 w-full transition-colors">
       {/* 썸네일 — 클릭 시 승리 선택 */}
       <button
         onClick={onPick}
         disabled={disabled}
-        className={`relative overflow-hidden group cursor-pointer disabled:cursor-not-allowed block ${
+        className={`relative overflow-hidden cursor-pointer disabled:cursor-not-allowed block ${
           type === 'actor' ? 'aspect-square' : 'aspect-[800/540]'
         }`}
       >
         <ImagePreview path={imgPath ?? null} alt="" className="w-full h-full" objectPosition="center 10%" />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-blue-500/20 transition-colors" />
       </button>
 
       {/* 정보 — hover 시 툴팁, 클릭 시 상세 모달 */}
@@ -263,14 +262,17 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
   const matchNumber = cur ? curRoundAll.findIndex(m => m.id === cur.id) + 1 : 0
   const totalMatchCount = curRoundAll.length
 
-  // 브래킷 라벨 (선택강 ≠ 실제 참가자수일 때 "256강(200강)" 형식)
+  // 브래킷 라벨
+  const isFullMode = session?.round_total === 0
   const firstRound = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0
   const firstRoundByeCount = matches.filter(m => m.round === firstRound && m.is_bye).length
   const participantCount = firstRound > 0 ? firstRound - firstRoundByeCount : 0
   const isFirstRound = cur?.round === firstRound
-  const bracketLabel = isFirstRound && participantCount > 0 && participantCount !== firstRound
-    ? `${roundLabel(firstRound)}(${participantCount}강)`
-    : cur ? roundLabel(cur.round) : ''
+  const bracketLabel = isFullMode
+    ? (cur ? roundLabel(cur.round) : '')
+    : (isFirstRound && participantCount > 0 && participantCount !== firstRound
+      ? `${roundLabel(firstRound)}(${participantCount}강)`
+      : cur ? roundLabel(cur.round) : '')
 
   // ── 데이터 로드 ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -510,10 +512,13 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
               const exFirstRound = existing ? Math.max(...existing.matches.map(m => m.round)) : 0
               const exByeCount = existing ? existing.matches.filter(m => m.round === exFirstRound && m.is_bye).length : 0
               const exParticipantCount = exFirstRound - exByeCount
+              const exIsFullMode = existing?.session.round_total === 0
               const exIsFirstRound = exCurMatch?.round === exFirstRound
-              const exBracketPrefix = exIsFirstRound && exParticipantCount > 0 && exParticipantCount !== exFirstRound
-                ? `${roundLabel(exFirstRound)}(${exParticipantCount}강)`
-                : exCurMatch ? roundLabel(exCurMatch.round) : ''
+              const exBracketPrefix = exIsFullMode
+                ? (exCurMatch ? roundLabel(exCurMatch.round) : '')
+                : (exIsFirstRound && exParticipantCount > 0 && exParticipantCount !== exFirstRound
+                  ? `${roundLabel(exFirstRound)}(${exParticipantCount}강)`
+                  : exCurMatch ? roundLabel(exCurMatch.round) : '')
               const progressLabel = exCurMatch ? `${exBracketPrefix}-${exMatchNum}/${exTotalMatchCount}경기` : null
               const winner = catWinners[cat.id]
               const winnerImg = cat.type === 'actor' ? winner?.photo_path : winner?.cover_path

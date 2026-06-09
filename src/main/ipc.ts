@@ -1960,10 +1960,16 @@ export function registerIpcHandlers(): void {
 
     if (participants.length < 2) throw new Error('참가 항목이 2개 미만입니다')
 
-    // 첫 라운드: 2의 거듭제곱으로 맞춤 (부전승 처리)
     const totalCount = participants.length
-    const naturalRoundSize = Math.pow(2, Math.ceil(Math.log2(totalCount)))
-    let roundSize = roundTotal === 0 ? naturalRoundSize : Math.min(roundTotal, naturalRoundSize)
+    let roundSize: number
+    if (roundTotal === 0) {
+      // 전체: 실제 참가자 수 그대로 (3명이면 준결승 4강으로)
+      roundSize = totalCount === 3 ? 4 : totalCount
+    } else {
+      // 특정 강 선택: 2의 거듭제곱 브래킷
+      const naturalRoundSize = Math.pow(2, Math.ceil(Math.log2(totalCount)))
+      roundSize = Math.min(roundTotal, naturalRoundSize)
+    }
 
     // 세션 생성
     const sessionResult = db().prepare(`
@@ -1972,9 +1978,7 @@ export function registerIpcHandlers(): void {
     const sessionId = sessionResult.lastInsertRowid as number
 
     // 첫 라운드 매치 생성
-    const byeCount = roundSize - totalCount
     const shuffled = [...participants]
-    // 부전승 항목은 앞쪽에 배치
     const insertMatch = db().prepare(`
       INSERT INTO worldcup_matches (session_id, round, match_index, item1_id, item2_id, winner_id, is_bye)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1987,13 +1991,24 @@ export function registerIpcHandlers(): void {
 
     const firstRoundMatches: { round: number; idx: number; item1: number; item2: number | null; winner: number | null; isBye: number }[] = []
     let matchIdx = 0
-    // 부전승 처리: byeCount개 항목은 단독 진출
-    for (let i = 0; i < byeCount; i++) {
-      firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: null, winner: null, isBye: 1 })
-    }
-    // 나머지 항목들은 1:1 매치
-    for (let i = byeCount; i < totalCount; i += 2) {
-      firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: shuffled[i + 1]?.id ?? null, winner: null, isBye: 0 })
+
+    if (roundTotal === 0) {
+      // 전체: 순서대로 페어링, 홀수면 마지막만 부전승
+      for (let i = 0; i + 1 < totalCount; i += 2) {
+        firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: shuffled[i + 1].id, winner: null, isBye: 0 })
+      }
+      if (totalCount % 2 === 1) {
+        firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[totalCount - 1].id, item2: null, winner: null, isBye: 1 })
+      }
+    } else {
+      // 특정 강: 기존 로직 (부전승 앞쪽 배치)
+      const byeCount = roundSize - totalCount
+      for (let i = 0; i < byeCount; i++) {
+        firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: null, winner: null, isBye: 1 })
+      }
+      for (let i = byeCount; i < totalCount; i += 2) {
+        firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: shuffled[i + 1]?.id ?? null, winner: null, isBye: 0 })
+      }
     }
     insertMatchMany(firstRoundMatches)
 
@@ -2027,7 +2042,7 @@ export function registerIpcHandlers(): void {
     db().prepare(`UPDATE worldcup_matches SET winner_id = ? WHERE id = ?`).run(winnerId, matchId)
 
     // stats 업데이트 (승/패)
-    const session = db().prepare(`SELECT * FROM worldcup_sessions WHERE id = ?`).get(match.session_id) as { category_id: number } | undefined
+    const session = db().prepare(`SELECT * FROM worldcup_sessions WHERE id = ?`).get(match.session_id) as { category_id: number; round_total: number } | undefined
     if (session && loserId !== null) {
       db().prepare(`
         INSERT INTO worldcup_stats (category_id, item_id, total_matches, match_wins)
@@ -2055,8 +2070,9 @@ export function registerIpcHandlers(): void {
         db().prepare(`UPDATE worldcup_sessions SET status = 'completed', winner_id = ?, updated_at = datetime('now') WHERE id = ?`).run(winners[0], match.session_id)
         return { done: true, winnerId: winners[0] }
       }
-      // 다음 라운드 생성
-      const nextRoundSize = winners.length
+      // 다음 라운드 생성 (전체 모드에서 3명 남으면 준결승 4강 처리)
+      const isFullMode = session?.round_total === 0
+      const nextRoundSize = isFullMode && winners.length === 3 ? 4 : winners.length
       // 다음 라운드 대진 셔플 (Fisher-Yates)
       for (let k = winners.length - 1; k > 0; k--) {
         const r = Math.floor(Math.random() * (k + 1))
