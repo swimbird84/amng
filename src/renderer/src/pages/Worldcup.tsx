@@ -200,6 +200,8 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
   const [rankTotal, setRankTotal]     = useState(0)
   const [rankPage, setRankPage]       = useState(0)
   const [rankLimit, setRankLimit]     = useState(20)
+  const [rankSortBy,  setRankSortBy]  = useState<'win_rate' | 'match_win_rate' | 'total_matches'>('win_rate')
+  const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>('desc')
   const [rankHistories, setRankHistories] = useState<Record<number, { rank: number }[]>>({})
   const [rankMode, setRankMode]       = useState<'overall' | 'last'>('overall')
   const [rankImgPreview, setRankImgPreview] = useState<string | null>(null)
@@ -307,8 +309,8 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
     if (subView === 'home' && categories.length > 0) loadCatSessions(categories)
   }, [subView, categories, loadCatSessions])
 
-  const loadRankings = useCallback(async (catId: number, page: number, limit: number) => {
-    const res = await worldcupApi.rankings(catId, limit, page * limit) as { rows: WcRankRow[]; total: number }
+  const loadRankings = useCallback(async (catId: number, page: number, limit: number, sortBy: string, sortDir: string) => {
+    const res = await worldcupApi.rankings(catId, limit, page * limit, sortBy, sortDir) as { rows: WcRankRow[]; total: number }
     setRankRows(res.rows)
     setRankTotal(res.total)
     const histories: Record<number, { rank: number }[]> = {}
@@ -326,10 +328,10 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
 
   useEffect(() => {
     if (subView === 'rankings' && selCatId !== null) {
-      if (rankMode === 'overall') loadRankings(selCatId, rankPage, rankLimit)
+      if (rankMode === 'overall') loadRankings(selCatId, rankPage, rankLimit, rankSortBy, rankSortDir)
       else loadLastRankings(selCatId, lastRankPage, rankLimit)
     }
-  }, [subView, selCatId, rankPage, lastRankPage, rankLimit, rankMode, loadRankings, loadLastRankings])
+  }, [subView, selCatId, rankPage, lastRankPage, rankLimit, rankMode, rankSortBy, rankSortDir, loadRankings, loadLastRankings])
 
   // ── 게임 흐름 ────────────────────────────────────────────────────────────
   const handleStartRequest = async (catId: number, round: number, exclude: boolean) => {
@@ -748,9 +750,18 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                       <th className="py-2 text-left">썸네일</th>
                       {selCategory?.type === 'work' && <th className="py-2 text-left">품번</th>}
                       <th className="py-2 text-left">{selCategory?.type === 'work' ? '타이틀' : '이름'}</th>
-                      <th className="py-2 text-right">매치수</th>
-                      <th className="py-2 text-right">우승률</th>
-                      <th className="py-2 text-right">승률</th>
+                      {(['total_matches', 'win_rate', 'match_win_rate'] as const).map((col, i) => {
+                        const label = col === 'total_matches' ? '매치수' : col === 'win_rate' ? '우승률' : '승률'
+                        const active = rankSortBy === col
+                        const nextDir = active ? (rankSortDir === 'desc' ? 'asc' : 'desc') : 'desc'
+                        return (
+                          <th key={col} className={`py-2 text-right cursor-pointer select-none hover:text-white ${active ? 'text-white' : ''}`}
+                            onClick={() => { setRankSortBy(col); setRankSortDir(nextDir); setRankPage(0) }}
+                          >
+                            {label}{active ? (rankSortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+                          </th>
+                        )
+                      })}
                       <th className="py-2 text-center">순위추이</th>
                     </tr>
                   </thead>

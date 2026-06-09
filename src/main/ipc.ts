@@ -2167,12 +2167,19 @@ export function registerIpcHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('worldcup:rankings', (_e, params: { categoryId: number; limit: number; offset: number }) => {
-    const { categoryId, limit, offset } = params
+  ipcMain.handle('worldcup:rankings', (_e, params: { categoryId: number; limit: number; offset: number; sortBy?: string; sortDir?: string }) => {
+    const { categoryId, limit, offset, sortBy, sortDir } = params
     const category = db().prepare(`SELECT type FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string } | undefined
     if (!category) return { rows: [], total: 0 }
 
     const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM worldcup_stats WHERE category_id = ?`).get(categoryId) as { cnt: number }).cnt
+
+    const dir = sortDir === 'asc' ? 'ASC' : 'DESC'
+    const col = sortBy === 'match_win_rate'
+      ? `match_win_rate ${dir}, win_rate DESC, ws.total_matches DESC`
+      : sortBy === 'total_matches'
+      ? `ws.total_matches ${dir}, win_rate DESC, match_win_rate DESC`
+      : `win_rate ${dir}, match_win_rate DESC, ws.total_matches DESC`
 
     let rows: unknown[]
     if (category.type === 'actor') {
@@ -2190,7 +2197,7 @@ export function registerIpcHandlers(): void {
         FROM worldcup_stats ws
         JOIN actors a ON a.id = ws.item_id
         WHERE ws.category_id = ?
-        ORDER BY win_rate DESC, match_win_rate DESC, ws.total_matches DESC
+        ORDER BY ${col}
         LIMIT ? OFFSET ?
       `).all(categoryId, limit, offset)
     } else {
@@ -2208,7 +2215,7 @@ export function registerIpcHandlers(): void {
         FROM worldcup_stats ws
         JOIN works w ON w.id = ws.item_id
         WHERE ws.category_id = ?
-        ORDER BY win_rate DESC, match_win_rate DESC, ws.total_matches DESC
+        ORDER BY ${col}
         LIMIT ? OFFSET ?
       `).all(categoryId, limit, offset)
     }
