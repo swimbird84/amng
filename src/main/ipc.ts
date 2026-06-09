@@ -1845,8 +1845,8 @@ export function registerIpcHandlers(): void {
       db().prepare(`DELETE FROM worldcup_sessions WHERE id = ?`).run(existing.id)
     }
 
-    // 후보 항목 조회 (appearance_count 낮은 순 우선)
-    let items: { id: number; appearance_count: number }[]
+    // 후보 항목 조회
+    let items: { id: number }[]
     if (category.type === 'actor') {
       const excludeWhere = exclude ? `AND (a.score_excluded IS NULL OR a.score_excluded = 0)` : ''
       const filter = category.filter_json ? JSON.parse(category.filter_json) as Record<string, unknown> : null
@@ -1892,13 +1892,11 @@ export function registerIpcHandlers(): void {
       }
       const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
       items = db().prepare(`
-        SELECT DISTINCT a.id, COALESCE(ws.appearance_count, 0) AS appearance_count
+        SELECT DISTINCT a.id
         FROM actors a
-        LEFT JOIN worldcup_stats ws ON ws.item_id = a.id AND ws.category_id = ?
         ${extraJoins}
         WHERE 1=1 ${excludeWhere}${filterWhere}
-        ORDER BY appearance_count ASC
-      `).all(categoryId, ...extraBindings) as { id: number; appearance_count: number }[]
+      `).all(...extraBindings) as { id: number }[]
     } else {
       const filter = category.filter_json ? JSON.parse(category.filter_json) as Record<string, unknown> : null
       let extraJoins = ''
@@ -1938,30 +1936,18 @@ export function registerIpcHandlers(): void {
       }
       const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
       items = db().prepare(`
-        SELECT DISTINCT w.id, COALESCE(ws.appearance_count, 0) AS appearance_count
+        SELECT DISTINCT w.id
         FROM works w
-        LEFT JOIN worldcup_stats ws ON ws.item_id = w.id AND ws.category_id = ?
         ${extraJoins}
         WHERE 1=1${filterWhere}
-        ORDER BY appearance_count ASC
-      `).all(categoryId, ...extraBindings) as { id: number; appearance_count: number }[]
+      `).all(...extraBindings) as { id: number }[]
     }
 
-    // appearance_count 그룹 내 Fisher-Yates 셔플
-    const groupShuffled: { id: number; appearance_count: number }[] = []
-    let gi = 0
-    while (gi < items.length) {
-      let gj = gi
-      while (gj < items.length && items[gj].appearance_count === items[gi].appearance_count) gj++
-      const group = items.slice(gi, gj)
-      for (let k = group.length - 1; k > 0; k--) {
-        const r = Math.floor(Math.random() * (k + 1))
-        ;[group[k], group[r]] = [group[r], group[k]]
-      }
-      groupShuffled.push(...group)
-      gi = gj
+    // 전체 Fisher-Yates 셔플
+    for (let k = items.length - 1; k > 0; k--) {
+      const r = Math.floor(Math.random() * (k + 1))
+      ;[items[k], items[r]] = [items[r], items[k]]
     }
-    items = groupShuffled
 
     // 라운드 크기 결정
     let participants: { id: number }[]
@@ -2070,9 +2056,12 @@ export function registerIpcHandlers(): void {
         return { done: true, winnerId: winners[0] }
       }
       // 다음 라운드 생성
-      const nextRound = Math.floor(match.round / 2) === 0 ? match.round / 2 : Math.floor(match.round / 2)
-      // 실제로는 winners.length 기준
       const nextRoundSize = winners.length
+      // 다음 라운드 대진 셔플 (Fisher-Yates)
+      for (let k = winners.length - 1; k > 0; k--) {
+        const r = Math.floor(Math.random() * (k + 1))
+        ;[winners[k], winners[r]] = [winners[r], winners[k]]
+      }
       const insertNext = db().prepare(`
         INSERT INTO worldcup_matches (session_id, round, match_index, item1_id, item2_id, winner_id, is_bye)
         VALUES (?, ?, ?, ?, ?, ?, ?)
