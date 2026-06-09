@@ -41,7 +41,7 @@ function roundLabel(round: number): string {
 
 function currentMatch(matches: WcMatch[]): WcMatch | null {
   return matches
-    .filter(m => !m.is_bye && m.winner_id === null)
+    .filter(m => m.winner_id === null)
     .sort((a, b) => b.round - a.round || a.match_index - b.match_index)[0] ?? null
 }
 
