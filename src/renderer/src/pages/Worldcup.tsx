@@ -256,17 +256,19 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
       return (a.id - b.id) * dir
     })
 
-  // 현재 라운드 내 경기 번호
-  const curRoundNonBye = cur
-    ? matches.filter(m => m.round === cur.round && !m.is_bye).sort((a, b) => a.match_index - b.match_index)
+  // 현재 라운드 내 경기 번호 (부전승 포함)
+  const curRoundAll = cur
+    ? matches.filter(m => m.round === cur.round).sort((a, b) => a.match_index - b.match_index)
     : []
-  const matchNumber = cur ? curRoundNonBye.findIndex(m => m.id === cur.id) + 1 : 0
+  const matchNumber = cur ? curRoundAll.findIndex(m => m.id === cur.id) + 1 : 0
+  const totalMatchCount = curRoundAll.length
 
   // 브래킷 라벨 (선택강 ≠ 실제 참가자수일 때 "256강(200강)" 형식)
   const firstRound = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0
   const firstRoundByeCount = matches.filter(m => m.round === firstRound && m.is_bye).length
   const participantCount = firstRound > 0 ? firstRound - firstRoundByeCount : 0
-  const bracketLabel = firstRound > 0 && participantCount > 0 && participantCount !== firstRound
+  const isFirstRound = cur?.round === firstRound
+  const bracketLabel = isFirstRound && participantCount > 0 && participantCount !== firstRound
     ? `${roundLabel(firstRound)}(${participantCount}강)`
     : cur ? roundLabel(cur.round) : ''
 
@@ -502,15 +504,17 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
               const curRound    = cardRounds[cat.id] ?? 16
               const excl        = cardExclude[cat.id] ?? false
               const exCurMatch  = existing ? currentMatch(existing.matches) : null
-              const exNonBye    = exCurMatch ? existing!.matches.filter(m => m.round === exCurMatch.round && !m.is_bye).sort((a, b) => a.match_index - b.match_index) : []
-              const exMatchNum  = exCurMatch ? exNonBye.findIndex(m => m.id === exCurMatch.id) + 1 : 0
+              const exRoundAll  = exCurMatch ? existing!.matches.filter(m => m.round === exCurMatch.round).sort((a, b) => a.match_index - b.match_index) : []
+              const exMatchNum  = exCurMatch ? exRoundAll.findIndex(m => m.id === exCurMatch.id) + 1 : 0
+              const exTotalMatchCount = exRoundAll.length
               const exFirstRound = existing ? Math.max(...existing.matches.map(m => m.round)) : 0
               const exByeCount = existing ? existing.matches.filter(m => m.round === exFirstRound && m.is_bye).length : 0
               const exParticipantCount = exFirstRound - exByeCount
-              const exBracketPrefix = exFirstRound > 0 && exParticipantCount > 0 && exParticipantCount !== exFirstRound
+              const exIsFirstRound = exCurMatch?.round === exFirstRound
+              const exBracketPrefix = exIsFirstRound && exParticipantCount > 0 && exParticipantCount !== exFirstRound
                 ? `${roundLabel(exFirstRound)}(${exParticipantCount}강)`
                 : exCurMatch ? roundLabel(exCurMatch.round) : ''
-              const progressLabel = exCurMatch ? `${exBracketPrefix}-${exMatchNum}경기` : null
+              const progressLabel = exCurMatch ? `${exBracketPrefix}-${exMatchNum}/${exTotalMatchCount}경기` : null
               const winner = catWinners[cat.id]
               const winnerImg = cat.type === 'actor' ? winner?.photo_path : winner?.cover_path
               return (
@@ -579,7 +583,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
             {/* 헤더 */}
             <div className="flex items-center justify-between px-6 py-3 border-b border-gray-700 shrink-0">
               <button onClick={() => setSubView('home')} className="text-gray-400 hover:text-white text-sm">← 홈</button>
-              <p className="text-white font-bold">{bracketLabel} — {matchNumber}경기</p>
+              <p className="text-white font-bold">{bracketLabel} — {matchNumber}/{totalMatchCount}경기</p>
               <div className="w-16" />
             </div>
 
