@@ -70,7 +70,7 @@ function Pagination({ page, totalPages, onPageChange }: { page: number; totalPag
 // ── RankTrendChart (외부 컴포넌트 — 안정적) ────────────────────────────────
 function RankTrendChart({ history }: { history: { rank: number }[] }) {
   if (history.length < 2) return <span className="text-gray-600 text-xs">-</span>
-  const W = 80, H = 28, P = 3
+  const W = 160, H = 28, P = 3
   const ranks = history.map(h => h.rank)
   const minR = Math.min(...ranks), maxR = Math.max(...ranks)
   const range = maxR - minR || 1
@@ -200,7 +200,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
   const [rankTotal, setRankTotal]     = useState(0)
   const [rankPage, setRankPage]       = useState(0)
   const [rankLimit, setRankLimit]     = useState(20)
-  const [rankSortBy,  setRankSortBy]  = useState<'win_rate' | 'match_win_rate' | 'total_matches'>('win_rate')
+  const [rankSortBy,  setRankSortBy]  = useState<'win_rate' | 'match_win_rate'>('win_rate')
   const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>('desc')
   const [rankHistories, setRankHistories] = useState<Record<number, { rank: number }[]>>({})
   const [rankMode, setRankMode]       = useState<'overall' | 'last'>('overall')
@@ -739,10 +739,9 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                     <col style={{ width: '8%' }} />
                     {selCategory?.type === 'work' && <col style={{ width: '10%' }} />}
                     <col />
-                    <col style={{ width: '12%' }} />
                     <col style={{ width: selCategory?.type === 'work' ? '8%' : '10%' }} />
                     <col style={{ width: selCategory?.type === 'work' ? '8%' : '10%' }} />
-                    <col style={{ width: '15%' }} />
+                    <col style={{ width: '30%' }} />
                   </colgroup>
                   <thead>
                     <tr className="text-gray-400 text-xs border-b border-gray-700">
@@ -750,15 +749,17 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                       <th className="py-2 text-left">썸네일</th>
                       {selCategory?.type === 'work' && <th className="py-2 text-left">품번</th>}
                       <th className="py-2 text-left">{selCategory?.type === 'work' ? '타이틀' : '이름'}</th>
-                      {(['total_matches', 'win_rate', 'match_win_rate'] as const).map((col, i) => {
-                        const label = col === 'total_matches' ? '매치수' : col === 'win_rate' ? '우승률' : '승률'
+                      {(['win_rate', 'match_win_rate'] as const).map((col) => {
+                        const label = col === 'win_rate' ? '우승률' : '승률'
+                        const subtitle = col === 'win_rate' ? '(우승/세션)' : '(승리/매치)'
                         const active = rankSortBy === col
                         const nextDir = active ? (rankSortDir === 'desc' ? 'asc' : 'desc') : 'desc'
                         return (
                           <th key={col} className={`py-2 text-right cursor-pointer select-none hover:text-white ${active ? 'text-white' : ''}`}
                             onClick={() => { setRankSortBy(col); setRankSortDir(nextDir); setRankPage(0) }}
                           >
-                            {label}{active ? (rankSortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+                            <div>{label}{active ? (rankSortDir === 'desc' ? ' ↓' : ' ↑') : ''}</div>
+                            <div className="text-[10px] text-gray-500 font-normal">{subtitle}</div>
                           </th>
                         )
                       })}
@@ -769,7 +770,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                     {rankRows.map(row => {
                       const imgPath = selCategory?.type === 'actor' ? row.photo_path : row.cover_path
                       const label   = selCategory?.type === 'actor' ? row.name : (row.title ?? row.product_number)
-                      const recentHistory = (rankHistories[row.id] ?? []).slice(-5)
+                      const recentHistory = (rankHistories[row.id] ?? []).slice(-10)
                       return (
                         <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800 h-16">
                           <td className="px-2 text-gray-400 font-bold">{row.rank}</td>
@@ -794,9 +795,14 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                               >{label}</span>
                             </div>
                           </td>
-                          <td className="px-2 text-right text-gray-400 text-xs">{row.total_sessions}/{row.total_matches}</td>
-                          <td className="px-2 text-right text-yellow-400">{row.win_rate.toFixed(1)}%</td>
-                          <td className="px-2 text-right text-blue-400">{row.match_win_rate.toFixed(1)}%</td>
+                          <td className="px-2 text-right text-yellow-400">
+                            <div>{row.win_rate.toFixed(1)}%</div>
+                            <div className="text-[12px] text-gray-500">({row.session_wins}/{row.total_sessions})</div>
+                          </td>
+                          <td className="px-2 text-right text-blue-400">
+                            <div>{row.match_win_rate.toFixed(1)}%</div>
+                            <div className="text-[12px] text-gray-500">({row.match_wins}/{row.total_matches})</div>
+                          </td>
                           <td className="px-2 cursor-pointer" onClick={() => setTrendModal({ id: row.id, label: label ?? '', imgPath: imgPath ?? null })}>
                             <div className="flex justify-center"><RankTrendChart history={recentHistory} /></div>
                           </td>

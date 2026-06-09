@@ -71,6 +71,16 @@ function App() {
             대시보드
           </button>
           <button
+              onClick={() => setTabAndSave('ranking')}
+              className={`px-4 py-3 text-sm border-b-2 transition ${
+                  tab === 'ranking'
+                      ? 'border-blue-500 text-white'
+                      : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+          >
+            랭킹
+          </button>
+          <button
             onClick={() => setTabAndSave('works')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'works'
@@ -109,16 +119,6 @@ function App() {
             }`}
           >
             태그
-          </button>
-          <button
-              onClick={() => setTabAndSave('ranking')}
-              className={`px-4 py-3 text-sm border-b-2 transition ${
-                  tab === 'ranking'
-                      ? 'border-blue-500 text-white'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-              }`}
-          >
-            랭킹
           </button>
           <button
               onClick={() => setTabAndSave('worldcup')}
