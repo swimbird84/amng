@@ -155,21 +155,21 @@ function GameCard({ itemId, type, categoryId, onPick, onNavigate, onMouseMove, o
       >
         {/* 통계 행 */}
         {itemStats ? (
-          <p className="text-xs text-gray-400 mb-1.5 text-center">
+          <p className="text-[0.9rem] text-gray-400 mb-1.5 text-center">
             순위: {itemStats.rank}위&nbsp;&nbsp;
             우승률: {itemStats.win_rate}%({itemStats.session_wins}/{itemStats.total_sessions})&nbsp;&nbsp;
             승률: {itemStats.match_win_rate}%({itemStats.match_wins}/{itemStats.total_matches})
           </p>
         ) : (
-          <p className="text-xs text-gray-600 mb-1.5 text-center">-</p>
+          <p className="text-[0.9rem] text-gray-600 mb-1.5 text-center">-</p>
         )}
         {type === 'actor' ? (
-          <p className="text-[1.47rem] font-bold text-white text-center">{itemStats !== null ? `(${itemStats.total_sessions}) ` : ''}{info?.name ?? '...'}</p>
+          <p className="text-[1.47rem] font-bold text-white text-center">{info?.name ?? '...'}</p>
         ) : (
           <div className="flex items-start gap-2 min-h-[195px]">
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-gray-400">{itemStats !== null ? `(${itemStats.total_sessions}) ` : ''}{info?.product_number ?? '...'}</p>
-              <p className="text-sm font-bold text-white mt-0.5 line-clamp-6">{info?.title ?? info?.product_number ?? '...'}</p>
+              <p className="text-base text-white">{info?.product_number ?? '...'}</p>
+              <p className="text-base font-bold text-white mt-0.5 line-clamp-6">{info?.title ?? info?.product_number ?? '...'}</p>
             </div>
             {firstFile && (
               <button
