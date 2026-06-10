@@ -90,6 +90,56 @@ function RankTrendChart({ history }: { history: { rank: number }[] }) {
   )
 }
 
+// ── SessionDistChart ───────────────────────────────────────────────────────
+function SessionDistChart({ data }: { data: { total_sessions: number; count: number }[] }) {
+  const [hovered, setHovered] = useState<number | null>(null)
+  if (data.length === 0) return <p className="text-gray-500 text-sm text-center py-4">데이터 없음</p>
+  const W = 580, H = 180, PL = 44, PR = 12, PT = 18, PB = 32
+  const cW = W - PL - PR, cH = H - PT - PB
+  const maxCount = Math.max(...data.map(d => d.count))
+  const barW = cW / data.length
+  const showEvery = data.length > 30 ? Math.ceil(data.length / 30) : 1
+  const yTicks = [0, 0.25, 0.5, 0.75, 1]
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }}>
+      {yTicks.map(r => {
+        const y = PT + cH * (1 - r)
+        const val = Math.round(maxCount * r)
+        return (
+          <g key={r}>
+            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#374151" strokeWidth="1" />
+            <text x={PL - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{val}</text>
+          </g>
+        )
+      })}
+      {data.map((d, i) => {
+        const x = PL + i * barW
+        const bH = maxCount > 0 ? (d.count / maxCount) * cH : 0
+        const y = PT + cH - bH
+        const isH = hovered === i
+        return (
+          <g key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ cursor: 'default' }}>
+            <rect x={x + 1} y={y} width={Math.max(barW - 2, 1)} height={bH} fill={isH ? '#60a5fa' : '#3b82f6'} rx="2" />
+            {isH && <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="white">{d.count}</text>}
+            {i % showEvery === 0 && (
+              <text x={x + barW / 2} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.total_sessions}</text>
+            )}
+          </g>
+        )
+      })}
+      <line x1={PL} y1={PT} x2={PL} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
+      <line x1={PL} y1={PT + cH} x2={W - PR} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
+      <text x={W / 2} y={H + 2} textAnchor="middle" fontSize="9" fill="#6b7280">세션수</text>
+    </svg>
+  )
+}
+
+// ── pool 계산 헬퍼 ─────────────────────────────────────────────────────────
+function calcPoolSize(totalItems: number, roundTotal: number): number {
+  const multiplier = Math.max(2, Math.sqrt(totalItems / roundTotal))
+  return Math.min(totalItems, Math.round(roundTotal * multiplier))
+}
+
 // ── GameCard (외부 컴포넌트 — 안정적) ─────────────────────────────────────
 function GameCard({ itemId, type, categoryId, onPick, onNavigate, onMouseMove, onMouseLeave, disabled }: {
   itemId: number; type: 'actor' | 'work'; categoryId: number
@@ -230,6 +280,9 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
 
   const [catSessions, setCatSessions] = useState<Record<number, { session: WcSession; matches: WcMatch[] } | null>>({})
   const [catWinners, setCatWinners]   = useState<Record<number, { id: number; photo_path?: string | null; cover_path?: string | null; name?: string; title?: string | null; product_number?: string | null } | null>>({})
+  const [catItemCounts, setCatItemCounts] = useState<Record<number, number>>({})
+  const [statsModal, setStatsModal]   = useState(false)
+  const [catStats, setCatStats]       = useState<{ total_sessions: number; completed_sessions: number; last_session_at: string | null; total_items: number; no_session_items: number; session_dist: { total_sessions: number; count: number }[] } | null>(null)
   const [cardRounds, setCardRounds]   = useState<Record<number, number>>({})
   const [cardExclude, setCardExclude] = useState<Record<number, boolean>>(() => {
     const result: Record<number, boolean> = {}
@@ -326,6 +379,12 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
   useEffect(() => {
     if (subView === 'home' && categories.length > 0) loadCatSessions(categories)
   }, [subView, categories, loadCatSessions])
+
+  useEffect(() => {
+    if (categories.length === 0) return
+    Promise.all(categories.map(async cat => [cat.id, await worldcupApi.itemCount(cat.id)] as [number, number]))
+      .then(entries => setCatItemCounts(Object.fromEntries(entries)))
+  }, [categories])
 
   const loadRankings = useCallback(async (catId: number, page: number, limit: number, sortBy: string, sortDir: string) => {
     const res = await worldcupApi.rankings(catId, limit, page * limit, sortBy, sortDir) as { rows: WcRankRow[]; total: number }
@@ -570,7 +629,16 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                         onChange={e => setCardRounds(prev => ({ ...prev, [cat.id]: Number(e.target.value) }))}
                         className="flex-1 bg-gray-700 text-white text-xs px-2 py-1.5 rounded"
                       >
-                        {ROUND_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        {ROUND_OPTIONS.map(opt => {
+                          const total = catItemCounts[cat.id] ?? 0
+                          let label = opt.label
+                          if (total > 0) {
+                            if (opt.value === 0) label = `전체 (${total})`
+                            else if (total < opt.value) label = `${opt.label} (부족)`
+                            else label = `${opt.label} (풀${calcPoolSize(total, opt.value)})`
+                          }
+                          return <option key={opt.value} value={opt.value} disabled={opt.value > 0 && total > 0 && total < opt.value}>{label}</option>
+                        })}
                       </select>
                       {cat.type === 'actor' && (
                         <label className="flex items-center gap-1 cursor-pointer select-none shrink-0 bg-gray-700 px-2 py-1.5 rounded">
@@ -730,6 +798,10 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
               ({rankMode === 'overall' ? rankTotal : lastRankTotal}{selCategory?.type === 'work' ? '작품' : '명'})
             </span>
             <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => { if (selCatId) worldcupApi.categoryStats(selCatId).then(d => { setCatStats(d); setStatsModal(true) }) }}
+                className="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-3 py-1 rounded"
+              >통계</button>
               <select
                 value={rankLimit}
                 onChange={e => { const v = Number(e.target.value); setRankLimit(v); localStorage.setItem('worldcup:rankLimit', String(v)); setRankPage(0); setLastRankPage(0) }}
@@ -1079,6 +1151,65 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
       )}
 
       {tooltip && <CardTooltip tooltip={tooltip} />}
+
+      {/* ── 통계 모달 ── */}
+      {statsModal && catStats && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setStatsModal(false)}>
+          <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 w-[640px] max-w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-white font-bold text-base">{selCategory?.name} 통계</h3>
+              <button onClick={() => setStatsModal(false)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+
+            {/* 세션 통계 */}
+            <div className="mb-4">
+              <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">세션 통계</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-700 rounded-lg p-3 text-center">
+                  <p className="text-gray-400 text-xs mb-1">전체 세션</p>
+                  <p className="text-white text-xl font-bold">{catStats.total_sessions}</p>
+                </div>
+                <div className="bg-gray-700 rounded-lg p-3 text-center">
+                  <p className="text-gray-400 text-xs mb-1">완료</p>
+                  <p className="text-white text-xl font-bold">{catStats.completed_sessions}</p>
+                </div>
+                <div className="bg-gray-700 rounded-lg p-3 text-center">
+                  <p className="text-gray-400 text-xs mb-1">마지막 세션</p>
+                  <p className="text-white text-sm font-bold">{catStats.last_session_at ? catStats.last_session_at.slice(0, 10) : '-'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 참가자 통계 */}
+            <div className="mb-5">
+              <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">참가자 통계</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-700 rounded-lg p-3 text-center">
+                  <p className="text-gray-400 text-xs mb-1">전체 항목</p>
+                  <p className="text-white text-xl font-bold">{catStats.total_items}</p>
+                </div>
+                <div className="bg-gray-700 rounded-lg p-3 text-center">
+                  <p className="text-gray-400 text-xs mb-1">미참가</p>
+                  <p className="text-white text-xl font-bold">
+                    {catStats.no_session_items}
+                    <span className="text-gray-400 text-sm font-normal ml-1">
+                      ({catStats.total_items > 0 ? (catStats.no_session_items / catStats.total_items * 100).toFixed(1) : 0}%)
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 세션수 분포 차트 */}
+            <div>
+              <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">세션수 분포 <span className="text-gray-600 normal-case">(X: 세션수, Y: 항목수)</span></p>
+              <div className="bg-gray-700 rounded-lg p-3">
+                <SessionDistChart data={catStats.session_dist} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

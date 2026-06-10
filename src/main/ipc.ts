@@ -3,6 +3,79 @@ import fs from 'fs'
 import path from 'path'
 import { getDatabase } from './db'
 
+function buildWcFilterQuery(category: { type: string; filter_json?: string | null }): {
+  tableExpr: string; idCol: string; extraJoins: string; filterWhere: string; bindings: unknown[]
+} {
+  const filter = category.filter_json ? JSON.parse(category.filter_json) as Record<string, unknown> : null
+  let extraJoins = ''
+  const extraConditions: string[] = []
+  const bindings: unknown[] = []
+  if (category.type === 'actor') {
+    if (filter) {
+      const tagIds = filter.tagIds as number[] | undefined
+      if (tagIds?.length) {
+        const ph = tagIds.map(() => '?').join(',')
+        extraJoins += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
+        extraConditions.push(`at2.tag_id IN (${ph})`); bindings.push(...tagIds)
+        if (filter.tagMode === 'and') {
+          extraConditions.push(`(SELECT COUNT(DISTINCT at3.tag_id) FROM actor_tags at3 WHERE at3.actor_id = a.id AND at3.tag_id IN (${ph})) = ?`)
+          bindings.push(...tagIds, tagIds.length)
+        }
+      }
+      const actorIds = filter.actorIds as number[] | undefined
+      if (actorIds?.length) { const ph = actorIds.map(() => '?').join(','); extraConditions.push(`a.id IN (${ph})`); bindings.push(...actorIds) }
+      if (filter.favoriteOnly) extraConditions.push('a.is_favorite = 1')
+      if (filter.ratingFrom !== undefined || filter.ratingTo !== undefined) {
+        extraJoins += ` LEFT JOIN actor_scores asc_f ON asc_f.actor_id = a.id`
+        if (filter.ratingFrom !== undefined) { extraConditions.push(`COALESCE((asc_f.face+asc_f.bust+asc_f.hip+asc_f.physical+asc_f.skin+asc_f.acting+asc_f.sexy+asc_f.charm+asc_f.technique+asc_f.proportions)/13.0,0)>=?`); bindings.push(filter.ratingFrom) }
+        if (filter.ratingTo   !== undefined) { extraConditions.push(`COALESCE((asc_f.face+asc_f.bust+asc_f.hip+asc_f.physical+asc_f.skin+asc_f.acting+asc_f.sexy+asc_f.charm+asc_f.technique+asc_f.proportions)/13.0,0)<=?`); bindings.push(filter.ratingTo) }
+      }
+      if (filter.workCountFrom !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id=a.id)>=?'); bindings.push(filter.workCountFrom) }
+      if (filter.workCountTo   !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id=a.id)<=?'); bindings.push(filter.workCountTo) }
+      if (filter.heightFrom !== undefined) { extraConditions.push('a.height>=?'); bindings.push(filter.heightFrom) }
+      if (filter.heightTo   !== undefined) { extraConditions.push('a.height<=?'); bindings.push(filter.heightTo) }
+      if (filter.bustFrom   !== undefined) { extraConditions.push('a.bust>=?');   bindings.push(filter.bustFrom) }
+      if (filter.bustTo     !== undefined) { extraConditions.push('a.bust<=?');   bindings.push(filter.bustTo) }
+      if (filter.waistFrom  !== undefined) { extraConditions.push('a.waist>=?');  bindings.push(filter.waistFrom) }
+      if (filter.waistTo    !== undefined) { extraConditions.push('a.waist<=?');  bindings.push(filter.waistTo) }
+      if (filter.hipFrom    !== undefined) { extraConditions.push('a.hip>=?');    bindings.push(filter.hipFrom) }
+      if (filter.hipTo      !== undefined) { extraConditions.push('a.hip<=?');    bindings.push(filter.hipTo) }
+      if (filter.cupFrom) { extraConditions.push('a.cup>=?'); bindings.push(filter.cupFrom) }
+      if (filter.cupTo)   { extraConditions.push('a.cup<=?'); bindings.push(filter.cupTo) }
+    }
+    return { tableExpr: 'actors a', idCol: 'a.id', extraJoins, filterWhere: extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : '', bindings }
+  } else {
+    if (filter) {
+      const tagIds = filter.tagIds as number[] | undefined
+      if (tagIds?.length) {
+        const ph = tagIds.map(() => '?').join(',')
+        extraJoins += ` JOIN work_tags wt ON wt.work_id = w.id`
+        extraConditions.push(`wt.tag_id IN (${ph})`); bindings.push(...tagIds)
+        if (filter.tagMode === 'and') {
+          extraConditions.push(`(SELECT COUNT(DISTINCT wt2.tag_id) FROM work_tags wt2 WHERE wt2.work_id=w.id AND wt2.tag_id IN (${ph}))=?`)
+          bindings.push(...tagIds, tagIds.length)
+        }
+      }
+      const workActorIds = filter.actorIds as number[] | undefined
+      if (workActorIds?.length) {
+        const ph = workActorIds.map(() => '?').join(',')
+        extraConditions.push(`EXISTS (SELECT 1 FROM work_actors wa_f WHERE wa_f.work_id=w.id AND wa_f.actor_id IN (${ph}))`)
+        bindings.push(...workActorIds)
+      }
+      if (filter.favoriteOnly) extraConditions.push('w.is_favorite=1')
+      if (filter.ratingFrom !== undefined) { extraConditions.push('w.rating>=?'); bindings.push(filter.ratingFrom) }
+      if (filter.ratingTo   !== undefined) { extraConditions.push('w.rating<=?'); bindings.push(filter.ratingTo) }
+      const studioIds = filter.studioIds as number[] | undefined
+      if (studioIds?.length) { const ph = studioIds.map(() => '?').join(','); extraConditions.push(`w.studio_id IN (${ph})`); bindings.push(...studioIds) }
+      if (filter.releaseDateFrom) { extraConditions.push('w.release_date>=?'); bindings.push(filter.releaseDateFrom) }
+      if (filter.releaseDateTo)   { extraConditions.push('w.release_date<=?'); bindings.push(filter.releaseDateTo) }
+      if (filter.actorCountFrom !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id=w.id)>=?'); bindings.push(filter.actorCountFrom) }
+      if (filter.actorCountTo   !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id=w.id)<=?'); bindings.push(filter.actorCountTo) }
+    }
+    return { tableExpr: 'works w', idCol: 'w.id', extraJoins, filterWhere: extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : '', bindings }
+  }
+}
+
 export function registerIpcHandlers(): void {
   const db = () => getDatabase()
 
@@ -2275,6 +2348,37 @@ export function registerIpcHandlers(): void {
         FROM worldcup_stats WHERE category_id = ?
       ) WHERE item_id = ?
     `).get(params.categoryId, params.itemId) ?? null
+  })
+
+  ipcMain.handle('worldcup:item-count', (_e, params: { categoryId: number }) => {
+    const category = db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(params.categoryId) as { type: string; filter_json?: string | null } | undefined
+    if (!category) return 0
+    const { tableExpr, idCol, extraJoins, filterWhere, bindings } = buildWcFilterQuery(category)
+    return ((db().prepare(`SELECT COUNT(DISTINCT ${idCol}) as cnt FROM ${tableExpr}${extraJoins} WHERE 1=1${filterWhere}`).get(...bindings) as { cnt: number }).cnt)
+  })
+
+  ipcMain.handle('worldcup:category-stats', (_e, params: { categoryId: number }) => {
+    const { categoryId } = params
+    const category = db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string; filter_json?: string | null } | undefined
+    if (!category) return null
+    const sessionStats = db().prepare(`
+      SELECT COUNT(*) as total_sessions,
+        SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed_sessions,
+        MAX(created_at) as last_session_at
+      FROM worldcup_sessions WHERE category_id = ?
+    `).get(categoryId) as { total_sessions: number; completed_sessions: number; last_session_at: string | null }
+    const { tableExpr, idCol, extraJoins, filterWhere, bindings } = buildWcFilterQuery(category)
+    const totalItems = ((db().prepare(`SELECT COUNT(DISTINCT ${idCol}) as cnt FROM ${tableExpr}${extraJoins} WHERE 1=1${filterWhere}`).get(...bindings) as { cnt: number }).cnt)
+    const statsDist = db().prepare(`
+      SELECT total_sessions, COUNT(*) as count FROM worldcup_stats
+      WHERE category_id = ? GROUP BY total_sessions ORDER BY total_sessions ASC
+    `).all(categoryId) as { total_sessions: number; count: number }[]
+    const participated = statsDist.reduce((s, r) => s + r.count, 0)
+    const no_session_items = totalItems - participated
+    const session_dist = no_session_items > 0
+      ? [{ total_sessions: 0, count: no_session_items }, ...statsDist]
+      : statsDist
+    return { ...sessionStats, total_items: totalItems, no_session_items, session_dist }
   })
 
   ipcMain.handle('worldcup:delete-session', (_e, sessionId: number) => {
