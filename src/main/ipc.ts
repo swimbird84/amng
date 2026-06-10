@@ -1943,19 +1943,36 @@ export function registerIpcHandlers(): void {
       `).all(...extraBindings) as { id: number }[]
     }
 
-    // 전체 Fisher-Yates 셔플
-    for (let k = items.length - 1; k > 0; k--) {
-      const r = Math.floor(Math.random() * (k + 1))
-      ;[items[k], items[r]] = [items[r], items[k]]
-    }
-
-    // 라운드 크기 결정
+    // 라운드 크기 결정 및 참가자 선발
     let participants: { id: number }[]
     if (roundTotal === 0) {
-      // 전체
+      // 전체: Fisher-Yates 셔플 후 전원 참가
+      for (let k = items.length - 1; k > 0; k--) {
+        const r = Math.floor(Math.random() * (k + 1))
+        ;[items[k], items[r]] = [items[r], items[k]]
+      }
       participants = items
     } else {
-      participants = items.slice(0, roundTotal)
+      // 특정 강: total_sessions 적은 순 정렬 → sqrt 비례 풀 확장 → 풀 셔플 후 roundTotal 선발
+      if (items.length > 0) {
+        const ph = items.map(() => '?').join(',')
+        const statsRows = db().prepare(`
+          SELECT item_id, COALESCE(total_sessions, 0) AS total_sessions
+          FROM worldcup_stats
+          WHERE category_id = ? AND item_id IN (${ph})
+        `).all(categoryId, ...items.map(i => i.id)) as { item_id: number; total_sessions: number }[]
+        const statsMap = new Map(statsRows.map(r => [r.item_id, r.total_sessions]))
+        items.sort((a, b) => (statsMap.get(a.id) ?? 0) - (statsMap.get(b.id) ?? 0))
+      }
+      // 풀 크기: roundTotal × max(2, sqrt(총인원/roundTotal)) — 강수 낮을수록 풀 비례 확장
+      const multiplier = Math.max(2, Math.sqrt(items.length / roundTotal))
+      const poolSize = Math.min(items.length, Math.round(roundTotal * multiplier))
+      const pool = items.slice(0, poolSize)
+      for (let k = pool.length - 1; k > 0; k--) {
+        const r = Math.floor(Math.random() * (k + 1))
+        ;[pool[k], pool[r]] = [pool[r], pool[k]]
+      }
+      participants = pool.slice(0, roundTotal)
     }
 
     if (participants.length < 2) throw new Error('참가 항목이 2개 미만입니다')
@@ -2144,6 +2161,15 @@ export function registerIpcHandlers(): void {
     `).all(categoryId) as { item_id: number; win_rate: number; match_win_rate: number; total_matches: number }[]
 
     const insertHistory = db().prepare(`INSERT INTO worldcup_rank_history (category_id, item_id, rank) VALUES (?, ?, ?)`)
+    const trimHistory = db().prepare(`
+      DELETE FROM worldcup_rank_history
+      WHERE category_id = ? AND item_id = ?
+        AND id NOT IN (
+          SELECT id FROM worldcup_rank_history
+          WHERE category_id = ? AND item_id = ?
+          ORDER BY id DESC LIMIT 20
+        )
+    `)
     const insertHistoryMany = db().transaction(() => {
       let currentRank = 1
       stats.forEach((s, i) => {
@@ -2151,6 +2177,7 @@ export function registerIpcHandlers(): void {
           currentRank++
         }
         insertHistory.run(categoryId, s.item_id, currentRank)
+        trimHistory.run(categoryId, s.item_id, categoryId, s.item_id)
       })
     })
     insertHistoryMany()
@@ -2224,10 +2251,30 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('worldcup:rank-history', (_e, params: { categoryId: number; itemId: number }) => {
     return db().prepare(`
-      SELECT rank, recorded_at FROM worldcup_rank_history
-      WHERE category_id = ? AND item_id = ?
-      ORDER BY recorded_at ASC
+      SELECT rank, recorded_at FROM (
+        SELECT id, rank, recorded_at FROM worldcup_rank_history
+        WHERE category_id = ? AND item_id = ?
+        ORDER BY id DESC LIMIT 20
+      ) ORDER BY id ASC
     `).all(params.categoryId, params.itemId)
+  })
+
+  ipcMain.handle('worldcup:item-stats', (_e, params: { categoryId: number; itemId: number }) => {
+    return db().prepare(`
+      SELECT * FROM (
+        SELECT
+          item_id,
+          total_sessions, session_wins, total_matches, match_wins,
+          CASE WHEN total_sessions > 0 THEN ROUND(CAST(session_wins AS REAL) / total_sessions * 100, 1) ELSE 0 END AS win_rate,
+          CASE WHEN total_matches > 0 THEN ROUND(CAST(match_wins AS REAL) / total_matches * 100, 1) ELSE 0 END AS match_win_rate,
+          DENSE_RANK() OVER (ORDER BY
+            CASE WHEN total_sessions > 0 THEN CAST(session_wins AS REAL) / total_sessions ELSE 0 END DESC,
+            CASE WHEN total_matches > 0 THEN CAST(match_wins AS REAL) / total_matches ELSE 0 END DESC,
+            total_matches DESC
+          ) AS rank
+        FROM worldcup_stats WHERE category_id = ?
+      ) WHERE item_id = ?
+    `).get(params.categoryId, params.itemId) ?? null
   })
 
   ipcMain.handle('worldcup:delete-session', (_e, sessionId: number) => {

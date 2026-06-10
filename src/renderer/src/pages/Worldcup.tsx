@@ -30,7 +30,7 @@ const ROUND_OPTIONS = [
   { value: 256, label: '256강' }, { value: 512, label: '512강' },
   { value: 0, label: '전체' },
 ]
-const LIMIT_OPTIONS = [10, 20, 50, 100]
+const LIMIT_OPTIONS = [100, 200, 500, 1000]
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function roundLabel(round: number): string {
@@ -91,8 +91,8 @@ function RankTrendChart({ history }: { history: { rank: number }[] }) {
 }
 
 // ── GameCard (외부 컴포넌트 — 안정적) ─────────────────────────────────────
-function GameCard({ itemId, type, onPick, onNavigate, onMouseMove, onMouseLeave, disabled }: {
-  itemId: number; type: 'actor' | 'work'
+function GameCard({ itemId, type, categoryId, onPick, onNavigate, onMouseMove, onMouseLeave, disabled }: {
+  itemId: number; type: 'actor' | 'work'; categoryId: number
   onPick: () => void
   onNavigate: () => void
   onMouseMove?: (e: React.MouseEvent) => void
@@ -105,11 +105,16 @@ function GameCard({ itemId, type, onPick, onNavigate, onMouseMove, onMouseLeave,
     files?: { id: number; file_path: string; type: string }[]
   } | null>(null)
   const [fileExists, setFileExists] = useState(false)
+  const [itemStats, setItemStats] = useState<{ rank: number; total_sessions: number; session_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number } | null>(null)
 
   useEffect(() => {
     if (type === 'actor') actorsApi.get(itemId).then(d => setInfo(d as typeof info))
     else worksApi.get(itemId).then(d => setInfo(d as typeof info))
   }, [itemId, type])
+
+  useEffect(() => {
+    worldcupApi.itemStats(categoryId, itemId).then(setItemStats)
+  }, [categoryId, itemId])
 
   useEffect(() => {
     const first = info?.files?.[0]
@@ -148,12 +153,22 @@ function GameCard({ itemId, type, onPick, onNavigate, onMouseMove, onMouseLeave,
         onMouseLeave={onMouseLeave}
         onClick={onNavigate}
       >
+        {/* 통계 행 */}
+        {itemStats ? (
+          <p className="text-xs text-gray-400 mb-1.5 text-center">
+            순위: {itemStats.rank}위&nbsp;&nbsp;
+            우승률: {itemStats.win_rate}%({itemStats.session_wins}/{itemStats.total_sessions})&nbsp;&nbsp;
+            승률: {itemStats.match_win_rate}%({itemStats.match_wins}/{itemStats.total_matches})
+          </p>
+        ) : (
+          <p className="text-xs text-gray-600 mb-1.5 text-center">-</p>
+        )}
         {type === 'actor' ? (
-          <p className="text-[2.625rem] font-bold text-white text-center">{info?.name ?? '...'}</p>
+          <p className="text-[1.47rem] font-bold text-white text-center">{itemStats !== null ? `(${itemStats.total_sessions}) ` : ''}{info?.name ?? '...'}</p>
         ) : (
           <div className="flex items-start gap-2 min-h-[195px]">
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-gray-400">{info?.product_number ?? '...'}</p>
+              <p className="text-sm text-gray-400">{itemStats !== null ? `(${itemStats.total_sessions}) ` : ''}{info?.product_number ?? '...'}</p>
               <p className="text-sm font-bold text-white mt-0.5 line-clamp-6">{info?.title ?? info?.product_number ?? '...'}</p>
             </div>
             {firstFile && (
@@ -199,7 +214,10 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
   const [rankRows, setRankRows]       = useState<WcRankRow[]>([])
   const [rankTotal, setRankTotal]     = useState(0)
   const [rankPage, setRankPage]       = useState(0)
-  const [rankLimit, setRankLimit]     = useState(20)
+  const [rankLimit, setRankLimit]     = useState(() => {
+    const saved = localStorage.getItem('worldcup:rankLimit')
+    return saved ? Number(saved) : 100
+  })
   const [rankSortBy,  setRankSortBy]  = useState<'win_rate' | 'match_win_rate'>('win_rate')
   const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>('desc')
   const [rankHistories, setRankHistories] = useState<Record<number, { rank: number }[]>>({})
@@ -604,6 +622,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                   <GameCard
                     itemId={cur.item1_id}
                     type={selCategory?.type ?? 'actor'}
+                    categoryId={selCatId ?? 0}
                     onPick={() => handleCardPick(cur.id, cur.item1_id, null)}
                     onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item1_id) : onNavigateToWork(cur.item1_id)}
                     onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item1_id, x: e.clientX, y: e.clientY })}
@@ -624,6 +643,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                   <GameCard
                     itemId={cur.item1_id}
                     type={selCategory?.type ?? 'actor'}
+                    categoryId={selCatId ?? 0}
                     onPick={() => handleCardPick(cur.id, cur.item1_id, cur.item2_id)}
                     onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item1_id) : onNavigateToWork(cur.item1_id)}
                     onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item1_id, x: e.clientX, y: e.clientY })}
@@ -646,6 +666,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                   <GameCard
                     itemId={cur.item2_id}
                     type={selCategory?.type ?? 'actor'}
+                    categoryId={selCatId ?? 0}
                     onPick={() => handleCardPick(cur.id, cur.item2_id!, cur.item1_id)}
                     onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item2_id!) : onNavigateToWork(cur.item2_id!)}
                     onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item2_id!, x: e.clientX, y: e.clientY })}
@@ -711,7 +732,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
             <div className="ml-auto flex items-center gap-2">
               <select
                 value={rankLimit}
-                onChange={e => { setRankLimit(Number(e.target.value)); setRankPage(0); setLastRankPage(0) }}
+                onChange={e => { const v = Number(e.target.value); setRankLimit(v); localStorage.setItem('worldcup:rankLimit', String(v)); setRankPage(0); setLastRankPage(0) }}
                 className="bg-gray-700 text-white text-xs px-2 py-1 rounded"
               >
                 {LIMIT_OPTIONS.map(l => <option key={l} value={l}>{l}개</option>)}
@@ -1031,7 +1052,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                   ))}
                 </svg>
               )}
-              <p className="text-gray-500 text-xs mt-2 text-right">총 {history.length}회</p>
+              <p className="text-gray-500 text-xs mt-2 text-right">최근 {history.length}회</p>
             </div>
           </div>
         )

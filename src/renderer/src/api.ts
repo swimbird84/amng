@@ -175,4 +175,6 @@ export const worldcupApi = {
   createCategory: (name: string, type: 'actor' | 'work', filter?: object | null) => api.invoke('worldcup:create-category', { name, type, filter }),
   updateCategory: (id: number, name: string, filter?: object | null) => api.invoke('worldcup:update-category', { id, name, ...(filter !== undefined && { filter }) }),
   deleteCategory: (id: number) => api.invoke('worldcup:delete-category', id),
+  itemSessions: (categoryId: number, itemId: number) => api.invoke('worldcup:item-sessions', { categoryId, itemId }) as Promise<number>,
+  itemStats: (categoryId: number, itemId: number) => api.invoke('worldcup:item-stats', { categoryId, itemId }) as Promise<{ rank: number; total_sessions: number; session_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number } | null>,
 }
