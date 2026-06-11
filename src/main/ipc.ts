@@ -2035,6 +2035,11 @@ export function registerIpcHandlers(): void {
           WHERE category_id = ? AND item_id IN (${ph})
         `).all(categoryId, ...items.map(i => i.id)) as { item_id: number; total_sessions: number }[]
         const statsMap = new Map(statsRows.map(r => [r.item_id, r.total_sessions]))
+        // 동일 세션 수 항목 간 순서를 무작위화한 뒤 정렬 (stable sort 편향 방지)
+        for (let k = items.length - 1; k > 0; k--) {
+          const r = Math.floor(Math.random() * (k + 1))
+          ;[items[k], items[r]] = [items[r], items[k]]
+        }
         items.sort((a, b) => (statsMap.get(a.id) ?? 0) - (statsMap.get(b.id) ?? 0))
       }
       // 풀 크기: roundTotal × max(2, sqrt(총인원/roundTotal)) — 강수 낮을수록 풀 비례 확장
@@ -2267,18 +2272,25 @@ export function registerIpcHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('worldcup:rankings', (_e, params: { categoryId: number; limit: number; offset: number; sortBy?: string; sortDir?: string }) => {
-    const { categoryId, limit, offset, sortBy, sortDir } = params
+  ipcMain.handle('worldcup:rankings', (_e, params: { categoryId: number; limit: number; offset: number; sortBy?: string; sortDir?: string; search?: string }) => {
+    const { categoryId, limit, offset, sortBy, sortDir, search } = params
     const category = db().prepare(`SELECT type FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string } | undefined
     if (!category) return { rows: [], total: 0 }
+    const searchLike = search ? `%${search}%` : null
 
-    const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM worldcup_stats WHERE category_id = ?`).get(categoryId) as { cnt: number }).cnt
+    const actorSearchWhere = searchLike ? ` AND a.name LIKE ?` : ''
+    const workSearchWhere  = searchLike ? ` AND (w.title LIKE ? OR w.product_number LIKE ?)` : ''
+    const total = category.type === 'actor'
+      ? (db().prepare(`SELECT COUNT(*) AS cnt FROM worldcup_stats ws JOIN actors a ON a.id = ws.item_id WHERE ws.category_id = ?${actorSearchWhere}`).get(categoryId, ...(searchLike ? [searchLike] : [])) as { cnt: number }).cnt
+      : (db().prepare(`SELECT COUNT(*) AS cnt FROM worldcup_stats ws JOIN works w ON w.id = ws.item_id WHERE ws.category_id = ?${workSearchWhere}`).get(categoryId, ...(searchLike ? [searchLike, searchLike] : [])) as { cnt: number }).cnt
 
     const dir = sortDir === 'asc' ? 'ASC' : 'DESC'
     const col = sortBy === 'match_win_rate'
       ? `match_win_rate ${dir}, win_rate DESC, ws.total_matches DESC`
       : sortBy === 'total_matches'
       ? `ws.total_matches ${dir}, win_rate DESC, match_win_rate DESC`
+      : sortBy === 'adj_gap'
+      ? `adj_gap ${dir}, ws.total_sessions DESC, ws.total_matches DESC`
       : `win_rate ${dir}, match_win_rate DESC, ws.total_matches DESC`
 
     let rows: unknown[]
@@ -2293,13 +2305,17 @@ export function registerIpcHandlers(): void {
           a.id, a.name, a.photo_path,
           ws.total_sessions, ws.session_wins, ws.total_matches, ws.match_wins, ws.appearance_count,
           CASE WHEN ws.total_sessions > 0 THEN ROUND(CAST(ws.session_wins AS REAL) / ws.total_sessions * 100, 2) ELSE 0 END AS win_rate,
-          CASE WHEN ws.total_matches > 0 THEN ROUND(CAST(ws.match_wins AS REAL) / ws.total_matches * 100, 2) ELSE 0 END AS match_win_rate
+          CASE WHEN ws.total_matches > 0 THEN ROUND(CAST(ws.match_wins AS REAL) / ws.total_matches * 100, 2) ELSE 0 END AS match_win_rate,
+          ROUND(
+            ((CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL)/ws.total_matches*100 ELSE 0 END) -
+            (CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL)/ws.total_sessions*100 ELSE 0 END)) *
+            MIN(1.0, ln(1 + ws.total_sessions) / NULLIF(ln(1 + (SELECT AVG(total_sessions) FROM worldcup_stats WHERE category_id = ws.category_id)), 0)), 1) AS adj_gap
         FROM worldcup_stats ws
         JOIN actors a ON a.id = ws.item_id
-        WHERE ws.category_id = ?
+        WHERE ws.category_id = ?${actorSearchWhere}
         ORDER BY ${col}
         LIMIT ? OFFSET ?
-      `).all(categoryId, limit, offset)
+      `).all(categoryId, ...(searchLike ? [searchLike] : []), limit, offset)
     } else {
       rows = db().prepare(`
         SELECT
@@ -2311,13 +2327,17 @@ export function registerIpcHandlers(): void {
           w.id, w.title, w.product_number, w.cover_path,
           ws.total_sessions, ws.session_wins, ws.total_matches, ws.match_wins, ws.appearance_count,
           CASE WHEN ws.total_sessions > 0 THEN ROUND(CAST(ws.session_wins AS REAL) / ws.total_sessions * 100, 2) ELSE 0 END AS win_rate,
-          CASE WHEN ws.total_matches > 0 THEN ROUND(CAST(ws.match_wins AS REAL) / ws.total_matches * 100, 2) ELSE 0 END AS match_win_rate
+          CASE WHEN ws.total_matches > 0 THEN ROUND(CAST(ws.match_wins AS REAL) / ws.total_matches * 100, 2) ELSE 0 END AS match_win_rate,
+          ROUND(
+            ((CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL)/ws.total_matches*100 ELSE 0 END) -
+            (CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL)/ws.total_sessions*100 ELSE 0 END)) *
+            MIN(1.0, ln(1 + ws.total_sessions) / NULLIF(ln(1 + (SELECT AVG(total_sessions) FROM worldcup_stats WHERE category_id = ws.category_id)), 0)), 1) AS adj_gap
         FROM worldcup_stats ws
         JOIN works w ON w.id = ws.item_id
-        WHERE ws.category_id = ?
+        WHERE ws.category_id = ?${workSearchWhere}
         ORDER BY ${col}
         LIMIT ? OFFSET ?
-      `).all(categoryId, limit, offset)
+      `).all(categoryId, ...(searchLike ? [searchLike, searchLike] : []), limit, offset)
     }
     return { rows, total }
   })

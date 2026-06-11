@@ -15,6 +15,7 @@ type WcRankRow  = {
   total_sessions: number; session_wins: number
   total_matches: number; match_wins: number
   win_rate: number; match_win_rate: number
+  adj_gap: number
 }
 type WcLastRankRow = {
   rank: number; id: number; elim_round: number | null
@@ -120,7 +121,9 @@ function SessionDistChart({ data }: { data: { total_sessions: number; count: num
         return (
           <g key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ cursor: 'default' }}>
             <rect x={x + 1} y={y} width={Math.max(barW - 2, 1)} height={bH} fill={isH ? '#60a5fa' : '#3b82f6'} rx="2" />
-            {isH && <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="white">{d.count}</text>}
+            {i % showEvery === 0 && (
+              <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="white">{d.count}</text>
+            )}
             {i % showEvery === 0 && (
               <text x={x + barW / 2} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.total_sessions}</text>
             )}
@@ -198,7 +201,7 @@ function GameCard({ itemId, type, categoryId, onPick, onNavigate, onMouseMove, o
 
       {/* 정보 — hover 시 툴팁, 클릭 시 상세 모달 */}
       <div
-        className="p-3 bg-gray-800 border-t border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors"
+        className="p-3 bg-gray-800 border-t border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors overflow-hidden whitespace-nowrap"
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}
         onClick={onNavigate}
@@ -268,7 +271,8 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
     const saved = localStorage.getItem('worldcup:rankLimit')
     return saved ? Number(saved) : 100
   })
-  const [rankSortBy,  setRankSortBy]  = useState<'win_rate' | 'match_win_rate'>('win_rate')
+  const [rankSortBy,  setRankSortBy]  = useState<'win_rate' | 'match_win_rate' | 'adj_gap'>('win_rate')
+  const [rankSearch,  setRankSearch]  = useState('')
   const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>('desc')
   const [rankHistories, setRankHistories] = useState<Record<number, { rank: number }[]>>({})
   const [rankMode, setRankMode]       = useState<'overall' | 'last'>('overall')
@@ -283,7 +287,18 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
   const [catItemCounts, setCatItemCounts] = useState<Record<number, number>>({})
   const [statsModal, setStatsModal]   = useState(false)
   const [catStats, setCatStats]       = useState<{ total_sessions: number; completed_sessions: number; last_session_at: string | null; total_items: number; no_session_items: number; session_dist: { total_sessions: number; count: number }[] } | null>(null)
-  const [cardRounds, setCardRounds]   = useState<Record<number, number>>({})
+  const [cardRounds, setCardRounds]   = useState<Record<number, number>>(() => {
+    const result: Record<number, number> = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('worldcup:round:')) {
+        const catId = parseInt(key.replace('worldcup:round:', ''))
+        const val = parseInt(localStorage.getItem(key) ?? '')
+        if (!isNaN(catId) && !isNaN(val)) result[catId] = val
+      }
+    }
+    return result
+  })
   const [cardExclude, setCardExclude] = useState<Record<number, boolean>>(() => {
     const result: Record<number, boolean> = {}
     for (let i = 0; i < localStorage.length; i++) {
@@ -386,8 +401,8 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
       .then(entries => setCatItemCounts(Object.fromEntries(entries)))
   }, [categories])
 
-  const loadRankings = useCallback(async (catId: number, page: number, limit: number, sortBy: string, sortDir: string) => {
-    const res = await worldcupApi.rankings(catId, limit, page * limit, sortBy, sortDir) as { rows: WcRankRow[]; total: number }
+  const loadRankings = useCallback(async (catId: number, page: number, limit: number, sortBy: string, sortDir: string, search: string) => {
+    const res = await worldcupApi.rankings(catId, limit, page * limit, sortBy, sortDir, search || undefined) as { rows: WcRankRow[]; total: number }
     setRankRows(res.rows)
     setRankTotal(res.total)
     const histories: Record<number, { rank: number }[]> = {}
@@ -405,10 +420,10 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
 
   useEffect(() => {
     if (subView === 'rankings' && selCatId !== null) {
-      if (rankMode === 'overall') loadRankings(selCatId, rankPage, rankLimit, rankSortBy, rankSortDir)
+      if (rankMode === 'overall') loadRankings(selCatId, rankPage, rankLimit, rankSortBy, rankSortDir, rankSearch)
       else loadLastRankings(selCatId, lastRankPage, rankLimit)
     }
-  }, [subView, selCatId, rankPage, lastRankPage, rankLimit, rankMode, rankSortBy, rankSortDir, loadRankings, loadLastRankings])
+  }, [subView, selCatId, rankPage, lastRankPage, rankLimit, rankMode, rankSortBy, rankSortDir, rankSearch, loadRankings, loadLastRankings])
 
   // ── 게임 흐름 ────────────────────────────────────────────────────────────
   const handleStartRequest = async (catId: number, round: number, exclude: boolean) => {
@@ -616,6 +631,12 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                         진행중: {progressLabel}
                       </span>
                     )}
+                    {/* MFX 버튼 — 우측 하단 */}
+                    <div className="absolute bottom-1.5 right-1.5 flex gap-1 z-10">
+                      <button onClick={e => { e.stopPropagation(); setEditCat(cat); setEditName(cat.name) }} className="bg-gray-900/80 hover:bg-gray-700 text-gray-300 text-xs px-1.5 py-1 rounded">M</button>
+                      <button onClick={e => { e.stopPropagation(); setFilterCat(cat) }} className={`bg-gray-900/80 hover:bg-gray-700 text-xs px-1.5 py-1 rounded ${countActiveFilters(cat.filter_json ? JSON.parse(cat.filter_json) : null) > 0 ? 'text-blue-400' : 'text-gray-300'}`}>F</button>
+                      <button onClick={e => { e.stopPropagation(); setDeleteCat(cat) }} className="bg-gray-900/80 hover:bg-gray-700 text-gray-300 text-xs px-1.5 py-1 rounded">X</button>
+                    </div>
                   </div>
                   {/* 내용 */}
                   <div className="p-3 flex flex-col gap-2">
@@ -626,7 +647,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                     <div className="flex gap-1.5 items-center">
                       <select
                         value={curRound}
-                        onChange={e => setCardRounds(prev => ({ ...prev, [cat.id]: Number(e.target.value) }))}
+                        onChange={e => { const v = Number(e.target.value); setCardRounds(prev => ({ ...prev, [cat.id]: v })); localStorage.setItem(`worldcup:round:${cat.id}`, String(v)) }}
                         className="flex-1 bg-gray-700 text-white text-xs px-2 py-1.5 rounded"
                       >
                         {ROUND_OPTIONS.map(opt => {
@@ -655,9 +676,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                     <div className="flex gap-1">
                       <button onClick={() => handleStartRequest(cat.id, curRound, excl)} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1.5 rounded transition">시작하기</button>
                       <button onClick={() => { setSelCatId(cat.id); setRankPage(0); setSubView('rankings') }} className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1.5 rounded transition">순위보기</button>
-                      <button onClick={e => { e.stopPropagation(); setEditCat(cat); setEditName(cat.name) }} className="bg-gray-700 hover:bg-gray-500 text-gray-400 text-xs px-1.5 py-1.5 rounded">M</button>
-                      <button onClick={e => { e.stopPropagation(); setFilterCat(cat) }} className={`bg-gray-700 hover:bg-gray-500 text-xs px-1.5 py-1.5 rounded ${countActiveFilters(cat.filter_json ? JSON.parse(cat.filter_json) : null) > 0 ? 'text-blue-400' : 'text-gray-400'}`}>F</button>
-                      <button onClick={e => { e.stopPropagation(); setDeleteCat(cat) }} className="bg-gray-700 hover:bg-gray-500 text-gray-400 text-xs px-1.5 py-1.5 rounded">X</button>
+                      <button onClick={e => { e.stopPropagation(); setSelCatId(cat.id); worldcupApi.categoryStats(cat.id).then(d => { setCatStats(d); setStatsModal(true) }) }} className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1.5 rounded transition">통계보기</button>
                     </div>
                   </div>
                 </div>
@@ -798,6 +817,14 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
               ({rankMode === 'overall' ? rankTotal : lastRankTotal}{selCategory?.type === 'work' ? '작품' : '명'})
             </span>
             <div className="ml-auto flex items-center gap-2">
+              {rankMode === 'overall' && (
+                <input
+                  value={rankSearch}
+                  onChange={e => { setRankSearch(e.target.value); setRankPage(0) }}
+                  placeholder="이름/품번 검색"
+                  className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-36 placeholder-gray-500"
+                />
+              )}
               <button
                 onClick={() => { if (selCatId) worldcupApi.categoryStats(selCatId).then(d => { setCatStats(d); setStatsModal(true) }) }}
                 className="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-3 py-1 rounded"
@@ -828,23 +855,26 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
               ) : (
                 <table className="w-full table-fixed text-sm">
                   <colgroup>
+                    <col style={{ width: '3%' }} />
                     <col style={{ width: '5%' }} />
-                    <col style={{ width: '8%' }} />
-                    {selCategory?.type === 'work' && <col style={{ width: '10%' }} />}
+                    <col style={{ width: '7%' }} />
+                    {selCategory?.type === 'work' && <col style={{ width: '8%' }} />}
                     <col />
-                    <col style={{ width: selCategory?.type === 'work' ? '8%' : '10%' }} />
-                    <col style={{ width: selCategory?.type === 'work' ? '8%' : '10%' }} />
-                    <col style={{ width: '30%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '15%' }} />
                   </colgroup>
                   <thead>
                     <tr className="text-gray-400 text-xs border-b border-gray-700">
                       <th className="py-2 text-left">#</th>
+                      <th className="py-2 text-left">순위</th>
                       <th className="py-2 text-left">썸네일</th>
                       {selCategory?.type === 'work' && <th className="py-2 text-left">품번</th>}
                       <th className="py-2 text-left">{selCategory?.type === 'work' ? '타이틀' : '이름'}</th>
-                      {(['win_rate', 'match_win_rate'] as const).map((col) => {
-                        const label = col === 'win_rate' ? '우승률' : '승률'
-                        const subtitle = col === 'win_rate' ? '(우승/세션)' : '(승리/매치)'
+                      {(['win_rate', 'match_win_rate', 'adj_gap'] as const).map((col) => {
+                        const label = col === 'win_rate' ? '우승률' : col === 'match_win_rate' ? '승률' : '격차'
+                        const subtitle = col === 'win_rate' ? '(우승/세션)' : col === 'match_win_rate' ? '(승리/매치)' : null
                         const active = rankSortBy === col
                         const nextDir = active ? (rankSortDir === 'desc' ? 'asc' : 'desc') : 'desc'
                         return (
@@ -852,7 +882,7 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                             onClick={() => { setRankSortBy(col); setRankSortDir(nextDir); setRankPage(0) }}
                           >
                             <div>{label}{active ? (rankSortDir === 'desc' ? ' ↓' : ' ↑') : ''}</div>
-                            <div className="text-[10px] text-gray-500 font-normal">{subtitle}</div>
+                            {subtitle && <div className="text-[10px] text-gray-500 font-normal">{subtitle}</div>}
                           </th>
                         )
                       })}
@@ -860,13 +890,14 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                     </tr>
                   </thead>
                   <tbody>
-                    {rankRows.map(row => {
+                    {rankRows.map((row, index) => {
                       const imgPath = selCategory?.type === 'actor' ? row.photo_path : row.cover_path
                       const label   = selCategory?.type === 'actor' ? row.name : (row.title ?? row.product_number)
                       const recentHistory = (rankHistories[row.id] ?? []).slice(-10)
                       return (
                         <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800 h-16">
-                          <td className="px-2 text-gray-400 font-bold">{row.rank}</td>
+                          <td className="px-2 text-gray-500 text-xs">{rankPage * rankLimit + index + 1}</td>
+                          <td className="px-2 text-gray-300 font-bold text-sm">{row.rank}위</td>
                           <td className="p-0"
                             onMouseEnter={() => setRankImgPreview(imgPath ?? null)}
                             onMouseLeave={() => setRankImgPreview(null)}
@@ -895,6 +926,9 @@ export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props)
                           <td className="px-2 text-right text-blue-400">
                             <div>{row.match_win_rate.toFixed(1)}%</div>
                             <div className="text-[12px] text-gray-500">({row.match_wins}/{row.total_matches})</div>
+                          </td>
+                          <td className="px-2 text-right">
+                            <div className={row.adj_gap >= 0 ? 'text-green-400' : 'text-red-400'}>{row.adj_gap >= 0 ? '+' : ''}{row.adj_gap.toFixed(1)}%</div>
                           </td>
                           <td className="px-2 cursor-pointer" onClick={() => setTrendModal({ id: row.id, label: label ?? '', imgPath: imgPath ?? null })}>
                             <div className="flex justify-center"><RankTrendChart history={recentHistory} /></div>
