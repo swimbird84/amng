@@ -354,12 +354,17 @@ function TournamentCard({
   const [itemCount, setItemCount] = useState(0)
   const [roundValue, setRoundValue] = useState(0)
   const [starting, setStarting] = useState(false)
-  const [runProgress, setRunProgress] = useState<{ match: { round: number; match_index: number; phase: string; group_id: number | null } | null; total: number; done: number } | null>(null)
+  const [runProgress, setRunProgress] = useState<{ match: { round: number; match_index: number; phase: string; group_id: number | null } | null; total: number; done: number; groupMatchDone: number | null; groupMatchTotal: number | null } | null>(null)
 
   useEffect(() => {
     cupApi.itemCount(t.id).then(count => {
       setItemCount(count as number)
-      const validOptions = ROUND_OPTIONS.filter(o => o.value === 0 || o.value <= (count as number))
+      const validOptions = ROUND_OPTIONS.filter(o => {
+        if (o.value === 0) return t.format === 'tournament'
+        if (t.format === 'worldcup') return (count as number) >= o.value * 2
+        if (t.format === 'league') return (count as number) >= o.value * 2
+        return o.value <= (count as number)
+      })
       if (t.latest_run_status === 'in_progress' && t.round_total !== undefined && t.round_total !== null) {
         setRoundValue(t.round_total)
       } else {
@@ -437,12 +442,16 @@ function TournamentCard({
               if (t.format === 'tournament') {
                 label = `${roundLabel(m.round)} ${pos}`
               } else if (t.format === 'league') {
-                if (m.phase === 'group') label = `${m.group_id}조 조별리그 ${pos}`
-                else if (m.phase === 'tiebreak') label = `${m.group_id}조 동점처리 ${pos}`
+                const gDone = runProgress?.groupMatchDone ?? 0
+                const gTotal = runProgress?.groupMatchTotal ?? '?'
+                if (m.phase === 'group') label = `${m.group_id}조 조별리그 — ${gDone + 1}/${gTotal}경기`
+                else if (m.phase === 'tiebreak') label = `${m.group_id}조 동점처리 — ${gDone + 1}/${gTotal}경기`
                 else label = `본선 ${roundLabel(m.round)} ${pos}`
               } else if (t.format === 'worldcup') {
+                const gDone = runProgress?.groupMatchDone ?? 0
+                const gTotal = runProgress?.groupMatchTotal ?? '?'
                 label = m.phase === 'group'
-                  ? `예선 ${m.group_id}조 ${pos}`
+                  ? `예선 ${m.group_id}조 — ${gDone + 1}/${gTotal}경기`
                   : `본선 ${roundLabel(m.round)} ${pos}`
               }
             }
@@ -674,7 +683,7 @@ function MatchCard({
     setShowMemo(true)
   }
 
-  const handleSaveMemo = async (e: React.MouseEvent) => {
+  const handleSaveMemo = async (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation()
     setSaving(true)
     try {
@@ -769,8 +778,8 @@ function MatchCard({
 
       {/* 코멘트 편집 모달 */}
       {showMemo && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowMemo(false)}>
-          <div className="bg-gray-800 rounded-xl p-5 w-[420px] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
+          <div className="bg-gray-800 rounded-xl p-5 w-[420px] shadow-2xl">
             <h2 className="text-sm font-bold text-white mb-3 truncate">
               {type === 'actor' ? item.name : (item.title ?? item.product_number ?? `#${item.id}`)}
             </h2>
@@ -779,6 +788,7 @@ function MatchCard({
               rows={5}
               value={memoText}
               onChange={e => setMemoText(e.target.value)}
+              onKeyDown={e => { if (e.ctrlKey && e.key === 's') { e.preventDefault(); handleSaveMemo(e) } }}
               placeholder="코멘트를 입력하세요..."
               autoFocus
             />
@@ -822,7 +832,7 @@ function PlayView({
   const [tournament, setTournament] = useState<CupTournament | null>(null)
   const [run, setRun] = useState<CupRun | null>(null)
   const [currentMatch, setCurrentMatch] = useState<CupMatch | null | 'done'>(null)
-  const [progress, setProgress] = useState<{ total: number; done: number }>({ total: 0, done: 0 })
+  const [progress, setProgress] = useState<{ total: number; done: number; groupDone: number | null; groupTotal: number | null }>({ total: 0, done: 0, groupDone: null, groupTotal: null })
   const [items, setItems] = useState<Map<number, ItemInfo>>(new Map())
   const [liveScores, setLiveScores] = useState<{ item_id: number; pts: number; rank: number }[]>([])
   const [standings, setStandings] = useState<{
@@ -857,7 +867,7 @@ function PlayView({
     if (!result) return
     setTournament(result.tournament)
     setRun(result.run)
-    setProgress({ total: result.totalMatches, done: result.completedMatches })
+    setProgress({ total: result.totalMatches, done: result.completedMatches, groupDone: (result as any).groupMatchDone ?? null, groupTotal: (result as any).groupMatchTotal ?? null })
     const cm = result.currentMatch
     const runStatus = result.run?.status
     const isDone = runStatus === 'completed' || cm === null
@@ -926,6 +936,15 @@ function PlayView({
         if (tournament) {
           fetchItemInfo(m.item1_id, tournament.type)
           if (m.item2_id) fetchItemInfo(m.item2_id, tournament.type)
+        }
+        if (m.phase === 'group' || m.phase === 'tiebreak') {
+          if (run) {
+            cupApi.runProgress(run.id).then(prog => {
+              setProgress(p => ({ ...p, groupDone: prog.groupMatchDone ?? null, groupTotal: prog.groupMatchTotal ?? null }))
+            })
+          }
+        } else {
+          setProgress(p => ({ ...p, groupDone: null, groupTotal: null }))
         }
         if (tab === 'rank') loadLiveScores()
       }
@@ -1064,9 +1083,9 @@ function PlayView({
                   {tournament.format === 'league' && (
                     <p className={`font-bold text-lg ${match.phase === 'main' ? 'text-yellow-400' : match.phase === 'tiebreak' ? 'text-orange-400' : 'text-green-400'}`}>
                       {match.phase === 'group'
-                        ? `${match.group_id}조 조별리그 — ${progress.done + 1}/${progress.total}경기`
+                        ? `${match.group_id}조 조별리그 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                         : match.phase === 'tiebreak'
-                          ? `${match.group_id}조 동점처리 — ${progress.done + 1}/${progress.total}경기`
+                          ? `${match.group_id}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                           : `본선 ${roundLabel(match.round)} — ${match.match_index + 1}/${Math.ceil(match.round / 2)}경기`
                       }
                     </p>
@@ -1074,7 +1093,7 @@ function PlayView({
                   {tournament.format === 'worldcup' && (
                     <p className={`font-bold text-lg ${match.phase === 'group' ? 'text-purple-400' : 'text-yellow-400'}`}>
                       {match.phase === 'group'
-                        ? `${match.group_id}조 예선 — ${progress.done + 1}/${progress.total}경기`
+                        ? `${match.group_id}조 예선 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                         : `본선 ${roundLabel(match.round)} — ${match.match_index + 1}/${Math.ceil(match.round / 2)}경기`
                       }
                     </p>

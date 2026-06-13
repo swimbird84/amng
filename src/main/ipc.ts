@@ -2214,7 +2214,16 @@ export function registerIpcHandlers(): void {
     const { done: completedMatches } = db().prepare(
       `SELECT COUNT(*) as done FROM cup_matches WHERE run_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`
     ).get(runId) as { done: number }
-    return { tournament, run, currentMatch, totalMatches, completedMatches }
+    const cm = currentMatch as { phase: string; group_id: number | null } | null | undefined
+    let groupMatchDone: number | null = null
+    let groupMatchTotal: number | null = null
+    if (cm?.phase === 'group' || cm?.phase === 'tiebreak') {
+      const { cnt: gt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ?`).get(runId, cm.phase, cm.group_id) as { cnt: number }
+      const { cnt: gd } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, cm.phase, cm.group_id) as { cnt: number }
+      groupMatchDone = gd
+      groupMatchTotal = gt
+    }
+    return { tournament, run, currentMatch, totalMatches, completedMatches, groupMatchDone, groupMatchTotal }
   })
 
   ipcMain.handle('cup:create', (_e, params: {
@@ -3428,7 +3437,15 @@ export function registerIpcHandlers(): void {
     `).get(runId) as { round: number; match_index: number; phase: string; group_id: number | null } | undefined
     const { cnt: total } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ?`).get(runId) as { cnt: number }
     const { cnt: done } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId) as { cnt: number }
-    return { match: match ?? null, total, done }
+    let groupMatchDone: number | null = null
+    let groupMatchTotal: number | null = null
+    if (match?.phase === 'group' || match?.phase === 'tiebreak') {
+      const { cnt: gt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ?`).get(runId, match.phase, match.group_id) as { cnt: number }
+      const { cnt: gd } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, match.phase, match.group_id) as { cnt: number }
+      groupMatchDone = gd
+      groupMatchTotal = gt
+    }
+    return { match: match ?? null, total, done, groupMatchDone, groupMatchTotal }
   })
 
   ipcMain.handle('cup:tournament-stats', (_e, tournamentId: number) => {
