@@ -160,23 +160,46 @@ export const imageApi = {
   read: (path: string) => api.invoke('image:read', path),
 }
 
-// 월드컵
-export const worldcupApi = {
-  categories: () => api.invoke('worldcup:categories'),
-  getSession: (categoryId: number) => api.invoke('worldcup:get-session', categoryId),
-  start: (categoryId: number, roundTotal: number, exclude?: boolean) => api.invoke('worldcup:start', { categoryId, roundTotal, exclude }),
-  pick: (matchId: number, winnerId: number) => api.invoke('worldcup:pick', { matchId, winnerId }),
-  complete: (sessionId: number) => api.invoke('worldcup:complete', { sessionId }),
-  rankings: (categoryId: number, limit: number, offset: number, sortBy?: string, sortDir?: string, search?: string) => api.invoke('worldcup:rankings', { categoryId, limit, offset, sortBy, sortDir, search }),
-  rankHistory: (categoryId: number, itemId: number) => api.invoke('worldcup:rank-history', { categoryId, itemId }),
-  deleteSession: (sessionId: number) => api.invoke('worldcup:delete-session', sessionId),
-  lastSessionRankings: (categoryId: number, limit: number, offset: number) => api.invoke('worldcup:last-session-rankings', { categoryId, limit, offset }),
-  lastWinner: (categoryId: number, type: 'actor' | 'work') => api.invoke('worldcup:last-winner', { categoryId, type }),
-  createCategory: (name: string, type: 'actor' | 'work', filter?: object | null) => api.invoke('worldcup:create-category', { name, type, filter }),
-  updateCategory: (id: number, name: string, filter?: object | null) => api.invoke('worldcup:update-category', { id, name, ...(filter !== undefined && { filter }) }),
-  deleteCategory: (id: number) => api.invoke('worldcup:delete-category', id),
-  itemSessions: (categoryId: number, itemId: number) => api.invoke('worldcup:item-sessions', { categoryId, itemId }) as Promise<number>,
-  itemStats: (categoryId: number, itemId: number) => api.invoke('worldcup:item-stats', { categoryId, itemId }) as Promise<{ rank: number; total_sessions: number; session_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number } | null>,
-  itemCount: (categoryId: number) => api.invoke('worldcup:item-count', { categoryId }) as Promise<number>,
-  categoryStats: (categoryId: number) => api.invoke('worldcup:category-stats', { categoryId }) as Promise<{ total_sessions: number; completed_sessions: number; last_session_at: string | null; total_items: number; no_session_items: number; session_dist: { total_sessions: number; count: number }[] } | null>,
+// 컵 대회
+export const cupApi = {
+  list: (params?: { type?: 'actor' | 'work'; isMaster?: boolean; search?: string; sortBy?: string; sortDir?: string; format?: 'tournament' | 'league' | 'worldcup' }) =>
+    api.invoke('cup:list', params),
+  get: (tournamentId: number) =>
+    api.invoke('cup:get', tournamentId),
+  create: (params: { type: 'actor' | 'work'; name: string; isMaster: boolean; format: 'tournament' | 'league' | 'worldcup'; divisionRange?: number[] | null; filterJson?: object | null }) =>
+    api.invoke('cup:create', params),
+  update: (params: { id: number; name?: string; divisionRange?: number[] | null; filterJson?: object | null }) =>
+    api.invoke('cup:update', params),
+  delete: (id: number) =>
+    api.invoke('cup:delete', id),
+  standings: (runId: number) =>
+    api.invoke('cup:standings', runId),
+  itemCount: (tournamentId: number) =>
+    api.invoke('cup:item-count', { tournamentId }) as Promise<number>,
+  start: (tournamentId: number, roundTotal: number, force?: boolean) =>
+    api.invoke('cup:start', { tournamentId, roundTotal, force }),
+  pick: (matchId: number, winnerId: number | null, isDraw?: boolean) =>
+    api.invoke('cup:pick', { matchId, winnerId, isDraw }),
+  complete: (runId: number) =>
+    api.invoke('cup:complete', runId),
+  tournamentRankings: (tournamentId: number, params?: { limit?: number; offset?: number; sortBy?: string; sortDir?: string; search?: string }) =>
+    api.invoke('cup:tournament-rankings', { tournamentId, ...params }) as Promise<{ rows: unknown[]; total: number }>,
+  lastRunRankings: (tournamentId: number, params?: { limit?: number; offset?: number }) =>
+    api.invoke('cup:last-run-rankings', { tournamentId, ...params }) as Promise<{ rows: unknown[]; total: number; runId: number | null; format?: string }>,
+}
+
+// 랭킹 설정
+export const rankingSettingsApi = {
+  get: (type: 'actor' | 'work') =>
+    api.invoke('ranking-settings:get', type),
+  update: (type: 'actor' | 'work', settings: object) =>
+    api.invoke('ranking-settings:update', type, settings),
+}
+
+// 마스터 랭킹
+export const masterRankingApi = {
+  list: (params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string }) =>
+    api.invoke('master-ranking:list', params) as Promise<{ rows: unknown[]; total: number }>,
+  reset: (type: 'actor' | 'work') =>
+    api.invoke('master-ranking:reset', type),
 }

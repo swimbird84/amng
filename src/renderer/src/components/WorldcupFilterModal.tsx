@@ -16,6 +16,7 @@ export type ActorFilter = {
   waistFrom?: number; waistTo?: number
   hipFrom?: number; hipTo?: number
   cupFrom?: string; cupTo?: string
+  poolMode?: 'normal' | 'champion' | 'loser'
 }
 
 export type WorkFilter = {
@@ -30,6 +31,7 @@ export type WorkFilter = {
   studioIds?: number[]
   actorCountFrom?: number
   actorCountTo?: number
+  poolMode?: 'normal' | 'champion' | 'loser'
 }
 
 export type WcFilter = ActorFilter | WorkFilter
@@ -55,6 +57,7 @@ export function countActiveFilters(filter: WcFilter | null): number {
   if ((wf.studioIds?.length ?? 0) > 0) count++
   if (wf.releaseDateFrom || wf.releaseDateTo) count++
   if (wf.actorCountFrom !== undefined || wf.actorCountTo !== undefined) count++
+  if (filter.poolMode && filter.poolMode !== 'normal') count++
   return count
 }
 
@@ -79,6 +82,7 @@ export default function WorldcupFilterModal({ type, filter, onSave, onClose }: P
   const af = filter as ActorFilter | null
   const wf = filter as WorkFilter | null
 
+  const [poolMode, setPoolMode] = useState<'normal' | 'champion' | 'loser'>(filter?.poolMode ?? 'normal')
   const [actorIds, setActorIds] = useState<number[]>(af?.actorIds ?? wf?.actorIds ?? [])
   const [tagIds, setTagIds] = useState<number[]>(filter?.tagIds ?? [])
   const [tagMode, setTagMode] = useState<'and' | 'or'>(filter?.tagMode ?? 'or')
@@ -147,6 +151,7 @@ export default function WorldcupFilterModal({ type, filter, onSave, onClose }: P
     if (favoriteOnly) base.favoriteOnly = true
 
     if (actorIds.length > 0) base.actorIds = actorIds
+    if (poolMode !== 'normal') base.poolMode = poolMode
 
     if (type === 'actor') {
       if (workCountFrom !== '') base.workCountFrom = parseInt(workCountFrom)
@@ -189,6 +194,26 @@ export default function WorldcupFilterModal({ type, filter, onSave, onClose }: P
         <div className="flex items-center justify-between">
           <p className="text-white font-bold">월드컵 필터 설정</p>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-lg leading-none">✕</button>
+        </div>
+
+        {/* 풀 선택 방식 */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-gray-400 text-xs">풀 선택 방식</label>
+          <div className="flex">
+            {([
+              { value: 'normal', label: '일반' },
+              { value: 'champion', label: '👑 왕중왕전' },
+              { value: 'loser', label: '💀 꼴지대전' },
+            ] as const).map((opt, i) => (
+              <button
+                key={opt.value}
+                onClick={() => setPoolMode(opt.value)}
+                className={`flex-1 text-sm py-1.5 border-gray-600 ${i === 0 ? 'rounded-l border-r' : i === 2 ? 'rounded-r' : 'border-r'} ${poolMode === opt.value ? (opt.value === 'champion' ? 'bg-yellow-600 text-white' : opt.value === 'loser' ? 'bg-red-700 text-white' : 'bg-blue-600 text-white') : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >{opt.label}</button>
+            ))}
+          </div>
+          {poolMode === 'champion' && <p className="text-xs text-yellow-400">우승률 상위 항목 중심으로 풀 구성</p>}
+          {poolMode === 'loser' && <p className="text-xs text-red-400">우승률 하위 항목 중심으로 풀 구성</p>}
         </div>
 
         {/* 즐겨찾기 */}

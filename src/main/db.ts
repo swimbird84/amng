@@ -328,71 +328,258 @@ export function initDatabase(): void {
     db.prepare("UPDATE actor_tags_master SET created_at = datetime('now') WHERE created_at IS NULL").run()
   }
 
-  // 월드컵 테이블 마이그레이션
-  const wcCategoriesTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='worldcup_categories'").get()
-  if (!wcCategoriesTable) {
+  // 기존 worldcup_* 테이블 제거 (cup 시스템으로 교체, 최초 1회)
+  const wcLegacyExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='worldcup_categories'").get()
+  if (wcLegacyExists) {
     db.exec(`
-      CREATE TABLE worldcup_categories (
+      DROP TABLE IF EXISTS _worldcup_orphan_cleaned;
+      DROP TABLE IF EXISTS _rank_history_migrated;
+      DROP TABLE IF EXISTS worldcup_rank_history;
+      DROP TABLE IF EXISTS worldcup_stats;
+      DROP TABLE IF EXISTS worldcup_matches;
+      DROP TABLE IF EXISTS worldcup_sessions;
+      DROP TABLE IF EXISTS worldcup_categories;
+    `)
+  }
+
+  // cup 대회 시스템 테이블 (B안: tournament=템플릿, run=실행기록)
+  const cupTournamentsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cup_tournaments'").get()
+  if (!cupTournamentsTable) {
+    db.exec(`
+      CREATE TABLE cup_tournaments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        type TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('actor', 'work')),
         name TEXT NOT NULL,
-        sort_order INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now'))
+        is_master INTEGER NOT NULL DEFAULT 0,
+        format TEXT NOT NULL CHECK(format IN ('tournament', 'league', 'worldcup')),
+        division_range TEXT,
+        filter_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      CREATE TABLE worldcup_sessions (
+
+      CREATE TABLE cup_runs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category_id INTEGER NOT NULL REFERENCES worldcup_categories(id) ON DELETE CASCADE,
-        round_total INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'in_progress',
+        tournament_id INTEGER NOT NULL REFERENCES cup_tournaments(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed')),
+        round_total INTEGER,
         winner_id INTEGER,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
+        settings_snapshot TEXT,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT
       );
-      CREATE TABLE worldcup_matches (
+
+      CREATE TABLE cup_stats (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id INTEGER NOT NULL REFERENCES worldcup_sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('actor', 'work')),
+        item_id INTEGER NOT NULL,
+        total_cups INTEGER NOT NULL DEFAULT 0,
+        cup_wins INTEGER NOT NULL DEFAULT 0,
+        total_matches INTEGER NOT NULL DEFAULT 0,
+        match_wins INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(type, item_id)
+      );
+
+      CREATE TABLE cup_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        division INTEGER,
+        UNIQUE(run_id, item_id)
+      );
+
+      CREATE TABLE cup_matches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        phase TEXT NOT NULL DEFAULT 'main' CHECK(phase IN ('group', 'main')),
+        group_id INTEGER,
         round INTEGER NOT NULL,
         match_index INTEGER NOT NULL,
         item1_id INTEGER NOT NULL,
         item2_id INTEGER,
         winner_id INTEGER,
-        is_bye INTEGER DEFAULT 0
+        is_bye INTEGER NOT NULL DEFAULT 0,
+        is_draw INTEGER NOT NULL DEFAULT 0
       );
-      CREATE TABLE worldcup_stats (
-        category_id INTEGER NOT NULL REFERENCES worldcup_categories(id) ON DELETE CASCADE,
-        item_id INTEGER NOT NULL,
-        total_sessions INTEGER DEFAULT 0,
-        session_wins INTEGER DEFAULT 0,
-        total_matches INTEGER DEFAULT 0,
-        match_wins INTEGER DEFAULT 0,
-        appearance_count INTEGER DEFAULT 0,
-        PRIMARY KEY (category_id, item_id)
-      );
-      CREATE TABLE worldcup_rank_history (
+
+      CREATE TABLE cup_match_points (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category_id INTEGER NOT NULL REFERENCES worldcup_categories(id) ON DELETE CASCADE,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        match_id INTEGER NOT NULL REFERENCES cup_matches(id) ON DELETE CASCADE,
         item_id INTEGER NOT NULL,
-        rank INTEGER NOT NULL,
-        recorded_at TEXT DEFAULT (datetime('now'))
+        base_points REAL NOT NULL DEFAULT 0,
+        bonus_points REAL NOT NULL DEFAULT 0,
+        total_points REAL NOT NULL DEFAULT 0
       );
-      CREATE INDEX idx_worldcup_sessions_category ON worldcup_sessions(category_id);
-      CREATE INDEX idx_worldcup_matches_session ON worldcup_matches(session_id);
-      CREATE INDEX idx_worldcup_rank_history_category_item ON worldcup_rank_history(category_id, item_id);
+
+      CREATE TABLE master_ranking_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('actor', 'work')),
+        item_id INTEGER NOT NULL,
+        points REAL NOT NULL DEFAULT 0,
+        recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE ranking_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL UNIQUE CHECK(type IN ('actor', 'work')),
+        settings_json TEXT NOT NULL DEFAULT '{}'
+      );
+
+      CREATE INDEX idx_cup_tournaments_type ON cup_tournaments(type);
+      CREATE INDEX idx_cup_runs_tournament ON cup_runs(tournament_id);
+      CREATE INDEX idx_cup_entries_run ON cup_entries(run_id);
+      CREATE INDEX idx_cup_matches_run ON cup_matches(run_id);
+      CREATE INDEX idx_master_ranking_history_item ON master_ranking_history(type, item_id);
     `)
-    db.prepare("INSERT INTO worldcup_categories (type, name, sort_order) VALUES ('actor', '배우 월드컵', 0)").run()
-    db.prepare("INSERT INTO worldcup_categories (type, name, sort_order) VALUES ('work', '작품 월드컵', 1)").run()
+
+    // ranking_settings 기본값 삽입 (배우/작품 각각)
+    const defaultSettings = JSON.stringify({
+      basePoints: { win: 3, draw: 1, loss: 0 },
+      divisionWeights: [5.0, 3.5, 2.5, 1.5, 1.0, 0.5],
+      opponentWeights: [5.0, 3.5, 2.5, 1.5, 1.0, 0.5],
+      rankBonus: {
+        '32':  { '1': 15, '2': 8,  '4': 4, '8': 2 },
+        '64':  { '1': 20, '2': 10, '4': 5, '8': 3, '16': 1 },
+        '128': { '1': 25, '2': 13, '4': 6, '8': 3, '16': 1 },
+        '256': { '1': 30, '2': 15, '4': 8, '8': 4, '16': 2, '32': 1 },
+        '512': { '1': 35, '2': 18, '4': 9, '8': 5, '16': 2, '32': 1 }
+      }
+    })
+    db.prepare("INSERT INTO ranking_settings (type, settings_json) VALUES ('actor', ?)").run(defaultSettings)
+    db.prepare("INSERT INTO ranking_settings (type, settings_json) VALUES ('work', ?)").run(defaultSettings)
   }
 
-  // worldcup_categories filter_json 컬럼 마이그레이션
-  const wcCatCols = (db.prepare("PRAGMA table_info(worldcup_categories)").all() as { name: string }[]).map(c => c.name)
-  if (!wcCatCols.includes('filter_json')) {
-    db.prepare("ALTER TABLE worldcup_categories ADD COLUMN filter_json TEXT").run()
-  }
+  // B안 마이그레이션: tournament_id → run_id (기존 설치 대상)
+  const cupEntriesCols = (db.prepare("PRAGMA table_info(cup_entries)").all() as { name: string }[]).map(c => c.name)
+  if (cupEntriesCols.includes('tournament_id')) {
+    db.exec(`PRAGMA foreign_keys = OFF`)
 
-  // rank_history dense rank 마이그레이션: 기존 sequential rank 데이터 초기화
-  const rankHistoryMigrated = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='_rank_history_migrated'").get()
-  if (!rankHistoryMigrated) {
-    db.prepare("DELETE FROM worldcup_rank_history").run()
-    db.exec("CREATE TABLE _rank_history_migrated (done INTEGER)")
+    // 1. cup_runs 생성
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS cup_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tournament_id INTEGER NOT NULL REFERENCES cup_tournaments(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed')),
+        round_total INTEGER,
+        winner_id INTEGER,
+        settings_snapshot TEXT,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_cup_runs_tournament ON cup_runs(tournament_id);
+    `)
+
+    // 2. 기존 실행된 tournament → run 마이그레이션
+    db.exec(`
+      INSERT OR IGNORE INTO cup_runs (tournament_id, status, round_total, winner_id, settings_snapshot, started_at, completed_at)
+      SELECT id,
+        CASE WHEN status IN ('in_progress', 'completed') THEN status ELSE 'completed' END,
+        round_total, winner_id, settings_snapshot,
+        COALESCE(started_at, datetime('now')), completed_at
+      FROM cup_tournaments WHERE status IN ('in_progress', 'completed');
+    `)
+
+    // 3. cup_entries 재생성
+    db.exec(`
+      CREATE TABLE cup_entries_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        division INTEGER,
+        UNIQUE(run_id, item_id)
+      );
+      INSERT INTO cup_entries_new (id, run_id, item_id, division)
+      SELECT e.id, r.id, e.item_id, e.division
+      FROM cup_entries e
+      JOIN cup_runs r ON r.tournament_id = e.tournament_id;
+      DROP TABLE cup_entries;
+      ALTER TABLE cup_entries_new RENAME TO cup_entries;
+      CREATE INDEX idx_cup_entries_run ON cup_entries(run_id);
+    `)
+
+    // 4. cup_matches 재생성
+    db.exec(`
+      CREATE TABLE cup_matches_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        phase TEXT NOT NULL DEFAULT 'main' CHECK(phase IN ('group', 'main')),
+        group_id INTEGER,
+        round INTEGER NOT NULL,
+        match_index INTEGER NOT NULL,
+        item1_id INTEGER NOT NULL,
+        item2_id INTEGER,
+        winner_id INTEGER,
+        is_bye INTEGER NOT NULL DEFAULT 0,
+        is_draw INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT INTO cup_matches_new (id, run_id, phase, group_id, round, match_index, item1_id, item2_id, winner_id, is_bye, is_draw)
+      SELECT m.id, r.id, m.phase, m.group_id, m.round, m.match_index, m.item1_id, m.item2_id, m.winner_id, m.is_bye, m.is_draw
+      FROM cup_matches m
+      JOIN cup_runs r ON r.tournament_id = m.tournament_id;
+      DROP TABLE cup_matches;
+      ALTER TABLE cup_matches_new RENAME TO cup_matches;
+      CREATE INDEX idx_cup_matches_run ON cup_matches(run_id);
+    `)
+
+    // 5. cup_match_points 재생성
+    db.exec(`
+      CREATE TABLE cup_match_points_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        match_id INTEGER NOT NULL REFERENCES cup_matches(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL,
+        base_points REAL NOT NULL DEFAULT 0,
+        bonus_points REAL NOT NULL DEFAULT 0,
+        total_points REAL NOT NULL DEFAULT 0
+      );
+      INSERT INTO cup_match_points_new (id, run_id, match_id, item_id, base_points, bonus_points, total_points)
+      SELECT p.id, r.id, p.match_id, p.item_id, p.base_points, p.bonus_points, p.total_points
+      FROM cup_match_points p
+      JOIN cup_runs r ON r.tournament_id = p.tournament_id;
+      DROP TABLE cup_match_points;
+      ALTER TABLE cup_match_points_new RENAME TO cup_match_points;
+    `)
+
+    // 6. master_ranking_history 재생성
+    db.exec(`
+      CREATE TABLE master_ranking_history_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('actor', 'work')),
+        item_id INTEGER NOT NULL,
+        points REAL NOT NULL DEFAULT 0,
+        recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO master_ranking_history_new (id, run_id, type, item_id, points, recorded_at)
+      SELECT h.id, r.id, h.type, h.item_id, h.points, h.recorded_at
+      FROM master_ranking_history h
+      JOIN cup_runs r ON r.tournament_id = h.tournament_id;
+      DROP TABLE master_ranking_history;
+      ALTER TABLE master_ranking_history_new RENAME TO master_ranking_history;
+      CREATE INDEX idx_master_ranking_history_item ON master_ranking_history(type, item_id);
+    `)
+
+    // 7. cup_tournaments 재생성 (run 전용 컬럼 제거)
+    db.exec(`
+      CREATE TABLE cup_tournaments_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL CHECK(type IN ('actor', 'work')),
+        name TEXT NOT NULL,
+        is_master INTEGER NOT NULL DEFAULT 0,
+        format TEXT NOT NULL CHECK(format IN ('tournament', 'league', 'worldcup')),
+        division_range TEXT,
+        filter_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO cup_tournaments_new (id, type, name, is_master, format, division_range, filter_json, created_at)
+      SELECT id, type, name, is_master, format, division_range, filter_json, created_at
+      FROM cup_tournaments;
+      DROP TABLE cup_tournaments;
+      ALTER TABLE cup_tournaments_new RENAME TO cup_tournaments;
+      CREATE INDEX idx_cup_tournaments_type ON cup_tournaments(type);
+    `)
+
+    db.exec(`PRAGMA foreign_keys = ON`)
   }
 }

@@ -3,76 +3,144 @@ import fs from 'fs'
 import path from 'path'
 import { getDatabase } from './db'
 
-function buildWcFilterQuery(category: { type: string; filter_json?: string | null }): {
-  tableExpr: string; idCol: string; extraJoins: string; filterWhere: string; bindings: unknown[]
-} {
-  const filter = category.filter_json ? JSON.parse(category.filter_json) as Record<string, unknown> : null
-  let extraJoins = ''
-  const extraConditions: string[] = []
-  const bindings: unknown[] = []
-  if (category.type === 'actor') {
-    if (filter) {
-      const tagIds = filter.tagIds as number[] | undefined
-      if (tagIds?.length) {
-        const ph = tagIds.map(() => '?').join(',')
-        extraJoins += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
-        extraConditions.push(`at2.tag_id IN (${ph})`); bindings.push(...tagIds)
-        if (filter.tagMode === 'and') {
-          extraConditions.push(`(SELECT COUNT(DISTINCT at3.tag_id) FROM actor_tags at3 WHERE at3.actor_id = a.id AND at3.tag_id IN (${ph})) = ?`)
-          bindings.push(...tagIds, tagIds.length)
-        }
+
+// ========== 마스터 랭킹 승점 계산 헬퍼 ==========
+function calcAndStoreRunPoints(
+  database: ReturnType<typeof getDatabase>,
+  runId: number,
+  type: 'actor' | 'work',
+  isMaster: boolean,
+  settingsSnapshotJson: string | null
+): void {
+  // 마스터 대회: 스냅샷 사용 / 일반 대회: 현재 설정 사용
+  let settingsJson = settingsSnapshotJson
+  if (!settingsJson) {
+    const row = database.prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
+    if (!row) return
+    settingsJson = row.settings_json
+  }
+  const settings = JSON.parse(settingsJson) as {
+    basePoints: { win: number; draw: number; loss: number }
+    divisionWeights: number[]
+    opponentWeights: number[]
+    rankBonus: Record<string, Record<string, number>>
+  }
+
+  const entries = database.prepare(
+    `SELECT item_id, division FROM cup_entries WHERE run_id = ?`
+  ).all(runId) as { item_id: number; division: number | null }[]
+  if (entries.length === 0) return
+
+  const divMap = new Map(entries.map(e => [e.item_id, e.division ?? 0]))
+
+  // 마스터 대회만 부별/섞인 구분 (일반 대회는 부 없음)
+  const divisions = new Set(entries.map(e => e.division ?? 0))
+  const isMixed = isMaster && divisions.size > 1
+
+  const run = database.prepare(
+    `SELECT r.winner_id, t.format FROM cup_runs r JOIN cup_tournaments t ON t.id = r.tournament_id WHERE r.id = ?`
+  ).get(runId) as { format: string; winner_id: number | null }
+
+  const matches = database.prepare(`
+    SELECT item1_id, item2_id, winner_id, is_draw, round FROM cup_matches
+    WHERE run_id = ? AND is_bye = 0
+  `).all(runId) as {
+    item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; round: number
+  }[]
+
+  const getDivWeight = (div: number, weights: number[]) =>
+    div >= 1 && div <= weights.length ? weights[div - 1] : 1.0
+
+  // ---- 매치 승점 계산 ----
+  // 섞인 대회: 매치마다 상대방 부 가중치 적용 (raw pts)
+  // 부별 대회 / 일반 대회: raw 승점만 누적 (가중치는 최종 단계에서 적용)
+  const matchPts = new Map<number, number>()
+  for (const m of matches) {
+    if (m.item2_id === null) continue
+    if (isMixed) {
+      const div1 = divMap.get(m.item1_id) ?? 0
+      const div2 = divMap.get(m.item2_id) ?? 0
+      if (m.is_draw) {
+        matchPts.set(m.item1_id, (matchPts.get(m.item1_id) ?? 0) + settings.basePoints.draw * getDivWeight(div2, settings.opponentWeights))
+        matchPts.set(m.item2_id, (matchPts.get(m.item2_id) ?? 0) + settings.basePoints.draw * getDivWeight(div1, settings.opponentWeights))
+      } else if (m.winner_id !== null) {
+        const loserId = m.item1_id === m.winner_id ? m.item2_id : m.item1_id
+        matchPts.set(m.winner_id, (matchPts.get(m.winner_id) ?? 0) + settings.basePoints.win * getDivWeight(divMap.get(loserId) ?? 0, settings.opponentWeights))
       }
-      const actorIds = filter.actorIds as number[] | undefined
-      if (actorIds?.length) { const ph = actorIds.map(() => '?').join(','); extraConditions.push(`a.id IN (${ph})`); bindings.push(...actorIds) }
-      if (filter.favoriteOnly) extraConditions.push('a.is_favorite = 1')
-      if (filter.ratingFrom !== undefined || filter.ratingTo !== undefined) {
-        extraJoins += ` LEFT JOIN actor_scores asc_f ON asc_f.actor_id = a.id`
-        if (filter.ratingFrom !== undefined) { extraConditions.push(`COALESCE((asc_f.face+asc_f.bust+asc_f.hip+asc_f.physical+asc_f.skin+asc_f.acting+asc_f.sexy+asc_f.charm+asc_f.technique+asc_f.proportions)/13.0,0)>=?`); bindings.push(filter.ratingFrom) }
-        if (filter.ratingTo   !== undefined) { extraConditions.push(`COALESCE((asc_f.face+asc_f.bust+asc_f.hip+asc_f.physical+asc_f.skin+asc_f.acting+asc_f.sexy+asc_f.charm+asc_f.technique+asc_f.proportions)/13.0,0)<=?`); bindings.push(filter.ratingTo) }
+    } else {
+      if (m.is_draw) {
+        matchPts.set(m.item1_id, (matchPts.get(m.item1_id) ?? 0) + settings.basePoints.draw)
+        matchPts.set(m.item2_id, (matchPts.get(m.item2_id) ?? 0) + settings.basePoints.draw)
+      } else if (m.winner_id !== null) {
+        matchPts.set(m.winner_id, (matchPts.get(m.winner_id) ?? 0) + settings.basePoints.win)
       }
-      if (filter.workCountFrom !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id=a.id)>=?'); bindings.push(filter.workCountFrom) }
-      if (filter.workCountTo   !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id=a.id)<=?'); bindings.push(filter.workCountTo) }
-      if (filter.heightFrom !== undefined) { extraConditions.push('a.height>=?'); bindings.push(filter.heightFrom) }
-      if (filter.heightTo   !== undefined) { extraConditions.push('a.height<=?'); bindings.push(filter.heightTo) }
-      if (filter.bustFrom   !== undefined) { extraConditions.push('a.bust>=?');   bindings.push(filter.bustFrom) }
-      if (filter.bustTo     !== undefined) { extraConditions.push('a.bust<=?');   bindings.push(filter.bustTo) }
-      if (filter.waistFrom  !== undefined) { extraConditions.push('a.waist>=?');  bindings.push(filter.waistFrom) }
-      if (filter.waistTo    !== undefined) { extraConditions.push('a.waist<=?');  bindings.push(filter.waistTo) }
-      if (filter.hipFrom    !== undefined) { extraConditions.push('a.hip>=?');    bindings.push(filter.hipFrom) }
-      if (filter.hipTo      !== undefined) { extraConditions.push('a.hip<=?');    bindings.push(filter.hipTo) }
-      if (filter.cupFrom) { extraConditions.push('a.cup>=?'); bindings.push(filter.cupFrom) }
-      if (filter.cupTo)   { extraConditions.push('a.cup<=?'); bindings.push(filter.cupTo) }
     }
-    return { tableExpr: 'actors a', idCol: 'a.id', extraJoins, filterWhere: extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : '', bindings }
+  }
+
+  // ---- 순위 계산 ----
+  const rankMap = new Map<number, number>()
+  if (run.format === 'tournament' || run.format === 'worldcup') {
+    if (run.winner_id !== null) rankMap.set(run.winner_id, 1)
+    const roundGroups = new Map<number, number[]>()
+    for (const m of matches) {
+      if (m.winner_id === null || m.item2_id === null || m.is_draw) continue
+      const loserId = m.item1_id === m.winner_id ? m.item2_id : m.item1_id
+      const group = roundGroups.get(m.round) ?? []
+      group.push(loserId)
+      roundGroups.set(m.round, group)
+    }
+    for (const [round, losers] of roundGroups.entries()) {
+      const rankStart = Math.floor(round / 2) + 1
+      for (const loserId of losers) rankMap.set(loserId, rankStart)
+    }
   } else {
-    if (filter) {
-      const tagIds = filter.tagIds as number[] | undefined
-      if (tagIds?.length) {
-        const ph = tagIds.map(() => '?').join(',')
-        extraJoins += ` JOIN work_tags wt ON wt.work_id = w.id`
-        extraConditions.push(`wt.tag_id IN (${ph})`); bindings.push(...tagIds)
-        if (filter.tagMode === 'and') {
-          extraConditions.push(`(SELECT COUNT(DISTINCT wt2.tag_id) FROM work_tags wt2 WHERE wt2.work_id=w.id AND wt2.tag_id IN (${ph}))=?`)
-          bindings.push(...tagIds, tagIds.length)
-        }
-      }
-      const workActorIds = filter.actorIds as number[] | undefined
-      if (workActorIds?.length) {
-        const ph = workActorIds.map(() => '?').join(',')
-        extraConditions.push(`EXISTS (SELECT 1 FROM work_actors wa_f WHERE wa_f.work_id=w.id AND wa_f.actor_id IN (${ph}))`)
-        bindings.push(...workActorIds)
-      }
-      if (filter.favoriteOnly) extraConditions.push('w.is_favorite=1')
-      if (filter.ratingFrom !== undefined) { extraConditions.push('w.rating>=?'); bindings.push(filter.ratingFrom) }
-      if (filter.ratingTo   !== undefined) { extraConditions.push('w.rating<=?'); bindings.push(filter.ratingTo) }
-      const studioIds = filter.studioIds as number[] | undefined
-      if (studioIds?.length) { const ph = studioIds.map(() => '?').join(','); extraConditions.push(`w.studio_id IN (${ph})`); bindings.push(...studioIds) }
-      if (filter.releaseDateFrom) { extraConditions.push('w.release_date>=?'); bindings.push(filter.releaseDateFrom) }
-      if (filter.releaseDateTo)   { extraConditions.push('w.release_date<=?'); bindings.push(filter.releaseDateTo) }
-      if (filter.actorCountFrom !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id=w.id)>=?'); bindings.push(filter.actorCountFrom) }
-      if (filter.actorCountTo   !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id=w.id)<=?'); bindings.push(filter.actorCountTo) }
+    // 리그전: raw matchPts 기준 순위
+    const sorted = [...entries].sort((a, b) => (matchPts.get(b.item_id) ?? 0) - (matchPts.get(a.item_id) ?? 0))
+    let rank = 1
+    for (let i = 0; i < sorted.length; i++) {
+      if (i > 0 && (matchPts.get(sorted[i].item_id) ?? 0) < (matchPts.get(sorted[i - 1].item_id) ?? 0)) rank = i + 1
+      rankMap.set(sorted[i].item_id, rank)
     }
-    return { tableExpr: 'works w', idCol: 'w.id', extraJoins, filterWhere: extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : '', bindings }
+  }
+
+  // ---- 순위 보너스 ----
+  const entryCount = entries.length
+  const bonusKeys = Object.keys(settings.rankBonus).map(Number).sort((a, b) => a - b)
+  const bonusTableKey = String(bonusKeys.find(k => entryCount <= k) ?? bonusKeys[bonusKeys.length - 1] ?? 32)
+  const bonusTable: Record<string, number> = settings.rankBonus[bonusTableKey] ?? {}
+  const bonusRankKeys = Object.keys(bonusTable).map(Number).sort((a, b) => a - b)
+  const getBonus = (rank: number) => {
+    const key = bonusRankKeys.find(k => rank <= k)
+    return key !== undefined ? (bonusTable[String(key)] ?? 0) : 0
+  }
+
+  // 섞인 대회: 순위 보너스에 적용할 부 가중치 평균
+  const avgDivWeight = isMixed
+    ? entries.reduce((sum, e) => sum + getDivWeight(divMap.get(e.item_id) ?? 0, settings.divisionWeights), 0) / entries.length
+    : 1.0
+
+  // ---- 최종 승점 계산 및 저장 ----
+  // 부별 대회: (raw_matchPts + bonus) × divWeight  ← RANK.md 수식
+  // 섞인 대회: matchPts(per-match weight 적용) + bonus × avgDivWeight
+  // 일반 대회: matchPts + bonus (가중치 없음)
+  const insert = database.prepare(`
+    INSERT INTO master_ranking_history (run_id, type, item_id, points, recorded_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+  `)
+  for (const e of entries) {
+    const mp = matchPts.get(e.item_id) ?? 0
+    const rank = rankMap.get(e.item_id) ?? entryCount
+    const bonus = getBonus(rank)
+    let finalPts: number
+    if (isMaster && !isMixed) {
+      const w = getDivWeight(divMap.get(e.item_id) ?? 0, settings.divisionWeights)
+      finalPts = (mp + bonus) * w
+    } else if (isMixed) {
+      finalPts = mp + bonus * avgDivWeight
+    } else {
+      finalPts = mp + bonus
+    }
+    insert.run(runId, type, e.item_id, finalPts)
   }
 }
 
@@ -426,8 +494,16 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('works:delete', (_e, id: number) => {
+    const blocked = db().prepare(`
+      SELECT 1 FROM cup_entries e
+      JOIN cup_runs r ON r.id = e.run_id
+      WHERE r.status = 'in_progress' AND e.item_id = ?
+      LIMIT 1
+    `).get(id)
+    if (blocked) return { blocked: true }
     db().prepare('DELETE FROM works WHERE id = ?').run(id)
-    return true
+    db().prepare(`DELETE FROM master_ranking_history WHERE type = 'work' AND item_id = ?`).run(id)
+    return { blocked: false }
   })
 
   ipcMain.handle('work-files:add', (_e, workId: number, filePath: string, type: 'local' | 'url' = 'local') => {
@@ -858,8 +934,16 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('actors:delete', (_e, id: number) => {
+    const blocked = db().prepare(`
+      SELECT 1 FROM cup_entries e
+      JOIN cup_runs r ON r.id = e.run_id
+      WHERE r.status = 'in_progress' AND e.item_id = ?
+      LIMIT 1
+    `).get(id)
+    if (blocked) return { blocked: true }
     db().prepare('DELETE FROM actors WHERE id = ?').run(id)
-    return true
+    db().prepare(`DELETE FROM master_ranking_history WHERE type = 'actor' AND item_id = ?`).run(id)
+    return { blocked: false }
   })
 
   ipcMain.handle('actors:workTags', (_e, actorId: number) => {
@@ -1892,40 +1976,277 @@ export function registerIpcHandlers(): void {
     return `data:image/${mime};base64,${data.toString('base64')}`
   })
 
-  // ========== 월드컵 ==========
+  // ========== 컵 대회 시스템 ==========
 
-  ipcMain.handle('worldcup:categories', () => {
-    return db().prepare(`SELECT * FROM worldcup_categories ORDER BY sort_order, id`).all()
+  ipcMain.handle('cup:list', (_e, params?: { type?: 'actor' | 'work'; isMaster?: boolean; search?: string; sortBy?: string; sortDir?: string; format?: 'tournament' | 'league' | 'worldcup' }) => {
+    const { type, isMaster, search, sortBy = 'created_at', sortDir = 'desc', format } = params ?? {}
+    const conditions: string[] = []
+    const bindings: unknown[] = []
+    if (type) { conditions.push('t.type = ?'); bindings.push(type) }
+    if (isMaster !== undefined) { conditions.push('t.is_master = ?'); bindings.push(isMaster ? 1 : 0) }
+    if (search) { conditions.push('t.name LIKE ?'); bindings.push(`%${search}%`) }
+    if (format) { conditions.push('t.format = ?'); bindings.push(format) }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+    const orderCol = sortBy === 'name' ? 't.name' : 't.created_at'
+    const dir = sortDir === 'asc' ? 'ASC' : 'DESC'
+    return db().prepare(`
+      SELECT t.*,
+        lr.id AS latest_run_id,
+        lr.status AS latest_run_status,
+        lr.round_total,
+        lr.winner_id,
+        lr.started_at,
+        lr.completed_at,
+        CASE WHEN t.type = 'actor' THEN a.name ELSE w.title END AS winner_name,
+        CASE WHEN t.type = 'actor' THEN a.photo_path ELSE w.cover_path END AS winner_photo
+      FROM cup_tournaments t
+      LEFT JOIN cup_runs lr ON lr.id = (
+        SELECT id FROM cup_runs WHERE tournament_id = t.id ORDER BY id DESC LIMIT 1
+      )
+      LEFT JOIN actors a ON a.id = lr.winner_id AND t.type = 'actor'
+      LEFT JOIN works w ON w.id = lr.winner_id AND t.type = 'work'
+      ${where}
+      ORDER BY ${orderCol} ${dir}
+    `).all(...bindings)
   })
 
-  ipcMain.handle('worldcup:get-session', (_e, categoryId: number) => {
-    const session = db().prepare(`
-      SELECT * FROM worldcup_sessions WHERE category_id = ? AND status = 'in_progress' ORDER BY id DESC LIMIT 1
-    `).get(categoryId) as { id: number; category_id: number; round_total: number; status: string; winner_id: number | null } | undefined
-    if (!session) return null
-    const matches = db().prepare(`SELECT * FROM worldcup_matches WHERE session_id = ? ORDER BY round DESC, match_index`).all(session.id)
-    return { session, matches }
+  ipcMain.handle('cup:get', (_e, tournamentId: number) => {
+    const tournament = db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId) as Record<string, unknown> | undefined
+    if (!tournament) return null
+    const run = db().prepare(`SELECT * FROM cup_runs WHERE tournament_id = ? ORDER BY id DESC LIMIT 1`).get(tournamentId) as Record<string, unknown> | undefined
+    if (!run) return { tournament, run: null, currentMatch: null, totalMatches: 0, completedMatches: 0 }
+    const runId = run.id as number
+    const currentMatch = db().prepare(`
+      SELECT * FROM cup_matches
+      WHERE run_id = ? AND winner_id IS NULL AND is_bye = 0 AND is_draw = 0
+      ORDER BY phase DESC, round DESC, match_index ASC
+      LIMIT 1
+    `).get(runId)
+    const { total: totalMatches } = db().prepare(
+      `SELECT COUNT(*) as total FROM cup_matches WHERE run_id = ? AND is_bye = 0`
+    ).get(runId) as { total: number }
+    const { done: completedMatches } = db().prepare(
+      `SELECT COUNT(*) as done FROM cup_matches WHERE run_id = ? AND is_bye = 0 AND (winner_id IS NOT NULL OR is_draw = 1)`
+    ).get(runId) as { done: number }
+    return { tournament, run, currentMatch, totalMatches, completedMatches }
   })
 
-  ipcMain.handle('worldcup:start', (_e, params: { categoryId: number; roundTotal: number; exclude?: boolean }) => {
-    const { categoryId, roundTotal, exclude } = params
-    const category = db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string; filter_json?: string | null } | undefined
-    if (!category) throw new Error('카테고리를 찾을 수 없습니다')
+  ipcMain.handle('cup:create', (_e, params: {
+    type: 'actor' | 'work'
+    name: string
+    isMaster: boolean
+    format: 'tournament' | 'league' | 'worldcup'
+    divisionRange?: number[] | null
+    filterJson?: object | null
+  }) => {
+    const { type, name, isMaster, format, divisionRange, filterJson } = params
+    const result = db().prepare(`
+      INSERT INTO cup_tournaments (type, name, is_master, format, division_range, filter_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(type, name, isMaster ? 1 : 0, format, divisionRange ? JSON.stringify(divisionRange) : null, filterJson ? JSON.stringify(filterJson) : null)
+    return db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(result.lastInsertRowid)
+  })
 
-    // 기존 in_progress 세션 삭제
-    const existing = db().prepare(`SELECT id FROM worldcup_sessions WHERE category_id = ? AND status = 'in_progress'`).get(categoryId) as { id: number } | undefined
-    if (existing) {
-      db().prepare(`DELETE FROM worldcup_sessions WHERE id = ?`).run(existing.id)
+  ipcMain.handle('cup:update', (_e, params: {
+    id: number
+    name?: string
+    divisionRange?: number[] | null
+    filterJson?: object | null
+  }) => {
+    const t = db().prepare(`SELECT id FROM cup_tournaments WHERE id = ?`).get(params.id) as { id: number } | undefined
+    if (!t) throw new Error('대회를 찾을 수 없습니다')
+    if (params.name !== undefined) db().prepare(`UPDATE cup_tournaments SET name = ? WHERE id = ?`).run(params.name, params.id)
+    if (params.divisionRange !== undefined) db().prepare(`UPDATE cup_tournaments SET division_range = ? WHERE id = ?`).run(params.divisionRange ? JSON.stringify(params.divisionRange) : null, params.id)
+    if (params.filterJson !== undefined) db().prepare(`UPDATE cup_tournaments SET filter_json = ? WHERE id = ?`).run(params.filterJson ? JSON.stringify(params.filterJson) : null, params.id)
+    return db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(params.id)
+  })
+
+  ipcMain.handle('cup:delete', (_e, id: number) => {
+    db().prepare(`DELETE FROM cup_tournaments WHERE id = ?`).run(id)
+    return { ok: true }
+  })
+
+  ipcMain.handle('cup:standings', (_e, runId: number) => {
+    const row = db().prepare(`
+      SELECT r.*, t.format, t.type FROM cup_runs r
+      JOIN cup_tournaments t ON t.id = r.tournament_id
+      WHERE r.id = ?
+    `).get(runId) as { format: string; type: string } | undefined
+    if (!row) return null
+    if (row.format === 'tournament') {
+      const matches = db().prepare(
+        `SELECT * FROM cup_matches WHERE run_id = ? ORDER BY round DESC, match_index ASC`
+      ).all(runId)
+      return { type: 'tournament', matches }
+    } else if (row.format === 'worldcup') {
+      const groups = db().prepare(`SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group' ORDER BY group_id`).all(runId) as { group_id: number }[]
+      const groupStandings = groups.map(({ group_id }) => {
+        const itemIds = new Set<number>()
+        const groupMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ?`).all(runId, group_id) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+        for (const m of groupMatches) { itemIds.add(m.item1_id); if (m.item2_id) itemIds.add(m.item2_id) }
+        const standings = Array.from(itemIds).map(item_id => {
+          let pts = 0, w = 0, d = 0, l = 0
+          for (const m of groupMatches) {
+            const isItem1 = m.item1_id === item_id, isItem2 = m.item2_id === item_id
+            if (!isItem1 && !isItem2) continue
+            if (m.is_draw) { pts += 1; d++ }
+            else if (m.winner_id === item_id) { pts += 3; w++ }
+            else if (m.winner_id !== null) { l++ }
+          }
+          return { item_id, pts, w, d, l }
+        }).sort((a, b) => b.pts - a.pts || b.w - a.w)
+        return { group_id, standings }
+      })
+      const mainMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'main' ORDER BY round DESC, match_index`).all(runId)
+      return { type: 'worldcup', groupStandings, mainMatches }
+    } else {
+      const entries = db().prepare(`SELECT item_id FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number }[]
+      const allMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? ORDER BY match_index`).all(runId) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+      const standings = entries.map(({ item_id }) => {
+        let pts = 0, w = 0, d = 0, l = 0
+        for (const m of allMatches) {
+          const isItem1 = m.item1_id === item_id, isItem2 = m.item2_id === item_id
+          if (!isItem1 && !isItem2) continue
+          if (m.is_draw) { pts += 1; d++ }
+          else if (m.winner_id === item_id) { pts += 3; w++ }
+          else if (m.winner_id !== null) { l++ }
+        }
+        return { item_id, pts, w, d, l }
+      }).sort((a, b) => b.pts - a.pts || b.w - a.w)
+      return { type: 'league', standings, matches: allMatches }
     }
+  })
+
+  ipcMain.handle('ranking-settings:get', (_e, type: 'actor' | 'work') => {
+    const row = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
+    return row ? JSON.parse(row.settings_json) : null
+  })
+
+  ipcMain.handle('ranking-settings:update', (_e, type: 'actor' | 'work', settings: object) => {
+    const inProgress = db().prepare(`SELECT 1 FROM cup_runs WHERE status = 'in_progress' LIMIT 1`).get()
+    if (inProgress) throw new Error('진행 중인 대회가 있어 설정을 변경할 수 없습니다')
+    db().prepare(`UPDATE ranking_settings SET settings_json = ? WHERE type = ?`).run(JSON.stringify(settings), type)
+    return { ok: true }
+  })
+
+  ipcMain.handle('master-ranking:list', (_e, params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string }) => {
+    const { type, limit = 50, offset = 0, search } = params
+    const searchWhere = search ? (type === 'actor' ? ' AND a.name LIKE ?' : ' AND (w.title LIKE ? OR w.product_number LIKE ?)') : ''
+    const searchBindings: unknown[] = search ? (type === 'work' ? [`%${search}%`, `%${search}%`] : [`%${search}%`]) : []
+    if (type === 'actor') {
+      const rows = db().prepare(`
+        SELECT
+          RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
+          a.id, a.name, a.photo_path,
+          COALESCE(pts.total_points, 0) AS total_points,
+          COALESCE(cs.total_cups, 0) AS total_cups,
+          COALESCE(cs.cup_wins, 0) AS cup_wins
+        FROM actors a
+        LEFT JOIN (
+          SELECT mh.item_id, SUM(mh.points) AS total_points
+          FROM (
+            SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
+            FROM master_ranking_history mh2
+            JOIN cup_runs r ON r.id = mh2.run_id
+            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+            WHERE mh2.type = 'actor'
+          ) mh WHERE rn <= 10 GROUP BY mh.item_id
+        ) pts ON pts.item_id = a.id
+        LEFT JOIN cup_stats cs ON cs.type = 'actor' AND cs.item_id = a.id
+        WHERE 1=1${searchWhere}
+        ORDER BY total_points DESC, a.name ASC
+        LIMIT ? OFFSET ?
+      `).all(...searchBindings, limit, offset)
+      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM actors a WHERE 1=1${searchWhere}`).get(...searchBindings) as { cnt: number }).cnt
+      return { rows, total }
+    } else {
+      const rows = db().prepare(`
+        SELECT
+          RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
+          w.id, w.title, w.product_number, w.cover_path,
+          COALESCE(pts.total_points, 0) AS total_points,
+          COALESCE(cs.total_cups, 0) AS total_cups,
+          COALESCE(cs.cup_wins, 0) AS cup_wins
+        FROM works w
+        LEFT JOIN (
+          SELECT mh.item_id, SUM(mh.points) AS total_points
+          FROM (
+            SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
+            FROM master_ranking_history mh2
+            JOIN cup_runs r ON r.id = mh2.run_id
+            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+            WHERE mh2.type = 'work'
+          ) mh WHERE rn <= 10 GROUP BY mh.item_id
+        ) pts ON pts.item_id = w.id
+        LEFT JOIN cup_stats cs ON cs.type = 'work' AND cs.item_id = w.id
+        WHERE 1=1${searchWhere}
+        ORDER BY total_points DESC, w.title ASC
+        LIMIT ? OFFSET ?
+      `).all(...searchBindings, limit, offset)
+      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM works w WHERE 1=1${searchWhere}`).get(...searchBindings) as { cnt: number }).cnt
+      return { rows, total }
+    }
+  })
+
+  ipcMain.handle('master-ranking:reset', (_e, type: 'actor' | 'work') => {
+    const inProgress = db().prepare(`SELECT 1 FROM cup_runs WHERE status = 'in_progress' LIMIT 1`).get()
+    if (inProgress) throw new Error('진행 중인 대회가 있어 리셋할 수 없습니다')
+    db().prepare(`DELETE FROM master_ranking_history WHERE type = ?`).run(type)
+    return { ok: true }
+  })
+
+  ipcMain.handle('cup:item-count', (_e, params: { tournamentId: number }) => {
+    const t = db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(params.tournamentId) as { type: string; filter_json?: string | null } | undefined
+    if (!t) return 0
+    const filter = t.filter_json ? JSON.parse(t.filter_json) as Record<string, unknown> : null
+    const extraConditions: string[] = []
+    const extraBindings: unknown[] = []
+    let extraJoins = ''
+    if (filter) {
+      const tagIds = filter.tagIds as number[] | undefined
+      if (tagIds?.length) {
+        const ph = tagIds.map(() => '?').join(',')
+        if (t.type === 'actor') {
+          extraJoins += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
+          extraConditions.push(`at2.tag_id IN (${ph})`)
+        } else {
+          extraJoins += ` JOIN work_tags wt2 ON wt2.work_id = w.id`
+          extraConditions.push(`wt2.tag_id IN (${ph})`)
+        }
+        extraBindings.push(...tagIds)
+      }
+      if (filter.favoriteOnly) extraConditions.push(t.type === 'actor' ? 'a.is_favorite = 1' : 'w.is_favorite = 1')
+    }
+    const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
+    if (t.type === 'actor') {
+      return ((db().prepare(`SELECT COUNT(DISTINCT a.id) as cnt FROM actors a${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt)
+    } else {
+      return ((db().prepare(`SELECT COUNT(DISTINCT w.id) as cnt FROM works w${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt)
+    }
+  })
+
+  ipcMain.handle('cup:start', (_e, params: { tournamentId: number; roundTotal: number; force?: boolean }) => {
+    const { tournamentId, roundTotal, force = false } = params
+    const tournament = db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId) as {
+      id: number; type: 'actor' | 'work'; format: string; is_master: number; filter_json: string | null
+    } | undefined
+    if (!tournament) throw new Error('대회를 찾을 수 없습니다')
+    const existingRun = db().prepare(`SELECT id FROM cup_runs WHERE tournament_id = ? AND status = 'in_progress' LIMIT 1`).get(tournamentId) as { id: number } | undefined
+    if (existingRun) {
+      if (!force) throw new Error('이미 진행 중인 대회가 있습니다')
+      // force: 기존 진행중 run 삭제 (CASCADE)
+      db().prepare(`DELETE FROM cup_runs WHERE id = ?`).run(existingRun.id)
+    }
+
+    const filter = tournament.filter_json ? JSON.parse(tournament.filter_json) as Record<string, unknown> : null
+    const poolMode = (filter?.poolMode as string | undefined) ?? 'normal'
 
     // 후보 항목 조회
     let items: { id: number }[]
-    if (category.type === 'actor') {
-      const excludeWhere = exclude ? `AND (a.score_excluded IS NULL OR a.score_excluded = 0)` : ''
-      const filter = category.filter_json ? JSON.parse(category.filter_json) as Record<string, unknown> : null
-      let extraJoins = ''
+    if (tournament.type === 'actor') {
       const extraConditions: string[] = []
       const extraBindings: unknown[] = []
+      let extraJoins = ''
       if (filter) {
         const tagIds = filter.tagIds as number[] | undefined
         if (tagIds?.length) {
@@ -1937,12 +2258,6 @@ export function registerIpcHandlers(): void {
             extraConditions.push(`(SELECT COUNT(DISTINCT at3.tag_id) FROM actor_tags at3 WHERE at3.actor_id = a.id AND at3.tag_id IN (${ph})) = ?`)
             extraBindings.push(...tagIds, tagIds.length)
           }
-        }
-        const actorIds = filter.actorIds as number[] | undefined
-        if (actorIds?.length) {
-          const ph = actorIds.map(() => '?').join(',')
-          extraConditions.push(`a.id IN (${ph})`)
-          extraBindings.push(...actorIds)
         }
         if (filter.favoriteOnly) extraConditions.push('a.is_favorite = 1')
         if (filter.ratingFrom !== undefined || filter.ratingTo !== undefined) {
@@ -1964,17 +2279,11 @@ export function registerIpcHandlers(): void {
         if (filter.cupTo) { extraConditions.push('a.cup <= ?'); extraBindings.push(filter.cupTo) }
       }
       const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
-      items = db().prepare(`
-        SELECT DISTINCT a.id
-        FROM actors a
-        ${extraJoins}
-        WHERE 1=1 ${excludeWhere}${filterWhere}
-      `).all(...extraBindings) as { id: number }[]
+      items = db().prepare(`SELECT DISTINCT a.id FROM actors a ${extraJoins} WHERE 1=1${filterWhere}`).all(...extraBindings) as { id: number }[]
     } else {
-      const filter = category.filter_json ? JSON.parse(category.filter_json) as Record<string, unknown> : null
-      let extraJoins = ''
       const extraConditions: string[] = []
       const extraBindings: unknown[] = []
+      let extraJoins = ''
       if (filter) {
         const tagIds = filter.tagIds as number[] | undefined
         if (tagIds?.length) {
@@ -2008,41 +2317,48 @@ export function registerIpcHandlers(): void {
         if (filter.actorCountTo !== undefined) { extraConditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id = w.id) <= ?'); extraBindings.push(filter.actorCountTo) }
       }
       const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
-      items = db().prepare(`
-        SELECT DISTINCT w.id
-        FROM works w
-        ${extraJoins}
-        WHERE 1=1${filterWhere}
-      `).all(...extraBindings) as { id: number }[]
+      items = db().prepare(`SELECT DISTINCT w.id FROM works w ${extraJoins} WHERE 1=1${filterWhere}`).all(...extraBindings) as { id: number }[]
     }
 
-    // 라운드 크기 결정 및 참가자 선발
+    // cup_stats 조회 (참가 수 보정 및 champion/loser 모드용)
+    let statsMap = new Map<number, number>()
+    let winRateMap = new Map<number, number>()
+    if (items.length > 0) {
+      const ph = items.map(() => '?').join(',')
+      const statsRows = db().prepare(`
+        SELECT item_id, total_cups, cup_wins FROM cup_stats WHERE type = ? AND item_id IN (${ph})
+      `).all(tournament.type, ...items.map(i => i.id)) as { item_id: number; total_cups: number; cup_wins: number }[]
+      statsMap = new Map(statsRows.map(r => [r.item_id, r.total_cups]))
+      winRateMap = new Map(statsRows.map(r => [r.item_id, r.total_cups > 0 ? r.cup_wins / r.total_cups : -1]))
+      // 정렬 전 셔플 (stable sort 편향 방지)
+      for (let k = items.length - 1; k > 0; k--) {
+        const r = Math.floor(Math.random() * (k + 1))
+        ;[items[k], items[r]] = [items[r], items[k]]
+      }
+      if (poolMode === 'champion') {
+        items.sort((a, b) => (winRateMap.get(b.id) ?? -1) - (winRateMap.get(a.id) ?? -1))
+      } else if (poolMode === 'loser') {
+        items.sort((a, b) => {
+          const ra = winRateMap.get(a.id) ?? -1
+          const rb = winRateMap.get(b.id) ?? -1
+          if (ra === -1 && rb === -1) return 0
+          if (ra === -1) return 1
+          if (rb === -1) return -1
+          return ra - rb
+        })
+      } else {
+        items.sort((a, b) => (statsMap.get(a.id) ?? 0) - (statsMap.get(b.id) ?? 0))
+      }
+    }
+
     let participants: { id: number }[]
     if (roundTotal === 0) {
-      // 전체: Fisher-Yates 셔플 후 전원 참가
       for (let k = items.length - 1; k > 0; k--) {
         const r = Math.floor(Math.random() * (k + 1))
         ;[items[k], items[r]] = [items[r], items[k]]
       }
       participants = items
     } else {
-      // 특정 강: total_sessions 적은 순 정렬 → sqrt 비례 풀 확장 → 풀 셔플 후 roundTotal 선발
-      if (items.length > 0) {
-        const ph = items.map(() => '?').join(',')
-        const statsRows = db().prepare(`
-          SELECT item_id, COALESCE(total_sessions, 0) AS total_sessions
-          FROM worldcup_stats
-          WHERE category_id = ? AND item_id IN (${ph})
-        `).all(categoryId, ...items.map(i => i.id)) as { item_id: number; total_sessions: number }[]
-        const statsMap = new Map(statsRows.map(r => [r.item_id, r.total_sessions]))
-        // 동일 세션 수 항목 간 순서를 무작위화한 뒤 정렬 (stable sort 편향 방지)
-        for (let k = items.length - 1; k > 0; k--) {
-          const r = Math.floor(Math.random() * (k + 1))
-          ;[items[k], items[r]] = [items[r], items[k]]
-        }
-        items.sort((a, b) => (statsMap.get(a.id) ?? 0) - (statsMap.get(b.id) ?? 0))
-      }
-      // 풀 크기: roundTotal × max(2, sqrt(총인원/roundTotal)) — 강수 낮을수록 풀 비례 확장
       const multiplier = Math.max(2, Math.sqrt(items.length / roundTotal))
       const poolSize = Math.min(items.length, Math.round(roundTotal * multiplier))
       const pool = items.slice(0, poolSize)
@@ -2050,460 +2366,493 @@ export function registerIpcHandlers(): void {
         const r = Math.floor(Math.random() * (k + 1))
         ;[pool[k], pool[r]] = [pool[r], pool[k]]
       }
-      participants = pool.slice(0, roundTotal)
+      // 최솟값 티어 강제 포함 (일반 모드만)
+      const minSessions = poolMode === 'normal' && pool.length > 0 ? Math.min(...pool.map(i => statsMap.get(i.id) ?? 0)) : Infinity
+      const minTier = pool.filter(i => (statsMap.get(i.id) ?? 0) === minSessions)
+      let forcedItems: { id: number }[] = []
+      if (minTier.length <= poolSize / 20) {
+        forcedItems = [...minTier]
+      } else if (minTier.length <= poolSize / 10) {
+        const shuffledMin = [...minTier]
+        for (let k = shuffledMin.length - 1; k > 0; k--) {
+          const r = Math.floor(Math.random() * (k + 1))
+          ;[shuffledMin[k], shuffledMin[r]] = [shuffledMin[r], shuffledMin[k]]
+        }
+        forcedItems = shuffledMin.slice(0, Math.ceil(minTier.length / 2))
+      }
+      if (forcedItems.length > 0) {
+        const forcedSet = new Set(forcedItems.map(i => i.id))
+        const rest = pool.filter(i => !forcedSet.has(i.id))
+        for (let k = rest.length - 1; k > 0; k--) {
+          const r = Math.floor(Math.random() * (k + 1))
+          ;[rest[k], rest[r]] = [rest[r], rest[k]]
+        }
+        const slotsLeft = Math.max(0, roundTotal - forcedItems.length)
+        const combined = [...forcedItems, ...rest.slice(0, slotsLeft)]
+        for (let k = combined.length - 1; k > 0; k--) {
+          const r = Math.floor(Math.random() * (k + 1))
+          ;[combined[k], combined[r]] = [combined[r], combined[k]]
+        }
+        participants = combined
+      } else {
+        participants = pool.slice(0, roundTotal)
+      }
     }
 
     if (participants.length < 2) throw new Error('참가 항목이 2개 미만입니다')
 
-    const totalCount = participants.length
-    let roundSize: number
-    if (roundTotal === 0) {
-      // 전체: 실제 참가자 수 그대로 (3명이면 준결승 4강으로)
-      roundSize = totalCount === 3 ? 4 : totalCount
-    } else {
-      // 특정 강 선택: 2의 거듭제곱 브래킷
-      const naturalRoundSize = Math.pow(2, Math.ceil(Math.log2(totalCount)))
-      roundSize = Math.min(roundTotal, naturalRoundSize)
+    // 마스터 대회: 설정 스냅샷 + 부 계산
+    let settingsSnapshot: string | null = null
+    const divisionMap = new Map<number, number>()
+    if (tournament.is_master) {
+      const settings = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(tournament.type) as { settings_json: string } | undefined
+      settingsSnapshot = settings?.settings_json ?? null
+      const allItems = tournament.type === 'actor'
+        ? db().prepare(`SELECT id FROM actors`).all() as { id: number }[]
+        : db().prepare(`SELECT id FROM works`).all() as { id: number }[]
+      const rankingRows = db().prepare(`
+        SELECT item_id, SUM(points) AS total_points
+        FROM (SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY recorded_at DESC) AS rn FROM master_ranking_history WHERE type = ?) WHERE rn <= 10
+        GROUP BY item_id
+      `).all(tournament.type) as { item_id: number; total_points: number }[]
+      const pointsMap = new Map(rankingRows.map(r => [r.item_id, r.total_points]))
+      const sorted = [...allItems].sort((a, b) => (pointsMap.get(b.id) ?? 0) - (pointsMap.get(a.id) ?? 0))
+      const divBoundaries = [32, 96, 224, 480, 992, 2016]
+      sorted.forEach((item, idx) => {
+        const rank = idx + 1
+        let div = 0
+        for (let d = 0; d < divBoundaries.length; d++) {
+          if (rank <= divBoundaries[d]) { div = d + 1; break }
+        }
+        divisionMap.set(item.id, div)
+      })
     }
 
-    // 세션 생성
-    const sessionResult = db().prepare(`
-      INSERT INTO worldcup_sessions (category_id, round_total, status) VALUES (?, ?, 'in_progress')
-    `).run(categoryId, roundTotal)
-    const sessionId = sessionResult.lastInsertRowid as number
+    let runId: number
+    db().transaction(() => {
+      // cup_run 생성
+      const runResult = db().prepare(
+        `INSERT INTO cup_runs (tournament_id, status, round_total, settings_snapshot, started_at) VALUES (?, 'in_progress', ?, ?, datetime('now'))`
+      ).run(tournamentId, roundTotal, settingsSnapshot)
+      runId = runResult.lastInsertRowid as number
 
-    // 첫 라운드 매치 생성
-    const shuffled = [...participants]
-    const insertMatch = db().prepare(`
-      INSERT INTO worldcup_matches (session_id, round, match_index, item1_id, item2_id, winner_id, is_bye)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `)
-    const insertMatchMany = db().transaction((matches: { round: number; idx: number; item1: number; item2: number | null; winner: number | null; isBye: number }[]) => {
-      for (const m of matches) {
-        insertMatch.run(sessionId, m.round, m.idx, m.item1, m.item2, m.winner, m.isBye)
-      }
-    })
+      const insertEntry = db().prepare(`INSERT OR IGNORE INTO cup_entries (run_id, item_id, division) VALUES (?, ?, ?)`)
+      for (const p of participants) insertEntry.run(runId, p.id, tournament.is_master ? (divisionMap.get(p.id) ?? 0) : null)
+      const upsertStat = db().prepare(`INSERT INTO cup_stats (type, item_id, total_cups) VALUES (?, ?, 0) ON CONFLICT(type, item_id) DO NOTHING`)
+      for (const p of participants) upsertStat.run(tournament.type, p.id)
 
-    const firstRoundMatches: { round: number; idx: number; item1: number; item2: number | null; winner: number | null; isBye: number }[] = []
-    let matchIdx = 0
-
-    if (roundTotal === 0) {
-      // 전체: 순서대로 페어링, 홀수면 마지막만 부전승
-      for (let i = 0; i + 1 < totalCount; i += 2) {
-        firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: shuffled[i + 1].id, winner: null, isBye: 0 })
-      }
-      if (totalCount % 2 === 1) {
-        firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[totalCount - 1].id, item2: null, winner: null, isBye: 1 })
-      }
-    } else {
-      // 특정 강: 기존 로직 (부전승 앞쪽 배치)
-      const byeCount = roundSize - totalCount
-      for (let i = 0; i < byeCount; i++) {
-        firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: null, winner: null, isBye: 1 })
-      }
-      for (let i = byeCount; i < totalCount; i += 2) {
-        firstRoundMatches.push({ round: roundSize, idx: matchIdx++, item1: shuffled[i].id, item2: shuffled[i + 1]?.id ?? null, winner: null, isBye: 0 })
-      }
-    }
-    insertMatchMany(firstRoundMatches)
-
-    // appearance_count 증가
-    const upsertStat = db().prepare(`
-      INSERT INTO worldcup_stats (category_id, item_id, appearance_count)
-      VALUES (?, ?, 1)
-      ON CONFLICT(category_id, item_id) DO UPDATE SET appearance_count = appearance_count + 1
-    `)
-    const upsertStats = db().transaction(() => {
-      for (const p of participants) upsertStat.run(categoryId, p.id)
-    })
-    upsertStats()
-
-    const session = db().prepare(`SELECT * FROM worldcup_sessions WHERE id = ?`).get(sessionId)
-    const matches = db().prepare(`SELECT * FROM worldcup_matches WHERE session_id = ? ORDER BY round DESC, match_index`).all(sessionId)
-    return { session, matches }
-  })
-
-  ipcMain.handle('worldcup:pick', (_e, params: { matchId: number; winnerId: number }) => {
-    const { matchId, winnerId } = params
-    const match = db().prepare(`SELECT * FROM worldcup_matches WHERE id = ?`).get(matchId) as {
-      id: number; session_id: number; round: number; match_index: number; item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number
-    } | undefined
-    if (!match) throw new Error('매치를 찾을 수 없습니다')
-    if (match.winner_id !== null) throw new Error('이미 결과가 있는 매치입니다')
-
-    const loserId = match.item1_id === winnerId ? match.item2_id : match.item1_id
-
-    // 매치 결과 저장
-    db().prepare(`UPDATE worldcup_matches SET winner_id = ? WHERE id = ?`).run(winnerId, matchId)
-
-    // stats 업데이트 (승/패)
-    const session = db().prepare(`SELECT * FROM worldcup_sessions WHERE id = ?`).get(match.session_id) as { category_id: number; round_total: number } | undefined
-    if (session && loserId !== null) {
-      db().prepare(`
-        INSERT INTO worldcup_stats (category_id, item_id, total_matches, match_wins)
-        VALUES (?, ?, 1, 1)
-        ON CONFLICT(category_id, item_id) DO UPDATE SET total_matches = total_matches + 1, match_wins = match_wins + 1
-      `).run(session.category_id, winnerId)
-      db().prepare(`
-        INSERT INTO worldcup_stats (category_id, item_id, total_matches)
-        VALUES (?, ?, 1)
-        ON CONFLICT(category_id, item_id) DO UPDATE SET total_matches = total_matches + 1
-      `).run(session.category_id, loserId)
-    }
-
-    // 현재 라운드의 모든 매치가 완료됐는지 확인
-    const sessionMatches = db().prepare(`SELECT * FROM worldcup_matches WHERE session_id = ?`).all(match.session_id) as {
-      round: number; match_index: number; winner_id: number | null; is_bye: number; item1_id: number
-    }[]
-    const currentRoundMatches = sessionMatches.filter(m => m.round === match.round)
-    const allDone = currentRoundMatches.every(m => m.winner_id !== null)
-
-    if (allDone) {
-      const winners = currentRoundMatches.map(m => m.winner_id!)
-      if (winners.length === 1) {
-        // 결승 완료 → 세션 종료
-        db().prepare(`UPDATE worldcup_sessions SET status = 'completed', winner_id = ?, updated_at = datetime('now') WHERE id = ?`).run(winners[0], match.session_id)
-        return { done: true, winnerId: winners[0] }
-      }
-      // 다음 라운드 생성 (전체 모드에서 3명 남으면 준결승 4강 처리)
-      const isFullMode = session?.round_total === 0
-      const nextRoundSize = isFullMode && winners.length === 3 ? 4 : winners.length
-      // 다음 라운드 대진 셔플 (Fisher-Yates)
-      for (let k = winners.length - 1; k > 0; k--) {
-        const r = Math.floor(Math.random() * (k + 1))
-        ;[winners[k], winners[r]] = [winners[r], winners[k]]
-      }
-      const insertNext = db().prepare(`
-        INSERT INTO worldcup_matches (session_id, round, match_index, item1_id, item2_id, winner_id, is_bye)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `)
-      const insertNextMany = db().transaction(() => {
-        for (let i = 0; i < winners.length; i += 2) {
-          if (i + 1 < winners.length) {
-            insertNext.run(match.session_id, nextRoundSize, i / 2, winners[i], winners[i + 1], null, 0)
-          } else {
-            // 홀수면 부전승
-            insertNext.run(match.session_id, nextRoundSize, i / 2, winners[i], null, null, 1)
+      if (tournament.format === 'tournament') {
+        const totalCount = participants.length
+        const roundSize = roundTotal === 0 ? (totalCount === 3 ? 4 : totalCount) : roundTotal
+        const byeCount = roundSize - totalCount
+        const shuffled = [...participants]
+        const insertMatch = db().prepare(`INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, winner_id, is_bye) VALUES (?, 'main', ?, ?, ?, ?, ?, ?)`)
+        let matchIdx = 0
+        if (roundTotal === 0) {
+          for (let i = 0; i + 1 < totalCount; i += 2) insertMatch.run(runId, roundSize, matchIdx++, shuffled[i].id, shuffled[i + 1].id, null, 0)
+          if (totalCount % 2 === 1) insertMatch.run(runId, roundSize, matchIdx++, shuffled[totalCount - 1].id, null, shuffled[totalCount - 1].id, 1)
+        } else {
+          for (let i = 0; i < byeCount; i++) insertMatch.run(runId, roundSize, matchIdx++, shuffled[i].id, null, shuffled[i].id, 1)
+          for (let i = byeCount; i < totalCount; i += 2) insertMatch.run(runId, roundSize, matchIdx++, shuffled[i].id, shuffled[i + 1]?.id ?? null, null, 0)
+        }
+      } else if (tournament.format === 'league') {
+        const insertMatch = db().prepare(`INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id) VALUES (?, 'main', 0, ?, ?, ?)`)
+        let matchIdx = 0
+        for (let i = 0; i < participants.length; i++) {
+          for (let j = i + 1; j < participants.length; j++) {
+            insertMatch.run(runId, matchIdx++, participants[i].id, participants[j].id)
           }
         }
-      })
-      insertNextMany()
-    }
+      } else if (tournament.format === 'worldcup') {
+        if (roundTotal === 0) throw new Error('월드컵은 강 수를 선택해야 합니다')
+        const groupCount = roundTotal / 2
+        if (participants.length < groupCount * 4) throw new Error(`조 구성 인원 부족 (${groupCount}조 × 최소 4명 = ${groupCount * 4}명 필요)`)
 
-    const updatedMatches = db().prepare(`SELECT * FROM worldcup_matches WHERE session_id = ? ORDER BY round DESC, match_index`).all(match.session_id)
-    return { done: false, matches: updatedMatches }
-  })
+        const wcRankRows = db().prepare(`
+          SELECT item_id, SUM(points) AS total_points
+          FROM (SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY recorded_at DESC) AS rn
+                FROM master_ranking_history WHERE type = ?) WHERE rn <= 10
+          GROUP BY item_id
+        `).all(tournament.type) as { item_id: number; total_points: number }[]
+        const wcPtsMap = new Map(wcRankRows.map(r => [r.item_id, r.total_points]))
 
-  ipcMain.handle('worldcup:complete', (_e, params: { sessionId: number }) => {
-    const { sessionId } = params
-    const session = db().prepare(`SELECT * FROM worldcup_sessions WHERE id = ?`).get(sessionId) as {
-      category_id: number; winner_id: number | null; status: string
-    } | undefined
-    if (!session || session.status !== 'completed') throw new Error('완료된 세션이 아닙니다')
-
-    // session_wins / total_sessions 업데이트
-    const categoryId = session.category_id
-    const winnerId = session.winner_id
-
-    // 이 세션에 참가한 모든 항목의 total_sessions 증가
-    const participants = db().prepare(`
-      SELECT DISTINCT item1_id AS item_id FROM worldcup_matches WHERE session_id = ?
-      UNION SELECT DISTINCT item2_id FROM worldcup_matches WHERE session_id = ? AND item2_id IS NOT NULL
-    `).all(sessionId, sessionId) as { item_id: number }[]
-
-    const updateTotalSessions = db().transaction(() => {
-      for (const p of participants) {
-        db().prepare(`
-          INSERT INTO worldcup_stats (category_id, item_id, total_sessions)
-          VALUES (?, ?, 1)
-          ON CONFLICT(category_id, item_id) DO UPDATE SET total_sessions = total_sessions + 1
-        `).run(categoryId, p.item_id)
-      }
-      if (winnerId !== null) {
-        db().prepare(`
-          INSERT INTO worldcup_stats (category_id, item_id, session_wins)
-          VALUES (?, ?, 1)
-          ON CONFLICT(category_id, item_id) DO UPDATE SET session_wins = session_wins + 1
-        `).run(categoryId, winnerId)
-      }
-    })
-    updateTotalSessions()
-
-    // 순위 계산 및 rank_history 기록
-    const stats = db().prepare(`
-      SELECT item_id, total_matches,
-        CASE WHEN total_sessions > 0 THEN ROUND(CAST(session_wins AS REAL) / total_sessions * 100, 2) ELSE 0 END AS win_rate,
-        CASE WHEN total_matches > 0 THEN ROUND(CAST(match_wins AS REAL) / total_matches * 100, 2) ELSE 0 END AS match_win_rate
-      FROM worldcup_stats WHERE category_id = ?
-      ORDER BY win_rate DESC, match_win_rate DESC, total_matches DESC
-    `).all(categoryId) as { item_id: number; win_rate: number; match_win_rate: number; total_matches: number }[]
-
-    const insertHistory = db().prepare(`INSERT INTO worldcup_rank_history (category_id, item_id, rank) VALUES (?, ?, ?)`)
-    const trimHistory = db().prepare(`
-      DELETE FROM worldcup_rank_history
-      WHERE category_id = ? AND item_id = ?
-        AND id NOT IN (
-          SELECT id FROM worldcup_rank_history
-          WHERE category_id = ? AND item_id = ?
-          ORDER BY id DESC LIMIT 20
-        )
-    `)
-    const insertHistoryMany = db().transaction(() => {
-      let currentRank = 1
-      stats.forEach((s, i) => {
-        if (i > 0 && (s.win_rate !== stats[i - 1].win_rate || s.match_win_rate !== stats[i - 1].match_win_rate || s.total_matches !== stats[i - 1].total_matches)) {
-          currentRank++
+        const wcRanked = participants.filter(p => (wcPtsMap.get(p.id) ?? 0) > 0)
+          .sort((a, b) => (wcPtsMap.get(b.id) ?? 0) - (wcPtsMap.get(a.id) ?? 0))
+        const wcUnranked = participants.filter(p => (wcPtsMap.get(p.id) ?? 0) === 0)
+        for (let k = wcUnranked.length - 1; k > 0; k--) {
+          const r = Math.floor(Math.random() * (k + 1))
+          ;[wcUnranked[k], wcUnranked[r]] = [wcUnranked[r], wcUnranked[k]]
         }
-        insertHistory.run(categoryId, s.item_id, currentRank)
-        trimHistory.run(categoryId, s.item_id, categoryId, s.item_id)
-      })
-    })
-    insertHistoryMany()
+        const wcSorted = [...wcRanked, ...wcUnranked]
 
-    // 현재 세션 외 완료된 이전 세션의 matches 정리
-    db().prepare(`
-      DELETE FROM worldcup_matches
-      WHERE session_id IN (
-        SELECT id FROM worldcup_sessions
-        WHERE category_id = ? AND status = 'completed' AND id != ?
-      )
-    `).run(categoryId, sessionId)
+        const wcGroups: number[][] = Array.from({ length: groupCount }, () => [])
+        wcSorted.forEach((p, i) => wcGroups[i % groupCount].push(p.id))
+        for (const group of wcGroups) {
+          for (let k = group.length - 1; k > 0; k--) {
+            const r = Math.floor(Math.random() * (k + 1))
+            ;[group[k], group[r]] = [group[r], group[k]]
+          }
+        }
 
-    return { ok: true }
-  })
-
-  ipcMain.handle('worldcup:rankings', (_e, params: { categoryId: number; limit: number; offset: number; sortBy?: string; sortDir?: string; search?: string }) => {
-    const { categoryId, limit, offset, sortBy, sortDir, search } = params
-    const category = db().prepare(`SELECT type FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string } | undefined
-    if (!category) return { rows: [], total: 0 }
-    const searchLike = search ? `%${search}%` : null
-
-    const actorSearchWhere = searchLike ? ` AND a.name LIKE ?` : ''
-    const workSearchWhere  = searchLike ? ` AND (w.title LIKE ? OR w.product_number LIKE ?)` : ''
-    const total = category.type === 'actor'
-      ? (db().prepare(`SELECT COUNT(*) AS cnt FROM worldcup_stats ws JOIN actors a ON a.id = ws.item_id WHERE ws.category_id = ?${actorSearchWhere}`).get(categoryId, ...(searchLike ? [searchLike] : [])) as { cnt: number }).cnt
-      : (db().prepare(`SELECT COUNT(*) AS cnt FROM worldcup_stats ws JOIN works w ON w.id = ws.item_id WHERE ws.category_id = ?${workSearchWhere}`).get(categoryId, ...(searchLike ? [searchLike, searchLike] : [])) as { cnt: number }).cnt
-
-    const dir = sortDir === 'asc' ? 'ASC' : 'DESC'
-    const col = sortBy === 'match_win_rate'
-      ? `match_win_rate ${dir}, win_rate DESC, ws.total_matches DESC`
-      : sortBy === 'total_matches'
-      ? `ws.total_matches ${dir}, win_rate DESC, match_win_rate DESC`
-      : sortBy === 'adj_gap'
-      ? `adj_gap ${dir}, ws.total_sessions DESC, ws.total_matches DESC`
-      : `win_rate ${dir}, match_win_rate DESC, ws.total_matches DESC`
-
-    let rows: unknown[]
-    if (category.type === 'actor') {
-      rows = db().prepare(`
-        SELECT
-          DENSE_RANK() OVER (ORDER BY
-            CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL) / ws.total_sessions ELSE 0 END DESC,
-            CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC,
-            ws.total_matches DESC
-          ) AS rank,
-          a.id, a.name, a.photo_path,
-          ws.total_sessions, ws.session_wins, ws.total_matches, ws.match_wins, ws.appearance_count,
-          CASE WHEN ws.total_sessions > 0 THEN ROUND(CAST(ws.session_wins AS REAL) / ws.total_sessions * 100, 2) ELSE 0 END AS win_rate,
-          CASE WHEN ws.total_matches > 0 THEN ROUND(CAST(ws.match_wins AS REAL) / ws.total_matches * 100, 2) ELSE 0 END AS match_win_rate,
-          ROUND(
-            ((CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL)/ws.total_matches*100 ELSE 0 END) -
-            (CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL)/ws.total_sessions*100 ELSE 0 END)) *
-            MIN(1.0, ln(1 + ws.total_sessions) / NULLIF(ln(1 + (SELECT AVG(total_sessions) FROM worldcup_stats WHERE category_id = ws.category_id)), 0)), 1) AS adj_gap
-        FROM worldcup_stats ws
-        JOIN actors a ON a.id = ws.item_id
-        WHERE ws.category_id = ?${actorSearchWhere}
-        ORDER BY ${col}
-        LIMIT ? OFFSET ?
-      `).all(categoryId, ...(searchLike ? [searchLike] : []), limit, offset)
-    } else {
-      rows = db().prepare(`
-        SELECT
-          DENSE_RANK() OVER (ORDER BY
-            CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL) / ws.total_sessions ELSE 0 END DESC,
-            CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL) / ws.total_matches ELSE 0 END DESC,
-            ws.total_matches DESC
-          ) AS rank,
-          w.id, w.title, w.product_number, w.cover_path,
-          ws.total_sessions, ws.session_wins, ws.total_matches, ws.match_wins, ws.appearance_count,
-          CASE WHEN ws.total_sessions > 0 THEN ROUND(CAST(ws.session_wins AS REAL) / ws.total_sessions * 100, 2) ELSE 0 END AS win_rate,
-          CASE WHEN ws.total_matches > 0 THEN ROUND(CAST(ws.match_wins AS REAL) / ws.total_matches * 100, 2) ELSE 0 END AS match_win_rate,
-          ROUND(
-            ((CASE WHEN ws.total_matches > 0 THEN CAST(ws.match_wins AS REAL)/ws.total_matches*100 ELSE 0 END) -
-            (CASE WHEN ws.total_sessions > 0 THEN CAST(ws.session_wins AS REAL)/ws.total_sessions*100 ELSE 0 END)) *
-            MIN(1.0, ln(1 + ws.total_sessions) / NULLIF(ln(1 + (SELECT AVG(total_sessions) FROM worldcup_stats WHERE category_id = ws.category_id)), 0)), 1) AS adj_gap
-        FROM worldcup_stats ws
-        JOIN works w ON w.id = ws.item_id
-        WHERE ws.category_id = ?${workSearchWhere}
-        ORDER BY ${col}
-        LIMIT ? OFFSET ?
-      `).all(categoryId, ...(searchLike ? [searchLike, searchLike] : []), limit, offset)
-    }
-    return { rows, total }
-  })
-
-  ipcMain.handle('worldcup:rank-history', (_e, params: { categoryId: number; itemId: number }) => {
-    return db().prepare(`
-      SELECT rank, recorded_at FROM (
-        SELECT id, rank, recorded_at FROM worldcup_rank_history
-        WHERE category_id = ? AND item_id = ?
-        ORDER BY id DESC LIMIT 20
-      ) ORDER BY id ASC
-    `).all(params.categoryId, params.itemId)
-  })
-
-  ipcMain.handle('worldcup:item-stats', (_e, params: { categoryId: number; itemId: number }) => {
-    return db().prepare(`
-      SELECT * FROM (
-        SELECT
-          item_id,
-          total_sessions, session_wins, total_matches, match_wins,
-          CASE WHEN total_sessions > 0 THEN ROUND(CAST(session_wins AS REAL) / total_sessions * 100, 1) ELSE 0 END AS win_rate,
-          CASE WHEN total_matches > 0 THEN ROUND(CAST(match_wins AS REAL) / total_matches * 100, 1) ELSE 0 END AS match_win_rate,
-          DENSE_RANK() OVER (ORDER BY
-            CASE WHEN total_sessions > 0 THEN CAST(session_wins AS REAL) / total_sessions ELSE 0 END DESC,
-            CASE WHEN total_matches > 0 THEN CAST(match_wins AS REAL) / total_matches ELSE 0 END DESC,
-            total_matches DESC
-          ) AS rank
-        FROM worldcup_stats WHERE category_id = ?
-      ) WHERE item_id = ?
-    `).get(params.categoryId, params.itemId) ?? null
-  })
-
-  ipcMain.handle('worldcup:item-count', (_e, params: { categoryId: number }) => {
-    const category = db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(params.categoryId) as { type: string; filter_json?: string | null } | undefined
-    if (!category) return 0
-    const { tableExpr, idCol, extraJoins, filterWhere, bindings } = buildWcFilterQuery(category)
-    return ((db().prepare(`SELECT COUNT(DISTINCT ${idCol}) as cnt FROM ${tableExpr}${extraJoins} WHERE 1=1${filterWhere}`).get(...bindings) as { cnt: number }).cnt)
-  })
-
-  ipcMain.handle('worldcup:category-stats', (_e, params: { categoryId: number }) => {
-    const { categoryId } = params
-    const category = db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string; filter_json?: string | null } | undefined
-    if (!category) return null
-    const sessionStats = db().prepare(`
-      SELECT COUNT(*) as total_sessions,
-        SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed_sessions,
-        MAX(created_at) as last_session_at
-      FROM worldcup_sessions WHERE category_id = ?
-    `).get(categoryId) as { total_sessions: number; completed_sessions: number; last_session_at: string | null }
-    const { tableExpr, idCol, extraJoins, filterWhere, bindings } = buildWcFilterQuery(category)
-    const totalItems = ((db().prepare(`SELECT COUNT(DISTINCT ${idCol}) as cnt FROM ${tableExpr}${extraJoins} WHERE 1=1${filterWhere}`).get(...bindings) as { cnt: number }).cnt)
-    const statsDist = db().prepare(`
-      SELECT total_sessions, COUNT(*) as count FROM worldcup_stats
-      WHERE category_id = ? GROUP BY total_sessions ORDER BY total_sessions ASC
-    `).all(categoryId) as { total_sessions: number; count: number }[]
-    const participated = statsDist.reduce((s, r) => s + r.count, 0)
-    const no_session_items = totalItems - participated
-    const session_dist = no_session_items > 0
-      ? [{ total_sessions: 0, count: no_session_items }, ...statsDist]
-      : statsDist
-    return { ...sessionStats, total_items: totalItems, no_session_items, session_dist }
-  })
-
-  ipcMain.handle('worldcup:delete-session', (_e, sessionId: number) => {
-    db().prepare(`DELETE FROM worldcup_sessions WHERE id = ?`).run(sessionId)
-    return { ok: true }
-  })
-
-  ipcMain.handle('worldcup:last-session-rankings', (_e, params: { categoryId: number; limit?: number; offset?: number }) => {
-    const { categoryId, limit = 20, offset = 0 } = params
-    const category = db().prepare(`SELECT type FROM worldcup_categories WHERE id = ?`).get(categoryId) as { type: string } | undefined
-    if (!category) return null
-
-    const session = db().prepare(`
-      SELECT id, winner_id, round_total, created_at FROM worldcup_sessions
-      WHERE category_id = ? AND status = 'completed'
-      ORDER BY updated_at DESC LIMIT 1
-    `).get(categoryId) as { id: number; winner_id: number; round_total: number; created_at: string } | undefined
-    if (!session) return null
-
-    const matches = db().prepare(`
-      SELECT item1_id, item2_id, winner_id, round, is_bye
-      FROM worldcup_matches WHERE session_id = ?
-    `).all(session.id) as { item1_id: number; item2_id: number | null; winner_id: number; round: number; is_bye: number }[]
-
-    // 탈락 라운드 맵 구성
-    const elimRound: Record<number, number> = {}
-    const participantIds = new Set<number>()
-    for (const m of matches) {
-      participantIds.add(m.item1_id)
-      if (m.item2_id !== null) participantIds.add(m.item2_id)
-      if (!m.is_bye && m.item2_id !== null && m.winner_id !== null) {
-        const loserId = m.winner_id === m.item1_id ? m.item2_id : m.item1_id
-        elimRound[loserId] = m.round
+        const wcInsert = db().prepare(`INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id) VALUES (?, 'group', ?, 0, ?, ?, ?)`)
+        let wcMatchIdx = 0
+        for (let gIdx = 0; gIdx < wcGroups.length; gIdx++) {
+          const group = wcGroups[gIdx]
+          for (let i = 0; i < group.length; i++) {
+            for (let j = i + 1; j < group.length; j++) {
+              wcInsert.run(runId, gIdx + 1, wcMatchIdx++, group[i], group[j])
+            }
+          }
+        }
       }
-    }
+    })()
 
-    // 탈락 라운드로 정렬 (우승자 먼저, 나머지는 elim 오름차순: 낮은 라운드=오래 생존)
-    const sorted = [...participantIds]
-      .map(id => ({ id, elim: id === session.winner_id ? Infinity : (elimRound[id] ?? 0) }))
-      .sort((a, b) => {
-        if (a.elim === Infinity) return -1
-        if (b.elim === Infinity) return 1
-        return a.elim - b.elim
-      })
+    const run = db().prepare(`SELECT * FROM cup_runs WHERE id = ?`).get(runId!)
+    return { tournament: db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId), run }
+  })
 
-    // Dense rank 부여 (같은 탈락 라운드 = 같은 순위, 다음 그룹은 +1)
-    const ranked: { id: number; rank: number; elim_round: number | null }[] = []
-    let currentRank = 1
-    for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && sorted[i].elim !== sorted[i - 1].elim) currentRank++
-      ranked.push({ id: sorted[i].id, rank: currentRank, elim_round: sorted[i].elim === Infinity ? null : sorted[i].elim })
-    }
+  ipcMain.handle('cup:pick', (_e, params: { matchId: number; winnerId: number | null; isDraw?: boolean }) => {
+    const { matchId, winnerId, isDraw = false } = params
+    const match = db().prepare(`SELECT * FROM cup_matches WHERE id = ?`).get(matchId) as {
+      id: number; run_id: number; phase: string; round: number; match_index: number;
+      item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number; is_draw: number
+    } | undefined
+    if (!match) throw new Error('매치를 찾을 수 없습니다')
+    if (match.winner_id !== null || match.is_draw) throw new Error('이미 결과가 있는 매치입니다')
 
-    const total = ranked.length
-    const paged = ranked.slice(offset, offset + limit)
+    const runRow = db().prepare(`
+      SELECT r.*, t.type, t.format, t.is_master FROM cup_runs r
+      JOIN cup_tournaments t ON t.id = r.tournament_id
+      WHERE r.id = ?
+    `).get(match.run_id) as {
+      id: number; tournament_id: number; type: 'actor' | 'work'; format: string; is_master: number;
+      round_total: number; settings_snapshot: string | null; status: string
+    } | undefined
+    if (!runRow) throw new Error('대회를 찾을 수 없습니다')
+    const tournament = runRow
 
-    // 항목 정보 JOIN
-    let rows: unknown[]
-    if (category.type === 'actor') {
-      rows = paged.map(r => {
-        const a = db().prepare(`SELECT id, name, photo_path FROM actors WHERE id = ?`).get(r.id) as { id: number; name: string; photo_path: string | null } | undefined
-        return { ...r, ...a }
-      })
+    const runId = match.run_id
+
+    db().transaction(() => {
+      if (isDraw) {
+        db().prepare(`UPDATE cup_matches SET is_draw = 1 WHERE id = ?`).run(matchId)
+        for (const itemId of [match.item1_id, match.item2_id]) {
+          if (itemId !== null) {
+            db().prepare(`INSERT INTO cup_stats (type, item_id, total_matches) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_matches = total_matches + 1`).run(tournament.type, itemId)
+          }
+        }
+      } else {
+        db().prepare(`UPDATE cup_matches SET winner_id = ? WHERE id = ?`).run(winnerId, matchId)
+        const loserId = match.item1_id === winnerId ? match.item2_id : match.item1_id
+        if (winnerId !== null) {
+          db().prepare(`INSERT INTO cup_stats (type, item_id, total_matches, match_wins) VALUES (?, ?, 1, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_matches = total_matches + 1, match_wins = match_wins + 1`).run(tournament.type, winnerId)
+        }
+        if (loserId !== null) {
+          db().prepare(`INSERT INTO cup_stats (type, item_id, total_matches) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_matches = total_matches + 1`).run(tournament.type, loserId)
+        }
+
+        // 토너먼트 / 월드컵 본선: 라운드 완료 체크 → 다음 라운드 생성
+        if (tournament.format === 'tournament' || (tournament.format === 'worldcup' && match.phase === 'main')) {
+          const roundMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = ? AND round = ?`).all(runId, match.phase, match.round) as { winner_id: number | null; is_bye: number }[]
+          const roundDone = roundMatches.every(m => m.winner_id !== null)
+          if (roundDone) {
+            const winners = roundMatches.map(m => m.winner_id!).filter(Boolean)
+            if (winners.length === 1) {
+              // run 완료
+              db().prepare(`UPDATE cup_runs SET status = 'completed', winner_id = ?, completed_at = datetime('now') WHERE id = ?`).run(winners[0], runId)
+              const entries = db().prepare(`SELECT item_id FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number }[]
+              for (const e of entries) {
+                db().prepare(`INSERT INTO cup_stats (type, item_id, total_cups) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_cups = total_cups + 1`).run(tournament.type, e.item_id)
+              }
+              db().prepare(`INSERT INTO cup_stats (type, item_id, cup_wins) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET cup_wins = cup_wins + 1`).run(tournament.type, winners[0])
+              calcAndStoreRunPoints(db(), runId, tournament.type, tournament.is_master === 1, tournament.settings_snapshot)
+            } else {
+              // 다음 라운드
+              const isFullMode = tournament.round_total === 0
+              const nextRoundSize = isFullMode && winners.length === 3 ? 4 : winners.length
+              for (let k = winners.length - 1; k > 0; k--) {
+                const r = Math.floor(Math.random() * (k + 1))
+                ;[winners[k], winners[r]] = [winners[r], winners[k]]
+              }
+              const insertNext = db().prepare(`INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id) VALUES (?, 'main', ?, ?, ?, ?)`)
+              for (let i = 0; i < winners.length; i += 2) {
+                insertNext.run(runId, nextRoundSize, i / 2, winners[i], winners[i + 1] ?? null)
+              }
+            }
+          }
+        }
+      }
+
+      // 월드컵 조별 예선 완료 체크 → 본선 매치 생성
+      if (tournament.format === 'worldcup' && match.phase === 'group') {
+        const wcPending = (db().prepare(
+          `SELECT COUNT(*) as cnt FROM cup_matches WHERE run_id = ? AND phase = 'group' AND winner_id IS NULL AND is_draw = 0`
+        ).get(runId) as { cnt: number }).cnt
+        if (wcPending === 0) {
+          const wcGroupIds = (db().prepare(
+            `SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group' ORDER BY group_id`
+          ).all(runId) as { group_id: number }[]).map(r => r.group_id)
+
+          const wcFirsts: { groupId: number; item_id: number }[] = []
+          const wcSeconds: { groupId: number; item_id: number }[] = []
+          for (const gid of wcGroupIds) {
+            const gms = db().prepare(
+              `SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ?`
+            ).all(runId, gid) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+            const itemSet = new Set<number>()
+            gms.forEach(m => { itemSet.add(m.item1_id); if (m.item2_id) itemSet.add(m.item2_id) })
+            const gs = Array.from(itemSet).map(item_id => {
+              let pts = 0, w = 0
+              for (const m of gms) {
+                if (m.is_draw && (m.item1_id === item_id || m.item2_id === item_id)) pts += 1
+                else if (m.winner_id === item_id) { pts += 3; w++ }
+              }
+              return { item_id, pts, w }
+            }).sort((a, b) => b.pts - a.pts || b.w - a.w)
+            if (gs[0]) wcFirsts.push({ groupId: gid, item_id: gs[0].item_id })
+            if (gs[1]) wcSeconds.push({ groupId: gid, item_id: gs[1].item_id })
+          }
+
+          for (let k = wcFirsts.length - 1; k > 0; k--) {
+            const r = Math.floor(Math.random() * (k + 1))
+            ;[wcFirsts[k], wcFirsts[r]] = [wcFirsts[r], wcFirsts[k]]
+          }
+          const wcAvail = [...wcSeconds]
+          const wcInsertMain = db().prepare(
+            `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id) VALUES (?, 'main', ?, ?, ?, ?)`
+          )
+          for (let i = 0; i < wcFirsts.length; i++) {
+            const f = wcFirsts[i]
+            const idx = wcAvail.findIndex(s => s.groupId !== f.groupId)
+            const s = idx >= 0 ? wcAvail.splice(idx, 1)[0] : wcAvail.splice(0, 1)[0]
+            wcInsertMain.run(runId, tournament.round_total, i, f.item_id, s.item_id)
+          }
+        }
+      }
+    })()
+
+    return db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND winner_id IS NULL AND is_bye = 0 AND is_draw = 0 ORDER BY phase DESC, round DESC, match_index ASC LIMIT 1`).get(runId) ?? { done: true }
+  })
+
+  ipcMain.handle('cup:complete', (_e, runId: number) => {
+    const runRow = db().prepare(`
+      SELECT r.*, t.type, t.format, t.is_master FROM cup_runs r
+      JOIN cup_tournaments t ON t.id = r.tournament_id
+      WHERE r.id = ?
+    `).get(runId) as {
+      id: number; type: 'actor' | 'work'; format: string; is_master: number; settings_snapshot: string | null
+    } | undefined
+    if (!runRow) throw new Error('대회를 찾을 수 없습니다')
+    const tournament = runRow
+    const pending = db().prepare(`SELECT 1 FROM cup_matches WHERE run_id = ? AND winner_id IS NULL AND is_draw = 0 AND is_bye = 0 LIMIT 1`).get(runId)
+    if (pending) throw new Error('완료되지 않은 매치가 있습니다')
+
+    const entries = db().prepare(`SELECT item_id FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number }[]
+    const allMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ?`).all(runId) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+    const standings = entries.map(({ item_id }) => {
+      let pts = 0, w = 0
+      for (const m of allMatches) {
+        if (m.is_draw && (m.item1_id === item_id || m.item2_id === item_id)) { pts += 1 }
+        else if (m.winner_id === item_id) { pts += 3; w++ }
+      }
+      return { item_id, pts, w }
+    }).sort((a, b) => b.pts - a.pts || b.w - a.w)
+    const winnerId = standings[0]?.item_id ?? null
+
+    db().transaction(() => {
+      db().prepare(`UPDATE cup_runs SET status = 'completed', winner_id = ?, completed_at = datetime('now') WHERE id = ?`).run(winnerId, runId)
+      for (const e of entries) {
+        db().prepare(`INSERT INTO cup_stats (type, item_id, total_cups) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_cups = total_cups + 1`).run(tournament.type, e.item_id)
+      }
+      if (winnerId) {
+        db().prepare(`INSERT INTO cup_stats (type, item_id, cup_wins) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET cup_wins = cup_wins + 1`).run(tournament.type, winnerId)
+      }
+      calcAndStoreRunPoints(db(), runId, tournament.type, tournament.is_master === 1, tournament.settings_snapshot)
+    })()
+
+    return { ok: true, winnerId }
+  })
+
+  ipcMain.handle('cup:tournament-rankings', (_e, params: {
+    tournamentId: number; limit?: number; offset?: number;
+    sortBy?: string; sortDir?: string; search?: string
+  }) => {
+    const { tournamentId, limit = 50, offset = 0, sortBy = 'win_rate', sortDir = 'desc', search } = params
+    const t = db().prepare(`SELECT type FROM cup_tournaments WHERE id = ?`).get(tournamentId) as { type: 'actor' | 'work' } | undefined
+    if (!t) return { rows: [], total: 0 }
+    const type = t.type
+    const dir = sortDir === 'asc' ? 'ASC' : 'DESC'
+    const sortColMap: Record<string, string> = { win_rate: 'win_rate', match_win_rate: 'match_win_rate', run_wins: 'run_wins', total_runs: 'total_runs', total_pts: 'total_pts' }
+    const sortCol = sortColMap[sortBy] ?? 'win_rate'
+    const searchWhere = search
+      ? (type === 'actor' ? 'AND a.name LIKE ?' : 'AND (w.title LIKE ? OR w.product_number LIKE ?)')
+      : ''
+    const searchBindings: unknown[] = search
+      ? (type === 'work' ? [`%${search}%`, `%${search}%`] : [`%${search}%`])
+      : []
+    const baseCte = `
+      WITH entry_stats AS (
+        SELECT e.item_id,
+          COUNT(DISTINCT e.run_id) AS total_runs,
+          SUM(CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END) AS run_wins
+        FROM cup_entries e
+        JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ? AND r.status = 'completed'
+        GROUP BY e.item_id
+      ),
+      match_parts AS (
+        SELECT m.item1_id AS item_id,
+          CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
+          CASE WHEN m.winner_id = m.item1_id THEN 1 ELSE 0 END AS is_win
+        FROM cup_matches m
+        JOIN cup_runs r ON r.id = m.run_id AND r.tournament_id = ? AND r.status = 'completed'
+        UNION ALL
+        SELECT m.item2_id AS item_id,
+          CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
+          CASE WHEN m.winner_id = m.item2_id THEN 1 ELSE 0 END AS is_win
+        FROM cup_matches m
+        JOIN cup_runs r ON r.id = m.run_id AND r.tournament_id = ? AND r.status = 'completed'
+        WHERE m.item2_id IS NOT NULL
+      ),
+      match_stats AS (
+        SELECT item_id, SUM(is_played) AS total_matches, SUM(is_win) AS match_wins
+        FROM match_parts GROUP BY item_id
+      ),
+      pts_agg AS (
+        SELECT mh.item_id, SUM(mh.pts) AS total_pts
+        FROM master_ranking_history mh
+        JOIN cup_runs r ON r.id = mh.run_id AND r.tournament_id = ?
+        GROUP BY mh.item_id
+      ),
+      combined AS (
+        SELECT es.item_id, es.total_runs, es.run_wins,
+          COALESCE(ms.total_matches, 0) AS total_matches,
+          COALESCE(ms.match_wins, 0) AS match_wins,
+          CASE WHEN es.total_runs > 0 THEN CAST(es.run_wins AS REAL) * 100.0 / es.total_runs ELSE 0 END AS win_rate,
+          CASE WHEN COALESCE(ms.total_matches, 0) > 0 THEN CAST(COALESCE(ms.match_wins, 0) AS REAL) * 100.0 / ms.total_matches ELSE 0 END AS match_win_rate,
+          COALESCE(pa.total_pts, 0) AS total_pts
+        FROM entry_stats es LEFT JOIN match_stats ms ON ms.item_id = es.item_id
+        LEFT JOIN pts_agg pa ON pa.item_id = es.item_id
+      )
+    `
+    if (type === 'actor') {
+      const rows = db().prepare(`${baseCte}
+        SELECT c.*, a.name, a.photo_path
+        FROM combined c LEFT JOIN actors a ON a.id = c.item_id
+        WHERE 1=1 ${searchWhere}
+        ORDER BY c.${sortCol} ${dir}, c.item_id ASC
+        LIMIT ? OFFSET ?
+      `).all(tournamentId, tournamentId, tournamentId, tournamentId, ...searchBindings, limit, offset)
+      const total = (db().prepare(`${baseCte}
+        SELECT COUNT(*) AS cnt FROM combined c LEFT JOIN actors a ON a.id = c.item_id WHERE 1=1 ${searchWhere}
+      `).get(tournamentId, tournamentId, tournamentId, tournamentId, ...searchBindings) as { cnt: number }).cnt
+      return { rows, total }
     } else {
-      rows = paged.map(r => {
-        const w = db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id = ?`).get(r.id) as { id: number; title: string | null; product_number: string | null; cover_path: string | null } | undefined
-        return { ...r, ...w }
-      })
+      const rows = db().prepare(`${baseCte}
+        SELECT c.*, w.title, w.product_number, w.cover_path
+        FROM combined c LEFT JOIN works w ON w.id = c.item_id
+        WHERE 1=1 ${searchWhere}
+        ORDER BY c.${sortCol} ${dir}, c.item_id ASC
+        LIMIT ? OFFSET ?
+      `).all(tournamentId, tournamentId, tournamentId, tournamentId, ...searchBindings, limit, offset)
+      const total = (db().prepare(`${baseCte}
+        SELECT COUNT(*) AS cnt FROM combined c LEFT JOIN works w ON w.id = c.item_id WHERE 1=1 ${searchWhere}
+      `).get(tournamentId, tournamentId, tournamentId, tournamentId, ...searchBindings) as { cnt: number }).cnt
+      return { rows, total }
     }
-    return { rows, total, session }
   })
 
-  ipcMain.handle('worldcup:last-winner', (_e, params: { categoryId: number; type: 'actor' | 'work' }) => {
-    const session = db().prepare(`
-      SELECT winner_id FROM worldcup_sessions
-      WHERE category_id = ? AND status = 'completed'
-      ORDER BY updated_at DESC LIMIT 1
-    `).get(params.categoryId) as { winner_id: number } | undefined
-    if (!session) return null
-    if (params.type === 'actor') {
-      return db().prepare(`SELECT id, name, photo_path FROM actors WHERE id = ?`).get(session.winner_id)
+  ipcMain.handle('cup:last-run-rankings', (_e, params: { tournamentId: number; limit?: number; offset?: number }) => {
+    const { tournamentId, limit = 50, offset = 0 } = params
+    const t = db().prepare(`SELECT type, format FROM cup_tournaments WHERE id = ?`).get(tournamentId) as { type: 'actor' | 'work'; format: 'tournament' | 'league' | 'worldcup' } | undefined
+    if (!t) return { rows: [], total: 0, runId: null }
+    const run = db().prepare(`SELECT * FROM cup_runs WHERE tournament_id = ? AND status = 'completed' ORDER BY id DESC LIMIT 1`).get(tournamentId) as { id: number; winner_id: number | null } | undefined
+    if (!run) return { rows: [], total: 0, runId: null }
+    const runId = run.id
+    const type = t.type
+    const format = t.format
+
+    let statRows: { item_id: number; elim_round: number | null; pts: number | null }[]
+    if (format === 'league') {
+      statRows = db().prepare(`
+        SELECT e.item_id, NULL AS elim_round,
+          COALESCE((
+            SELECT SUM(CASE WHEN m.winner_id = e.item_id THEN 3 WHEN m.is_draw = 1 THEN 1 ELSE 0 END)
+            FROM cup_matches m WHERE m.run_id = e.run_id
+              AND (m.item1_id = e.item_id OR m.item2_id = e.item_id)
+              AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
+          ), 0) AS pts
+        FROM cup_entries e WHERE e.run_id = ?
+        ORDER BY pts DESC, e.item_id ASC
+      `).all(runId) as typeof statRows
+    } else if (format === 'worldcup') {
+      statRows = db().prepare(`
+        SELECT e.item_id,
+          CASE WHEN r.winner_id = e.item_id THEN NULL
+            ELSE COALESCE((
+              SELECT m.round FROM cup_matches m
+              WHERE m.run_id = e.run_id AND m.phase = 'main'
+                AND (m.item1_id = e.item_id OR m.item2_id = e.item_id)
+                AND m.winner_id IS NOT NULL AND m.winner_id != e.item_id AND m.is_bye = 0
+              ORDER BY m.round DESC LIMIT 1
+            ), 0)
+          END AS elim_round,
+          COALESCE((
+            SELECT SUM(CASE WHEN m.winner_id = e.item_id THEN 3 WHEN m.is_draw = 1 THEN 1 ELSE 0 END)
+            FROM cup_matches m WHERE m.run_id = e.run_id AND m.phase = 'group'
+              AND (m.item1_id = e.item_id OR m.item2_id = e.item_id)
+              AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
+          ), 0) AS pts
+        FROM cup_entries e JOIN cup_runs r ON r.id = e.run_id
+        WHERE e.run_id = ?
+        ORDER BY
+          CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END DESC,
+          CASE WHEN EXISTS (SELECT 1 FROM cup_matches m WHERE m.run_id = e.run_id AND m.phase = 'main' AND (m.item1_id = e.item_id OR m.item2_id = e.item_id)) THEN 1 ELSE 0 END DESC,
+          COALESCE(elim_round, 99999) DESC,
+          pts DESC,
+          e.item_id ASC
+      `).all(runId) as typeof statRows
     } else {
-      return db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id = ?`).get(session.winner_id)
+      statRows = db().prepare(`
+        SELECT e.item_id,
+          CASE WHEN r.winner_id = e.item_id THEN NULL
+            ELSE (
+              SELECT m.round FROM cup_matches m
+              WHERE m.run_id = e.run_id
+                AND (m.item1_id = e.item_id OR m.item2_id = e.item_id)
+                AND m.winner_id IS NOT NULL AND m.winner_id != e.item_id AND m.is_bye = 0
+              ORDER BY m.round DESC LIMIT 1
+            )
+          END AS elim_round,
+          NULL AS pts
+        FROM cup_entries e JOIN cup_runs r ON r.id = e.run_id
+        WHERE e.run_id = ?
+        ORDER BY
+          CASE WHEN r.winner_id = e.item_id THEN 99999 ELSE COALESCE(elim_round, 0) END DESC,
+          e.item_id ASC
+      `).all(runId) as typeof statRows
     }
-  })
 
-  ipcMain.handle('worldcup:create-category', (_e, params: { name: string; type: 'actor' | 'work'; filter?: object | null }) => {
-    const { name, type, filter } = params
-    const maxOrder = (db().prepare(`SELECT COALESCE(MAX(sort_order), -1) AS m FROM worldcup_categories`).get() as { m: number }).m
-    const result = db().prepare(`INSERT INTO worldcup_categories (type, name, sort_order, filter_json) VALUES (?, ?, ?, ?)`).run(type, name, maxOrder + 1, filter ? JSON.stringify(filter) : null)
-    return db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(result.lastInsertRowid)
-  })
+    const total = statRows.length
+    const pageRows = statRows.slice(offset, offset + limit)
+    if (pageRows.length === 0) return { rows: [], total, runId }
 
-  ipcMain.handle('worldcup:update-category', (_e, params: { id: number; name: string; filter?: object | null }) => {
-    if (params.filter !== undefined) {
-      db().prepare(`UPDATE worldcup_categories SET name = ?, filter_json = ? WHERE id = ?`).run(params.name, params.filter ? JSON.stringify(params.filter) : null, params.id)
+    const ids = pageRows.map(r => r.item_id)
+    const placeholders = ids.map(() => '?').join(',')
+    const infoMap = new Map<number, Record<string, unknown>>()
+    if (type === 'actor') {
+      const actors = db().prepare(`SELECT id, name, photo_path FROM actors WHERE id IN (${placeholders})`).all(...ids) as { id: number }[]
+      actors.forEach(a => infoMap.set(a.id, a as Record<string, unknown>))
     } else {
-      db().prepare(`UPDATE worldcup_categories SET name = ? WHERE id = ?`).run(params.name, params.id)
+      const works = db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id IN (${placeholders})`).all(...ids) as { id: number }[]
+      works.forEach(w => infoMap.set(w.id, w as Record<string, unknown>))
     }
-    return db().prepare(`SELECT * FROM worldcup_categories WHERE id = ?`).get(params.id)
-  })
 
-  ipcMain.handle('worldcup:delete-category', (_e, id: number) => {
-    db().prepare(`DELETE FROM worldcup_categories WHERE id = ?`).run(id)
-    return { ok: true }
+    const rows = pageRows.map((r, i) => ({
+      rank: offset + i + 1,
+      ...r,
+      ...(infoMap.get(r.item_id) ?? {}),
+    }))
+    return { rows, total, runId, format }
   })
 
 }

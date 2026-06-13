@@ -1,49 +1,111 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { worldcupApi, actorsApi, worksApi, shellApi } from '../api'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { cupApi, masterRankingApi, rankingSettingsApi, actorsApi, worksApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
-import CardTooltip, { type TooltipState } from '../components/CardTooltip'
-import WorldcupFilterModal, { countActiveFilters, type WcFilter } from '../components/WorldcupFilterModal'
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type WcCategory = { id: number; type: 'actor' | 'work'; name: string; sort_order: number; filter_json?: string | null }
-type WcSession  = { id: number; category_id: number; round_total: number; status: string; winner_id: number | null }
-type WcMatch    = { id: number; session_id: number; round: number; match_index: number; item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number }
-type WcRankRow  = {
-  rank: number; id: number
-  name?: string; photo_path?: string | null
-  title?: string | null; product_number?: string | null; cover_path?: string | null
-  total_sessions: number; session_wins: number
-  total_matches: number; match_wins: number
-  win_rate: number; match_win_rate: number
-  adj_gap: number
-}
-type WcLastRankRow = {
-  rank: number; id: number; elim_round: number | null
-  name?: string; photo_path?: string | null
-  title?: string | null; product_number?: string | null; cover_path?: string | null
+type CupTournament = {
+  id: number
+  type: 'actor' | 'work'
+  name: string
+  is_master: number
+  format: 'tournament' | 'league' | 'worldcup'
+  division_range: string | null
+  filter_json: string | null
+  created_at: string
+  // latest run (LEFT JOIN)
+  latest_run_id: number | null
+  latest_run_status: 'in_progress' | 'completed' | null
+  round_total: number | null
+  winner_id: number | null
+  started_at: string | null
+  completed_at: string | null
+  winner_name: string | null
+  winner_photo: string | null
 }
 
-type SubView = 'home' | 'game' | 'result' | 'rankings'
+type CupRun = {
+  id: number
+  tournament_id: number
+  status: 'in_progress' | 'completed'
+  round_total: number | null
+  winner_id: number | null
+  settings_snapshot: string | null
+  started_at: string
+  completed_at: string | null
+}
 
+type CupMatch = {
+  id: number
+  tournament_id: number
+  phase: 'group' | 'main'
+  group_id: number | null
+  round: number
+  match_index: number
+  item1_id: number
+  item2_id: number | null
+  winner_id: number | null
+  is_bye: number
+  is_draw: number
+}
+
+type ItemInfo = {
+  id: number
+  name?: string
+  photo_path?: string | null
+  title?: string | null
+  product_number?: string | null
+  cover_path?: string | null
+  rating?: number | null
+}
+
+type StandingsRow = { item_id: number; pts: number; w: number; d: number; l: number }
+
+type TournamentRankRow = {
+  item_id: number
+  total_runs: number
+  run_wins: number
+  total_matches: number
+  match_wins: number
+  win_rate: number
+  match_win_rate: number
+  total_pts: number
+  name?: string
+  photo_path?: string | null
+  title?: string | null
+  product_number?: string | null
+  cover_path?: string | null
+}
+
+type LastRunRankRow = {
+  rank: number
+  item_id: number
+  elim_round: number | null
+  pts: number | null
+  name?: string
+  photo_path?: string | null
+  title?: string | null
+  product_number?: string | null
+  cover_path?: string | null
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────
 const ROUND_OPTIONS = [
   { value: 16, label: '16강' }, { value: 32, label: '32강' },
   { value: 64, label: '64강' }, { value: 128, label: '128강' },
   { value: 256, label: '256강' }, { value: 512, label: '512강' },
   { value: 0, label: '전체' },
 ]
-const LIMIT_OPTIONS = [100, 200, 500, 1000]
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function roundLabel(round: number): string {
-  if (round === 2) return '결승'
-  if (round === 4) return '준결승'
-  return `${round}강`
+const FORMAT_LABEL: Record<string, string> = { tournament: '토너먼트', league: '리그전', worldcup: '월드컵' }
+const FORMAT_COLOR: Record<string, string> = {
+  tournament: 'bg-blue-900/60 text-blue-300',
+  league: 'bg-green-900/60 text-green-300',
+  worldcup: 'bg-purple-900/60 text-purple-300',
 }
-
-function currentMatch(matches: WcMatch[]): WcMatch | null {
-  return matches
-    .filter(m => m.winner_id === null)
-    .sort((a, b) => b.round - a.round || a.match_index - b.match_index)[0] ?? null
+const STATUS_LABEL: Record<string, string> = { in_progress: '진행중', completed: '완료' }
+const STATUS_COLOR: Record<string, string> = {
+  in_progress: 'text-yellow-400',
+  completed: 'text-green-400',
 }
 
 // ── Pagination ─────────────────────────────────────────────────────────────
@@ -68,171 +130,865 @@ function Pagination({ page, totalPages, onPageChange }: { page: number; totalPag
   )
 }
 
-// ── RankTrendChart (외부 컴포넌트 — 안정적) ────────────────────────────────
-function RankTrendChart({ history }: { history: { rank: number }[] }) {
-  if (history.length < 2) return <span className="text-gray-600 text-xs">-</span>
-  const W = 160, H = 28, P = 3
-  const ranks = history.map(h => h.rank)
-  const minR = Math.min(...ranks), maxR = Math.max(...ranks)
-  const range = maxR - minR || 1
-  const pts = history.map((h, i) => {
-    const x = P + (i / (history.length - 1)) * (W - P * 2)
-    const y = P + ((h.rank - minR) / range) * (H - P * 2)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
-  const last = ranks[ranks.length - 1], prev = ranks[ranks.length - 2]
-  const color = last < prev ? '#4ade80' : last > prev ? '#f87171' : '#9ca3af'
-  const [lx, ly] = pts[pts.length - 1].split(',')
-  return (
-    <svg width={W} height={H} className="shrink-0">
-      <polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-      <circle cx={lx} cy={ly} r="2.5" fill={color} />
-    </svg>
-  )
+// ── Helpers ────────────────────────────────────────────────────────────────
+function roundLabel(round: number): string {
+  if (round === 2) return '결승'
+  if (round === 4) return '준결승'
+  return `${round}강`
 }
 
-// ── SessionDistChart ───────────────────────────────────────────────────────
-function SessionDistChart({ data }: { data: { total_sessions: number; count: number }[] }) {
-  const [hovered, setHovered] = useState<number | null>(null)
-  if (data.length === 0) return <p className="text-gray-500 text-sm text-center py-4">데이터 없음</p>
-  const W = 580, H = 180, PL = 44, PR = 12, PT = 18, PB = 32
-  const cW = W - PL - PR, cH = H - PT - PB
-  const maxCount = Math.max(...data.map(d => d.count))
-  const barW = cW / data.length
-  const showEvery = data.length > 30 ? Math.ceil(data.length / 30) : 1
-  const yTicks = [0, 0.25, 0.5, 0.75, 1]
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }}>
-      {yTicks.map(r => {
-        const y = PT + cH * (1 - r)
-        const val = Math.round(maxCount * r)
-        return (
-          <g key={r}>
-            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#374151" strokeWidth="1" />
-            <text x={PL - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{val}</text>
-          </g>
-        )
-      })}
-      {data.map((d, i) => {
-        const x = PL + i * barW
-        const bH = maxCount > 0 ? (d.count / maxCount) * cH : 0
-        const y = PT + cH - bH
-        const isH = hovered === i
-        return (
-          <g key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ cursor: 'default' }}>
-            <rect x={x + 1} y={y} width={Math.max(barW - 2, 1)} height={bH} fill={isH ? '#60a5fa' : '#3b82f6'} rx="2" />
-            {i % showEvery === 0 && (
-              <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="white">{d.count}</text>
-            )}
-            {i % showEvery === 0 && (
-              <text x={x + barW / 2} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.total_sessions}</text>
-            )}
-          </g>
-        )
-      })}
-      <line x1={PL} y1={PT} x2={PL} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
-      <line x1={PL} y1={PT + cH} x2={W - PR} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
-      <text x={W / 2} y={H + 2} textAnchor="middle" fontSize="9" fill="#6b7280">세션수</text>
-    </svg>
-  )
-}
-
-// ── pool 계산 헬퍼 ─────────────────────────────────────────────────────────
 function calcPoolSize(totalItems: number, roundTotal: number): number {
   const multiplier = Math.max(2, Math.sqrt(totalItems / roundTotal))
   return Math.min(totalItems, Math.round(roundTotal * multiplier))
 }
 
-// ── GameCard (외부 컴포넌트 — 안정적) ─────────────────────────────────────
-function GameCard({ itemId, type, categoryId, onPick, onNavigate, onMouseMove, onMouseLeave, disabled }: {
-  itemId: number; type: 'actor' | 'work'; categoryId: number
-  onPick: () => void
-  onNavigate: () => void
-  onMouseMove?: (e: React.MouseEvent) => void
-  onMouseLeave?: () => void
-  disabled?: boolean
+function itemLabel(item: ItemInfo): string {
+  return item.name ?? item.title ?? item.product_number ?? `#${item.id}`
+}
+
+function itemImagePath(item: ItemInfo): string | null | undefined {
+  return item.photo_path ?? item.cover_path
+}
+
+// ── CreateModal ────────────────────────────────────────────────────────────
+function CreateModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void
+  onCreated: (t: CupTournament) => void
 }) {
-  const [info, setInfo] = useState<{
-    name?: string; title?: string | null; product_number?: string | null
-    photo_path?: string | null; cover_path?: string | null
-    files?: { id: number; file_path: string; type: string }[]
-  } | null>(null)
-  const [fileExists, setFileExists] = useState(false)
-  const [itemStats, setItemStats] = useState<{ rank: number; total_sessions: number; session_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number } | null>(null)
+  const [name, setName] = useState('')
+  const [type, setType] = useState<'actor' | 'work'>('actor')
+  const [format, setFormat] = useState<'tournament' | 'league' | 'worldcup'>('tournament')
+  const [isMaster, setIsMaster] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (type === 'actor') actorsApi.get(itemId).then(d => setInfo(d as typeof info))
-    else worksApi.get(itemId).then(d => setInfo(d as typeof info))
-  }, [itemId, type])
-
-  useEffect(() => {
-    worldcupApi.itemStats(categoryId, itemId).then(setItemStats)
-  }, [categoryId, itemId])
-
-  useEffect(() => {
-    const first = info?.files?.[0]
-    if (!first) { setFileExists(false); return }
-    if (first.type === 'url') { setFileExists(true); return }
-    shellApi.fileExists(first.file_path).then(setFileExists)
-  }, [info])
-
-  const imgPath   = type === 'actor' ? info?.photo_path : info?.cover_path
-  const firstFile = info?.files?.[0]
-
-  const handlePlay = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!firstFile) return
-    if (firstFile.type === 'url') shellApi.openExternal(firstFile.file_path)
-    else await shellApi.openPath(firstFile.file_path)
+  const handleCreate = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    try {
+      const t = await cupApi.create({ type, name: name.trim(), isMaster, format }) as CupTournament
+      onCreated(t)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="flex flex-col rounded-xl overflow-hidden border-[5px] border-gray-700 hover:border-blue-500 bg-gray-800 w-full transition-colors">
-      {/* 썸네일 — 클릭 시 승리 선택 */}
-      <button
-        onClick={onPick}
-        disabled={disabled}
-        className={`relative overflow-hidden cursor-pointer disabled:cursor-not-allowed block ${
-          type === 'actor' ? 'aspect-square' : 'aspect-[800/540]'
-        }`}
-      >
-        <ImagePreview path={imgPath ?? null} alt="" className="w-full h-full" objectPosition="center 10%" />
-      </button>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-xl p-6 w-[420px] shadow-2xl">
+        <h2 className="text-lg font-bold text-white mb-4">대회 등록</h2>
 
-      {/* 정보 — hover 시 툴팁, 클릭 시 상세 모달 */}
-      <div
-        className="p-3 bg-gray-800 border-t border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors overflow-hidden whitespace-nowrap"
-        onMouseMove={onMouseMove}
-        onMouseLeave={onMouseLeave}
-        onClick={onNavigate}
-      >
-        {/* 통계 행 */}
-        {itemStats ? (
-          <p className="text-[0.9rem] text-gray-400 mb-1.5 text-center">
-            순위: {itemStats.rank}위&nbsp;&nbsp;
-            우승률: {itemStats.win_rate}%({itemStats.session_wins}/{itemStats.total_sessions})&nbsp;&nbsp;
-            승률: {itemStats.match_win_rate}%({itemStats.match_wins}/{itemStats.total_matches})
-          </p>
-        ) : (
-          <p className="text-[0.9rem] text-gray-600 mb-1.5 text-center">-</p>
-        )}
-        {type === 'actor' ? (
-          <p className="text-[1.47rem] font-bold text-white text-center">{info?.name ?? '...'}</p>
-        ) : (
-          <div className="flex items-start gap-2 min-h-[195px]">
-            <div className="flex-1 min-w-0">
-              <p className="text-base text-white">{info?.product_number ?? '...'}</p>
-              <p className="text-base font-bold text-white mt-0.5 line-clamp-6">{info?.title ?? info?.product_number ?? '...'}</p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">대회명</label>
+            <input
+              autoFocus
+              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="대회 이름 입력"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+            />
+          </div>
+
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div
+              onClick={() => setIsMaster(v => !v)}
+              className={`w-10 h-5 rounded-full transition-colors ${isMaster ? 'bg-yellow-500' : 'bg-gray-600'} relative`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isMaster ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </div>
-            {firstFile && (
+            <span className="text-sm text-gray-200">마스터 대회 <span className="text-yellow-400 text-xs">(랭킹 반영)</span></span>
+          </label>
+
+          <div className="flex gap-2">
+            {(['actor', 'work'] as const).map(t => (
               <button
-                onClick={handlePlay}
-                disabled={!fileExists}
-                className={`shrink-0 w-8 h-8 rounded flex items-center justify-center transition ${fileExists ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
-                title="재생"
+                key={t}
+                onClick={() => setType(t)}
+                className={`flex-1 py-2 rounded text-sm font-medium transition ${type === t ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
               >
-                <span className="text-white text-sm">▶</span>
+                {t === 'actor' ? '배우' : '작품'}
               </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            {(['tournament', 'league', 'worldcup'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFormat(f)}
+                className={`flex-1 py-2 rounded text-sm font-medium transition ${format === f ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >
+                {FORMAT_LABEL[f]}
+              </button>
+            ))}
+          </div>
+
+          <button
+            className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-sm"
+            onClick={() => {/* TODO: 필터 설정 모달 */}}
+          >
+            필터 설정
+          </button>
+        </div>
+
+        <div className="flex gap-2 mt-6">
+          <button
+            onClick={handleCreate}
+            disabled={!name.trim() || saving}
+            className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded text-sm font-semibold"
+          >
+            등록
+          </button>
+          <button onClick={onClose} className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">취소</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── TournamentCard ─────────────────────────────────────────────────────────
+function TournamentCard({
+  t,
+  onPlay,
+  onRankings,
+  onDelete,
+  onUpdate,
+}: {
+  t: CupTournament
+  onPlay: (runId?: number, tab?: 'match' | 'standings') => void
+  onRankings: (id: number) => void
+  onDelete: () => void
+  onUpdate: () => void
+}) {
+  const [showEditName, setShowEditName] = useState(false)
+  const [editName, setEditName] = useState(t.name)
+  const [showConfirmDel, setShowConfirmDel] = useState(false)
+  const [showInProgress, setShowInProgress] = useState(false)
+  const [itemCount, setItemCount] = useState(0)
+  const [roundValue, setRoundValue] = useState(0)
+  const [starting, setStarting] = useState(false)
+
+  useEffect(() => {
+    cupApi.itemCount(t.id).then(count => {
+      setItemCount(count as number)
+      if (t.latest_run_status !== 'in_progress') {
+        const validOptions = ROUND_OPTIONS.filter(o => o.value === 0 || o.value <= (count as number))
+        const best = validOptions.find(o => o.value !== 0 && o.value >= (count as number))
+          ?? validOptions.find(o => o.value !== 0)
+          ?? validOptions[0]
+        if (best) setRoundValue(best.value)
+      }
+    })
+  }, [t.id, t.latest_run_status])
+
+  const validOptions = ROUND_OPTIONS.filter(o => o.value === 0 || o.value <= itemCount)
+
+  const doStart = async (force = false) => {
+    setStarting(true)
+    try {
+      const result = await cupApi.start(t.id, roundValue, force) as { run: CupRun }
+      onPlay(result.run.id, 'match')
+    } catch (e) {
+      alert((e as Error).message)
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const handleStartClick = () => {
+    if (t.latest_run_status === 'in_progress') {
+      setShowInProgress(true)
+    } else {
+      doStart()
+    }
+  }
+
+  const handleSaveName = async () => {
+    if (!editName.trim()) return
+    await cupApi.update({ id: t.id, name: editName.trim() })
+    onUpdate()
+    setShowEditName(false)
+  }
+
+  const runStatus = t.latest_run_status
+  const hasRun = t.latest_run_id !== null
+
+  return (
+    <>
+      <div className="relative cursor-pointer rounded-lg border border-gray-700 ring-2 ring-transparent hover:border-gray-500 flex flex-col">
+        {/* 썸네일 */}
+        <div className="relative rounded-t-lg overflow-hidden">
+          <ImagePreview path={t.winner_photo ?? null} alt={t.name} className="w-full h-40" objectPosition="center 10%" />
+          {/* 상태 뱃지 (진행중만 표시) */}
+          {runStatus === 'in_progress' && (
+            <span className={`absolute top-1 left-1 px-1.5 py-0.5 text-xs rounded font-semibold ${STATUS_COLOR[runStatus]} bg-gray-900/70`}>
+              {STATUS_LABEL[runStatus]}
+            </span>
+          )}
+          {/* M / F / X 버튼 */}
+          <div className="absolute bottom-1 right-1 flex gap-1">
+            <button
+              onClick={e => { e.stopPropagation(); setEditName(t.name); setShowEditName(true) }}
+              className="w-6 h-6 rounded bg-gray-900/70 hover:bg-gray-700 text-white text-xs font-bold flex items-center justify-center"
+            >M</button>
+            <button
+              onClick={e => { e.stopPropagation() }}
+              className="w-6 h-6 rounded bg-gray-900/70 hover:bg-gray-700 text-white text-xs font-bold flex items-center justify-center"
+            >F</button>
+            <button
+              onClick={e => { e.stopPropagation(); setShowConfirmDel(true) }}
+              className="w-6 h-6 rounded bg-gray-900/70 hover:bg-red-700 text-red-400 hover:text-white text-xs font-bold flex items-center justify-center"
+            >X</button>
+          </div>
+        </div>
+
+        {/* 정보 */}
+        <div className="p-2 bg-gray-800 flex-1 flex flex-col gap-1">
+          <p className="text-sm font-bold text-white truncate">{t.name}</p>
+
+          <div className="flex items-center gap-1 flex-wrap">
+            {t.is_master === 1 && (
+              <span className="px-1.5 py-0.5 bg-yellow-900/60 text-yellow-300 text-xs rounded font-semibold">★</span>
+            )}
+            <span className={`px-1.5 py-0.5 text-xs rounded ${FORMAT_COLOR[t.format] ?? 'bg-gray-700 text-gray-300'}`}>
+              {FORMAT_LABEL[t.format] ?? t.format}
+            </span>
+            <span className="px-1.5 py-0.5 text-xs rounded bg-gray-700 text-gray-300">
+              {t.type === 'actor' ? '배우' : '작품'}
+            </span>
+          </div>
+
+          <div className="text-xs text-gray-500 flex gap-2">
+            {hasRun && t.format === 'tournament' && t.round_total !== null && (
+              <span>{t.round_total === 0 ? '전체' : roundLabel(t.round_total)}</span>
+            )}
+            <span>{t.created_at.slice(0, 10)}</span>
+          </div>
+
+          <div className="flex flex-col gap-1 mt-auto pt-1">
+            {/* 강수 selectbox: 진행중일 때만 disabled */}
+            {runStatus !== 'in_progress' ? (
+              <select
+                value={roundValue}
+                onChange={e => setRoundValue(Number(e.target.value))}
+                className="w-full bg-gray-700 text-white text-xs px-2 py-1.5 rounded"
+              >
+                {validOptions.map(o => (
+                  <option key={o.value} value={o.value}>
+                    {o.value === 0
+                      ? `전체 (${itemCount}${t.type === 'actor' ? '명' : '작품'})`
+                      : `${o.label} (풀${calcPoolSize(itemCount, o.value)}${t.type === 'actor' ? '명' : '작품'})`
+                    }
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select disabled className="w-full bg-gray-700 text-gray-500 text-xs px-2 py-1.5 rounded opacity-60">
+                <option>
+                  {t.round_total === 0 ? '전체' : t.round_total ? `${t.round_total}강` : '-'}
+                  ({t.type === 'actor' ? '배우' : '작품'})
+                </option>
+              </select>
+            )}
+            {/* 대회시작 / 순위보기 */}
+            <div className="flex gap-1">
+              <button
+                onClick={handleStartClick}
+                disabled={starting}
+                className="flex-1 py-1.5 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white text-xs rounded font-semibold"
+              >
+                {starting ? '시작 중...' : '대회시작'}
+              </button>
+              <button
+                onClick={() => onRankings(t.id)}
+                disabled={!hasRun}
+                className="flex-1 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-xs rounded"
+              >
+                순위보기
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 진행중 대회 모달 */}
+      {showInProgress && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-[380px] shadow-2xl">
+            <h2 className="text-base font-bold text-white mb-2">이미 진행 중인 대회가 있습니다</h2>
+            <p className="text-sm text-gray-400 mb-6">이어하시겠습니까?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowInProgress(false); onPlay(t.latest_run_id!, 'match') }}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-semibold"
+              >예</button>
+              <button
+                onClick={() => { setShowInProgress(false); doStart(true) }}
+                className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white rounded text-sm font-semibold"
+              >아니오</button>
+              <button
+                onClick={() => setShowInProgress(false)}
+                className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
+              >취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 대회명 수정 모달 */}
+      {showEditName && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowEditName(false)}>
+          <div className="bg-gray-800 rounded-xl p-6 w-[360px] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-white mb-4">대회명 수정</h2>
+            <input
+              autoFocus
+              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSaveName()}
+            />
+            <div className="flex gap-2">
+              <button onClick={handleSaveName} disabled={!editName.trim()} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded text-sm font-semibold">저장</button>
+              <button onClick={() => setShowEditName(false)} className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 confirm 모달 */}
+      {showConfirmDel && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowConfirmDel(false)}>
+          <div className="bg-gray-800 rounded-xl p-6 w-[360px] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-white mb-2">대회 삭제</h2>
+            <p className="text-sm text-gray-400 mb-6">「{t.name}」을 삭제하시겠습니까?<br />이 작업은 되돌릴 수 없습니다.</p>
+            <div className="flex gap-2">
+              <button onClick={onDelete} className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white rounded text-sm font-semibold">삭제</button>
+              <button onClick={() => setShowConfirmDel(false)} className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── MatchCard ──────────────────────────────────────────────────────────────
+function MatchCard({ item, onClick, disabled }: { item: ItemInfo; onClick: () => void; disabled: boolean }) {
+  const imgPath = itemImagePath(item)
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex-1 flex flex-col items-center gap-3 p-4 bg-gray-800 hover:bg-gray-700 active:scale-95 disabled:opacity-40 rounded-xl transition border-2 border-transparent hover:border-blue-500 cursor-pointer"
+    >
+      <div className="w-40 h-52 rounded-lg overflow-hidden bg-gray-700 flex items-center justify-center">
+        {imgPath
+          ? <ImagePreview path={imgPath} alt={itemLabel(item)} className="w-full h-full object-cover" />
+          : <span className="text-gray-500 text-4xl">?</span>
+        }
+      </div>
+      <p className="text-white font-semibold text-sm text-center line-clamp-2 max-w-[160px]">{itemLabel(item)}</p>
+    </button>
+  )
+}
+
+// ── PlayView ───────────────────────────────────────────────────────────────
+function PlayView({
+  tournamentId,
+  runId: initialRunId,
+  initialTab = 'match',
+  onBack,
+  onNavigateToActor,
+  onNavigateToWork,
+}: {
+  tournamentId: number
+  runId?: number
+  initialTab?: 'match' | 'standings'
+  onBack: () => void
+  onNavigateToActor: (id: number) => void
+  onNavigateToWork: (id: number) => void
+}) {
+  const [tab, setTab] = useState<'match' | 'standings'>(initialTab)
+  const [tournament, setTournament] = useState<CupTournament | null>(null)
+  const [run, setRun] = useState<CupRun | null>(null)
+  const [currentMatch, setCurrentMatch] = useState<CupMatch | null | 'done'>(null)
+  const [progress, setProgress] = useState<{ total: number; done: number }>({ total: 0, done: 0 })
+  const [items, setItems] = useState<Map<number, ItemInfo>>(new Map())
+  const [standings, setStandings] = useState<{
+    type: string
+    standings?: StandingsRow[]
+    matches?: CupMatch[]
+    groupStandings?: { group_id: number; standings: StandingsRow[] }[]
+    mainMatches?: CupMatch[]
+  } | null>(null)
+  const [picking, setPicking] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const itemFetchQueue = useRef(new Set<number>())
+
+  const fetchItemInfo = useCallback(async (id: number, type: 'actor' | 'work') => {
+    if (items.has(id) || itemFetchQueue.current.has(id)) return
+    itemFetchQueue.current.add(id)
+    try {
+      const data = type === 'actor'
+        ? await actorsApi.get(id) as ItemInfo
+        : await worksApi.get(id) as ItemInfo
+      if (data) setItems(prev => new Map(prev).set(id, data))
+    } catch { /* ignore */ }
+  }, [items])
+
+  const load = useCallback(async () => {
+    const result = await cupApi.get(tournamentId) as {
+      tournament: CupTournament; run: CupRun | null; currentMatch: CupMatch | null
+      totalMatches: number; completedMatches: number
+    } | null
+    if (!result) return
+    setTournament(result.tournament)
+    setRun(result.run)
+    setProgress({ total: result.totalMatches, done: result.completedMatches })
+    const cm = result.currentMatch
+    const runStatus = result.run?.status
+    const isDone = runStatus === 'completed' || cm === null
+    setCurrentMatch(isDone ? 'done' : cm)
+    if (isDone) setTab('standings')
+    if (cm) {
+      fetchItemInfo(cm.item1_id, result.tournament.type)
+      if (cm.item2_id) fetchItemInfo(cm.item2_id, result.tournament.type)
+    }
+    if (result.run?.winner_id) {
+      fetchItemInfo(result.run.winner_id, result.tournament.type)
+    }
+  }, [tournamentId, fetchItemInfo])
+
+  const loadStandings = useCallback(async () => {
+    const runId = run?.id
+    if (!runId) return
+    const s = await cupApi.standings(runId) as typeof standings
+    setStandings(s)
+    if (s && tournament) {
+      const ids = new Set<number>()
+      s.standings?.forEach(r => ids.add(r.item_id))
+      s.matches?.forEach(m => { ids.add(m.item1_id); if (m.item2_id) ids.add(m.item2_id) })
+      s.groupStandings?.forEach(g => g.standings.forEach(r => ids.add(r.item_id)))
+      s.mainMatches?.forEach(m => { ids.add(m.item1_id); if (m.item2_id) ids.add(m.item2_id) })
+      for (const id of ids) fetchItemInfo(id, tournament.type)
+    }
+  }, [run?.id, tournament, fetchItemInfo])
+
+  useEffect(() => { load() }, [load])
+  useEffect(() => { if (tab === 'standings') loadStandings() }, [tab, loadStandings])
+
+  const handlePick = async (winnerId: number | null, isDraw = false) => {
+    if (!currentMatch || currentMatch === 'done' || picking) return
+    const match = currentMatch as CupMatch
+    setPicking(true)
+    try {
+      const next = await cupApi.pick(match.id, winnerId, isDraw) as CupMatch | { done: boolean }
+      setProgress(p => ({ ...p, done: p.done + 1 }))
+      if ('done' in next && next.done) {
+        setCurrentMatch('done')
+        load()
+      } else {
+        const m = next as CupMatch
+        setCurrentMatch(m)
+        if (tournament) {
+          fetchItemInfo(m.item1_id, tournament.type)
+          if (m.item2_id) fetchItemInfo(m.item2_id, tournament.type)
+        }
+      }
+    } catch (e) {
+      alert((e as Error).message)
+    } finally {
+      setPicking(false)
+    }
+  }
+
+  const handleComplete = async () => {
+    if (!run) return
+    setCompleting(true)
+    try {
+      await cupApi.complete(run.id)
+      load()
+    } catch (e) {
+      alert((e as Error).message)
+    } finally {
+      setCompleting(false)
+    }
+  }
+
+  const item1 = currentMatch && currentMatch !== 'done' ? items.get((currentMatch as CupMatch).item1_id) : null
+  const item2 = currentMatch && currentMatch !== 'done' ? (items.get((currentMatch as CupMatch).item2_id!) ?? null) : null
+  const match = currentMatch !== 'done' && currentMatch ? currentMatch as CupMatch : null
+  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
+
+  const winnerItem = run?.winner_id ? items.get(run.winner_id) : null
+  const runStatus = run?.status ?? null
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* 상단 바 */}
+      <div className="shrink-0">
+        <div className="p-4 pb-0">
+          <div className="flex items-center gap-2">
+            {/* 뒤로 + 대회 정보 */}
+            <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 min-w-0">
+              <button onClick={onBack} className="text-gray-400 hover:text-white text-sm transition shrink-0">← 목록</button>
+              {tournament && (
+                <>
+                  <span className="text-gray-600 text-xs shrink-0">|</span>
+                  {tournament.is_master === 1 && <span className="text-yellow-400 text-xs font-semibold shrink-0">★</span>}
+                  <span className="text-white text-sm font-semibold truncate">{tournament.name}</span>
+                  {runStatus && <span className={`text-xs shrink-0 ${STATUS_COLOR[runStatus]}`}>{STATUS_LABEL[runStatus]}</span>}
+                  {progress.total > 0 && (
+                    <span className="text-xs text-gray-500 shrink-0">{progress.done}/{progress.total}</span>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* 탭 */}
+            <div className="flex items-center gap-1 bg-gray-800 rounded-lg px-2 py-1 ml-auto shrink-0">
+              {(['match', 'standings'] as const).map(key => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  className={`px-3 py-1 rounded text-xs font-medium transition ${tab === key ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                >
+                  {key === 'match' ? '매치' : '현황'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* 진행률 바 */}
+        {progress.total > 0 && runStatus === 'in_progress' && (
+          <div className="h-1 bg-gray-700 mt-3">
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {tab === 'match' && (
+          <div className="flex flex-col items-center justify-center min-h-full py-8 px-4">
+            {!tournament && <p className="text-gray-500">로딩 중...</p>}
+
+            {tournament && currentMatch === 'done' && (
+              <div className="text-center">
+                {runStatus === 'completed' ? (
+                  <>
+                    <p className="text-2xl font-bold text-white mb-1">대회 완료!</p>
+                    {winnerItem && (
+                      <div className="mt-4">
+                        <p className="text-yellow-400 text-sm mb-3">🏆 우승</p>
+                        <button
+                          className="group relative mx-auto block"
+                          onClick={() => tournament.type === 'actor'
+                            ? onNavigateToActor(winnerItem.id)
+                            : onNavigateToWork(winnerItem.id)
+                          }
+                        >
+                          <div className="w-36 h-44 rounded-xl overflow-hidden bg-gray-700 mb-2 ring-2 ring-yellow-500 group-hover:ring-yellow-400 transition">
+                            {itemImagePath(winnerItem)
+                              ? <ImagePreview path={itemImagePath(winnerItem)!} alt="우승자" className="w-full h-full object-cover" />
+                              : <span className="flex items-center justify-center h-full text-gray-500 text-4xl">?</span>
+                            }
+                          </div>
+                          <p className="text-white font-bold text-base group-hover:text-yellow-300 transition">{itemLabel(winnerItem)}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">클릭하여 상세 보기</p>
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setTab('standings')}
+                      className="mt-6 px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm"
+                    >
+                      전체 현황 보기
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-center">
+                    <p className="text-white text-lg font-semibold mb-2">모든 매치 완료</p>
+                    <p className="text-gray-400 text-sm mb-4">아래 버튼으로 최종 결과를 확정하세요.</p>
+                    <button
+                      onClick={handleComplete}
+                      disabled={completing}
+                      className="px-8 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg font-semibold"
+                    >
+                      {completing ? '처리 중...' : '대회 완료 확정'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tournament && match && (
+              <div className="w-full max-w-2xl">
+                {/* 라운드/진행 정보 */}
+                <div className="text-center mb-6">
+                  {tournament.format === 'tournament' && (
+                    <p className="text-yellow-400 font-bold text-lg">{roundLabel(match.round)}</p>
+                  )}
+                  {tournament.format === 'league' && (
+                    <>
+                      <p className="text-gray-300 font-semibold text-base">리그전</p>
+                      <p className="text-gray-500 text-sm mt-0.5">
+                        {progress.done + 1}번째 매치 · 남은 경기 {progress.total - progress.done}
+                      </p>
+                    </>
+                  )}
+                  {tournament.format === 'worldcup' && (
+                    <>
+                      <p className="text-purple-400 font-bold text-lg">
+                        {match.phase === 'group' ? `${match.group_id}조 예선` : `본선 ${roundLabel(match.round)}`}
+                      </p>
+                      <p className="text-gray-500 text-sm mt-0.5">
+                        {progress.done + 1}번째 매치 · 남은 경기 {progress.total - progress.done}
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                {/* 매치 카드 */}
+                <div className="flex gap-6 justify-center items-center">
+                  {item1
+                    ? <MatchCard item={item1} onClick={() => handlePick(match.item1_id)} disabled={picking} />
+                    : <div className="flex-1 h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
+                  }
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <span className="text-gray-500 font-bold text-xl">VS</span>
+                    {(tournament.format === 'league' || (tournament.format === 'worldcup' && match.phase === 'group')) && (
+                      <button
+                        onClick={() => handlePick(null, true)}
+                        disabled={picking}
+                        className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-300 rounded-lg text-xs"
+                      >
+                        무승부
+                      </button>
+                    )}
+                  </div>
+                  {match.item2_id
+                    ? (item2
+                        ? <MatchCard item={item2} onClick={() => handlePick(match.item2_id!)} disabled={picking} />
+                        : <div className="flex-1 h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
+                      )
+                    : <div className="flex-1 h-64 bg-gray-700 rounded-xl flex items-center justify-center text-gray-400">BYE</div>
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'standings' && (
+          <div className="p-4 max-w-2xl mx-auto space-y-4">
+            {!standings && <p className="text-gray-500 text-center py-8">로딩 중...</p>}
+
+            {/* ── 리그전 순위표 ── */}
+            {standings?.type === 'league' && standings.standings && (
+              <div className="bg-gray-800 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-700 text-gray-400 text-xs">
+                      <th className="px-3 py-2 text-left w-8">#</th>
+                      <th className="px-3 py-2 text-left">선수</th>
+                      <th className="px-3 py-2 text-center">승</th>
+                      <th className="px-3 py-2 text-center">무</th>
+                      <th className="px-3 py-2 text-center">패</th>
+                      <th className="px-3 py-2 text-center font-bold">점수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.standings.map((row, idx) => {
+                      const item = items.get(row.item_id)
+                      return (
+                        <tr key={row.item_id} className={`border-b border-gray-700/50 hover:bg-gray-700/30 ${idx === 0 ? 'bg-yellow-900/10' : ''}`}>
+                          <td className="px-3 py-2 text-gray-400 text-xs">{idx + 1}</td>
+                          <td className="px-3 py-2 text-white">{item ? itemLabel(item) : `#${row.item_id}`}</td>
+                          <td className="px-3 py-2 text-center text-green-400">{row.w}</td>
+                          <td className="px-3 py-2 text-center text-gray-400">{row.d}</td>
+                          <td className="px-3 py-2 text-center text-red-400">{row.l}</td>
+                          <td className="px-3 py-2 text-center text-white font-bold">{row.pts}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ── 리그전 매치 목록 ── */}
+            {standings?.type === 'league' && standings.matches && standings.matches.length > 0 && (
+              <div className="bg-gray-800 rounded-xl overflow-hidden">
+                <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40">
+                  <span className="text-xs font-semibold text-gray-300">전체 매치</span>
+                </div>
+                <div className="divide-y divide-gray-700/50 max-h-72 overflow-y-auto">
+                  {standings.matches.map(m => {
+                    const i1 = items.get(m.item1_id)
+                    const i2 = m.item2_id ? items.get(m.item2_id) : null
+                    const done = m.winner_id !== null || m.is_draw === 1
+                    return (
+                      <div key={m.id} className={`px-4 py-2 flex items-center gap-2 text-sm ${done ? '' : 'opacity-40'}`}>
+                        <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                          {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                        </span>
+                        <span className="text-gray-600 text-xs w-6 text-center shrink-0">
+                          {m.is_draw === 1 ? '무' : m.winner_id ? (m.winner_id === m.item1_id ? '>' : '<') : 'vs'}
+                        </span>
+                        <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                          {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ── 토너먼트 대진표 ── */}
+            {standings?.type === 'tournament' && standings.matches && (
+              <div className="space-y-3">
+                {Object.entries(
+                  (standings.matches as CupMatch[]).reduce<Record<string, CupMatch[]>>((acc, m) => {
+                    const key = String(m.round)
+                    if (!acc[key]) acc[key] = []
+                    acc[key].push(m)
+                    return acc
+                  }, {})
+                )
+                .sort(([a], [b]) => Number(b) - Number(a))
+                .map(([round, roundMatches]) => (
+                  <div key={round} className="bg-gray-800 rounded-xl overflow-hidden">
+                    <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40">
+                      <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
+                    </div>
+                    <div className="divide-y divide-gray-700/50">
+                      {(roundMatches as CupMatch[]).filter(m => !m.is_bye).map(m => {
+                        const i1 = items.get(m.item1_id)
+                        const i2 = m.item2_id ? items.get(m.item2_id) : null
+                        return (
+                          <div key={m.id} className="px-4 py-2 flex items-center gap-2 text-sm">
+                            <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                              {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                            </span>
+                            <span className="text-gray-600 text-xs w-6 text-center shrink-0">
+                              {m.winner_id ? 'vs' : 'vs'}
+                            </span>
+                            <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                              {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                            </span>
+                            {m.winner_id === null && (
+                              <span className="text-gray-600 text-xs shrink-0">대기 중</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── 월드컵 현황 ── */}
+            {standings?.type === 'worldcup' && (
+              <div className="space-y-6">
+                {/* 조별 순위표 */}
+                {standings.groupStandings && standings.groupStandings.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">조별 예선</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {standings.groupStandings.map(({ group_id, standings: gs }) => (
+                        <div key={group_id} className="bg-gray-800 rounded-xl overflow-hidden">
+                          <div className="px-3 py-1.5 border-b border-gray-700 bg-gray-700/40">
+                            <span className="text-xs font-semibold text-purple-400">{group_id}조</span>
+                          </div>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-gray-700/50 text-gray-500">
+                                <th className="px-3 py-1 text-left w-6">#</th>
+                                <th className="px-3 py-1 text-left">이름</th>
+                                <th className="px-2 py-1 text-center">승</th>
+                                <th className="px-2 py-1 text-center">무</th>
+                                <th className="px-2 py-1 text-center">패</th>
+                                <th className="px-2 py-1 text-center font-bold">점</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {gs.map((row, idx) => {
+                                const item = items.get(row.item_id)
+                                return (
+                                  <tr key={row.item_id} className={`border-b border-gray-700/30 ${idx < 2 ? 'bg-purple-900/10' : ''}`}>
+                                    <td className="px-3 py-1.5 text-gray-500">{idx + 1}</td>
+                                    <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
+                                      {item ? itemLabel(item) : `#${row.item_id}`}
+                                      {idx < 2 && <span className="ml-1 text-purple-400 text-xs">↑</span>}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-center text-green-400">{row.w}</td>
+                                    <td className="px-2 py-1.5 text-center text-gray-400">{row.d}</td>
+                                    <td className="px-2 py-1.5 text-center text-red-400">{row.l}</td>
+                                    <td className="px-2 py-1.5 text-center text-white font-bold">{row.pts}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 본선 대진표 */}
+                {standings.mainMatches && standings.mainMatches.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">본선 토너먼트</h3>
+                    <div className="space-y-3">
+                      {Object.entries(
+                        (standings.mainMatches as CupMatch[]).reduce<Record<string, CupMatch[]>>((acc, m) => {
+                          const key = String(m.round)
+                          if (!acc[key]) acc[key] = []
+                          acc[key].push(m)
+                          return acc
+                        }, {})
+                      )
+                      .sort(([a], [b]) => Number(b) - Number(a))
+                      .map(([round, roundMatches]) => (
+                        <div key={round} className="bg-gray-800 rounded-xl overflow-hidden">
+                          <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40">
+                            <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
+                          </div>
+                          <div className="divide-y divide-gray-700/50">
+                            {(roundMatches as CupMatch[]).filter(m => !m.is_bye).map(m => {
+                              const i1 = items.get(m.item1_id)
+                              const i2 = m.item2_id ? items.get(m.item2_id) : null
+                              return (
+                                <div key={m.id} className="px-4 py-2 flex items-center gap-2 text-sm">
+                                  <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                    {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                  </span>
+                                  <span className="text-gray-600 text-xs w-6 text-center shrink-0">vs</span>
+                                  <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                    {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                  </span>
+                                  {m.winner_id === null && <span className="text-gray-600 text-xs shrink-0">대기 중</span>}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -241,1009 +997,898 @@ function GameCard({ itemId, type, categoryId, onPick, onNavigate, onMouseMove, o
   )
 }
 
-// ── Main Page ──────────────────────────────────────────────────────────────
-interface Props {
-  onNavigateToActor: (id: number) => void
-  onNavigateToWork: (id: number) => void
+// ── RankingSettingsModal ───────────────────────────────────────────────────
+type RankingSettings = {
+  basePoints: { win: number; draw: number; loss: number }
+  divisionWeights: number[]
+  opponentWeights: number[]
+  rankBonus: Record<string, Record<string, number>>
 }
 
-export default function Worldcup({ onNavigateToActor, onNavigateToWork }: Props) {
-  const [subView, setSubView]   = useState<SubView>('home')
-  const [categories, setCategories] = useState<WcCategory[]>([])
-  const [selCatId, setSelCatId] = useState<number | null>(null)
-  const [session, setSession]   = useState<WcSession | null>(null)
-  const [matches, setMatches]   = useState<WcMatch[]>([])
-  const [tooltip, setTooltip]   = useState<TooltipState | null>(null)
-  const [picking, setPicking]     = useState<{ winnerId: number; loserId: number | null; fadeOut?: boolean } | null>(null)
-  const [cardsVisible, setCardsVisible] = useState(true)
+const POOL_SIZES = ['32', '64', '128', '256', '512']
+const RANK_THRESHOLDS = ['1', '2', '4', '8', '16', '32']
+const DIV_LABELS = ['1부', '2부', '3부', '4부', '5부', '6부']
 
-  const [confirmExisting, setConfirmExisting] = useState(false)
-  const [pendingRound, setPendingRound]       = useState<number | null>(null)
-
-  const [winnerInfo, setWinnerInfo]     = useState<{ id: number; label: string; imgPath: string | null; comment: string } | null>(null)
-  const [commentDraft, setCommentDraft] = useState('')
-  const [commentSaved, setCommentSaved] = useState(false)
-
-  const [rankRows, setRankRows]       = useState<WcRankRow[]>([])
-  const [rankTotal, setRankTotal]     = useState(0)
-  const [rankPage, setRankPage]       = useState(0)
-  const [rankLimit, setRankLimit]     = useState(() => {
-    const saved = localStorage.getItem('worldcup:rankLimit')
-    return saved ? Number(saved) : 100
-  })
-  const [rankSortBy,  setRankSortBy]  = useState<'win_rate' | 'match_win_rate' | 'adj_gap'>('win_rate')
-  const [rankSearch,  setRankSearch]  = useState('')
-  const [rankSortDir, setRankSortDir] = useState<'asc' | 'desc'>('desc')
-  const [rankHistories, setRankHistories] = useState<Record<number, { rank: number }[]>>({})
-  const [rankMode, setRankMode]       = useState<'overall' | 'last'>('overall')
-  const [rankImgPreview, setRankImgPreview] = useState<string | null>(null)
-  const [lastRankRows, setLastRankRows] = useState<WcLastRankRow[]>([])
-  const [lastRankTotal, setLastRankTotal] = useState(0)
-  const [lastRankPage, setLastRankPage]   = useState(0)
-  const [trendModal, setTrendModal]   = useState<{ id: number; label: string; imgPath: string | null } | null>(null)
-
-  const [catSessions, setCatSessions] = useState<Record<number, { session: WcSession; matches: WcMatch[] } | null>>({})
-  const [catWinners, setCatWinners]   = useState<Record<number, { id: number; photo_path?: string | null; cover_path?: string | null; name?: string; title?: string | null; product_number?: string | null } | null>>({})
-  const [catItemCounts, setCatItemCounts] = useState<Record<number, number>>({})
-  const [statsModal, setStatsModal]   = useState(false)
-  const [catStats, setCatStats]       = useState<{ total_sessions: number; completed_sessions: number; last_session_at: string | null; total_items: number; no_session_items: number; session_dist: { total_sessions: number; count: number }[] } | null>(null)
-  const [cardRounds, setCardRounds]   = useState<Record<number, number>>(() => {
-    const result: Record<number, number> = {}
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key?.startsWith('worldcup:round:')) {
-        const catId = parseInt(key.replace('worldcup:round:', ''))
-        const val = parseInt(localStorage.getItem(key) ?? '')
-        if (!isNaN(catId) && !isNaN(val)) result[catId] = val
-      }
-    }
-    return result
-  })
-  const [cardExclude, setCardExclude] = useState<Record<number, boolean>>(() => {
-    const result: Record<number, boolean> = {}
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key?.startsWith('worldcup:exclude:')) {
-        const catId = parseInt(key.replace('worldcup:exclude:', ''))
-        result[catId] = localStorage.getItem(key) === 'true'
-      }
-    }
-    return result
-  })
-
-  // 검색/정렬
-  const [wcSearch,     setWcSearch]     = useState(() => localStorage.getItem('worldcup:search') ?? '')
-  const [wcTypeFilter, setWcTypeFilter] = useState<'all' | 'actor' | 'work'>(() => (localStorage.getItem('worldcup:typeFilter') as 'all' | 'actor' | 'work') ?? 'all')
-  const [wcSortBy,     setWcSortBy]     = useState<'name' | 'created_at'>(() => (localStorage.getItem('worldcup:sortBy') as 'name' | 'created_at') ?? 'created_at')
-  const [wcSortDir,    setWcSortDir]    = useState<'asc' | 'desc'>(() => (localStorage.getItem('worldcup:sortDir') as 'asc' | 'desc') ?? 'asc')
-
-  // 월드컵 추가 모달
-  const [showAddModal,  setShowAddModal]  = useState(false)
-  const [addName,       setAddName]       = useState('')
-  const [addType,       setAddType]       = useState<'actor' | 'work'>('actor')
-  const [addFilter,     setAddFilter]     = useState<WcFilter | null>(null)
-  const [showAddFilter, setShowAddFilter] = useState(false)
-
-  // 월드컵 수정/삭제/필터 모달
-  const [editCat,       setEditCat]       = useState<WcCategory | null>(null)
-  const [editName,      setEditName]      = useState('')
-  const [deleteCat,     setDeleteCat]     = useState<WcCategory | null>(null)
-  const [filterCat,     setFilterCat]     = useState<WcCategory | null>(null)
-
-  const selCategory = categories.find(c => c.id === selCatId) ?? null
-  const cur         = currentMatch(matches)
-  const totalPages  = Math.ceil(rankTotal / rankLimit)
-
-  const filteredCategories = categories
-    .filter(c => wcTypeFilter === 'all' || c.type === wcTypeFilter)
-    .filter(c => !wcSearch || c.name.toLowerCase().includes(wcSearch.toLowerCase()))
-    .sort((a, b) => {
-      const dir = wcSortDir === 'asc' ? 1 : -1
-      if (wcSortBy === 'name') return a.name.localeCompare(b.name) * dir
-      return (a.id - b.id) * dir
-    })
-
-  // 현재 라운드 내 경기 번호 (부전승 포함)
-  const curRoundAll = cur
-    ? matches.filter(m => m.round === cur.round).sort((a, b) => a.match_index - b.match_index)
-    : []
-  const matchNumber = cur ? curRoundAll.findIndex(m => m.id === cur.id) + 1 : 0
-  const totalMatchCount = curRoundAll.length
-
-  // 브래킷 라벨
-  const isFullMode = session?.round_total === 0
-  const firstRound = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0
-  const firstRoundByeCount = matches.filter(m => m.round === firstRound && m.is_bye).length
-  const participantCount = firstRound > 0 ? firstRound - firstRoundByeCount : 0
-  const isFirstRound = cur?.round === firstRound
-  const bracketLabel = isFullMode
-    ? (cur ? roundLabel(cur.round) : '')
-    : (isFirstRound && participantCount > 0 && participantCount !== firstRound
-      ? `${roundLabel(firstRound)}(${participantCount}강)`
-      : cur ? roundLabel(cur.round) : '')
-
-  // ── 데이터 로드 ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    worldcupApi.categories().then(d => setCategories(d as WcCategory[]))
-  }, [])
-
-  const loadCatSessions = useCallback(async (cats: WcCategory[]) => {
-    // sessions 먼저 로드 → 칩 즉시 표시
-    const sessionEntries = await Promise.all(
-      cats.map(async cat => {
-        const d = await worldcupApi.getSession(cat.id) as { session: WcSession; matches: WcMatch[] } | null
-        return [cat.id, d] as [number, typeof d]
-      })
-    )
-    setCatSessions(Object.fromEntries(sessionEntries))
-
-    // winners는 별도로 로드 (실패해도 sessions에 영향 없음)
-    const winnerEntries = await Promise.all(
-      cats.map(async cat => {
-        try {
-          const w = await worldcupApi.lastWinner(cat.id, cat.type) as { id: number; photo_path?: string | null; cover_path?: string | null; name?: string; title?: string | null; product_number?: string | null } | null
-          return [cat.id, w] as [number, typeof w]
-        } catch {
-          return [cat.id, null] as [number, null]
-        }
-      })
-    )
-    setCatWinners(Object.fromEntries(winnerEntries))
-  }, [])
-
-  useEffect(() => {
-    if (subView === 'home' && categories.length > 0) loadCatSessions(categories)
-  }, [subView, categories, loadCatSessions])
-
-  useEffect(() => {
-    if (categories.length === 0) return
-    Promise.all(categories.map(async cat => [cat.id, await worldcupApi.itemCount(cat.id)] as [number, number]))
-      .then(entries => setCatItemCounts(Object.fromEntries(entries)))
-  }, [categories])
-
-  const loadRankings = useCallback(async (catId: number, page: number, limit: number, sortBy: string, sortDir: string, search: string) => {
-    const res = await worldcupApi.rankings(catId, limit, page * limit, sortBy, sortDir, search || undefined) as { rows: WcRankRow[]; total: number }
-    setRankRows(res.rows)
-    setRankTotal(res.total)
-    const histories: Record<number, { rank: number }[]> = {}
-    await Promise.all(res.rows.map(async row => {
-      histories[row.id] = await worldcupApi.rankHistory(catId, row.id) as { rank: number }[]
-    }))
-    setRankHistories(histories)
-  }, [])
-
-  const loadLastRankings = useCallback(async (catId: number, page: number, limit: number) => {
-    const res = await worldcupApi.lastSessionRankings(catId, limit, page * limit) as { rows: WcLastRankRow[]; total: number } | null
-    setLastRankRows(res?.rows ?? [])
-    setLastRankTotal(res?.total ?? 0)
-  }, [])
-
-  useEffect(() => {
-    if (subView === 'rankings' && selCatId !== null) {
-      if (rankMode === 'overall') loadRankings(selCatId, rankPage, rankLimit, rankSortBy, rankSortDir, rankSearch)
-      else loadLastRankings(selCatId, lastRankPage, rankLimit)
-    }
-  }, [subView, selCatId, rankPage, lastRankPage, rankLimit, rankMode, rankSortBy, rankSortDir, rankSearch, loadRankings, loadLastRankings])
-
-  // ── 게임 흐름 ────────────────────────────────────────────────────────────
-  const handleStartRequest = async (catId: number, round: number, exclude: boolean) => {
-    const existing = await worldcupApi.getSession(catId) as { session: WcSession; matches: WcMatch[] } | null
-    if (existing) { setSelCatId(catId); setPendingRound(round); setConfirmExisting(true) }
-    else await doStart(catId, round, exclude)
-  }
-
-  const doStart = async (catId: number, round: number, exclude: boolean) => {
-    const res = await worldcupApi.start(catId, round, exclude) as { session: WcSession; matches: WcMatch[] }
-    setSelCatId(catId); setSession(res.session); setMatches(res.matches); setSubView('game')
-  }
-
-  const handleContinue = async () => {
-    if (selCatId === null) return
-    setConfirmExisting(false)
-    const existing = await worldcupApi.getSession(selCatId) as { session: WcSession; matches: WcMatch[] } | null
-    if (!existing) return
-    setSession(existing.session); setMatches(existing.matches); setSubView('game')
-  }
-
-  const handleNewStart = async () => {
-    setConfirmExisting(false)
-    if (selCatId !== null && pendingRound !== null)
-      await doStart(selCatId, pendingRound, cardExclude[selCatId] ?? false)
-  }
-
-  const handleResume = async (catId: number) => {
-    const existing = await worldcupApi.getSession(catId) as { session: WcSession; matches: WcMatch[] } | null
-    if (!existing) return
-    setSelCatId(catId); setSession(existing.session); setMatches(existing.matches); setSubView('game')
-  }
-
-  const handlePick = async (matchId: number, winnerId: number) => {
-    const res = await worldcupApi.pick(matchId, winnerId) as { done: boolean; winnerId?: number; matches?: WcMatch[] }
-    if (res.done && res.winnerId != null) {
-      if (session) await worldcupApi.complete(session.id)
-      const wid = res.winnerId
-      if (selCategory?.type === 'actor') {
-        const a = await actorsApi.get(wid) as { name: string; photo_path: string | null; comment?: string }
-        setWinnerInfo({ id: wid, label: a.name, imgPath: a.photo_path, comment: a.comment ?? '' })
-        setCommentDraft(a.comment ?? '')
-      } else {
-        const w = await worksApi.get(wid) as { title: string | null; product_number: string | null; cover_path: string | null; comment?: string }
-        setWinnerInfo({ id: wid, label: w.title ?? w.product_number ?? '', imgPath: w.cover_path, comment: w.comment ?? '' })
-        setCommentDraft(w.comment ?? '')
-      }
-      setTooltip(null); setCommentSaved(false); setSubView('result')
-    } else if (res.matches) {
-      setMatches(res.matches)
-    }
-  }
-
-  // 애니메이션 후 실제 pick 처리
-  const handleCardPick = async (matchId: number, winnerId: number, loserId: number | null) => {
-    if (picking) return
-    setPicking({ winnerId, loserId })
-    await new Promise(r => setTimeout(r, 500))  // 애니메이션 완료
-    await new Promise(r => setTimeout(r, 300))  // 가운데 정지
-    setPicking({ winnerId, loserId, fadeOut: true })
-    await new Promise(r => setTimeout(r, 300))  // 페이드 아웃
-    setCardsVisible(false)
-    await handlePick(matchId, winnerId)          // picking 유지한 채 새 매치 로드
-    await new Promise(r => setTimeout(r, 50))   // 렌더 대기
-    setPicking(null)                             // 레이아웃 변화 없이 picking 해제
-    setCardsVisible(true)                        // 새 카드 페이드 인
-  }
-
-  const handleSaveComment = async () => {
-    if (!winnerInfo || !selCategory) return
-    if (selCategory.type === 'actor') await actorsApi.update(winnerInfo.id, { comment: commentDraft })
-    else await worksApi.update(winnerInfo.id, { comment: commentDraft })
-    setCommentSaved(true)
-  }
-
-  const handleAddCategory = async () => {
-    if (!addName.trim()) return
-    const newCat = await worldcupApi.createCategory(addName.trim(), addType, addFilter as object | null) as WcCategory
-    setCategories(prev => [...prev, newCat])
-    setAddName(''); setAddFilter(null); setShowAddModal(false)
-  }
-
-  const handleUpdateCategory = async () => {
-    if (!editCat || !editName.trim()) return
-    const updated = await worldcupApi.updateCategory(editCat.id, editName.trim()) as WcCategory
-    setCategories(prev => prev.map(c => c.id === updated.id ? updated : c))
-    setEditCat(null)
-  }
-
-  const handleDeleteCategory = async () => {
-    if (!deleteCat) return
-    await worldcupApi.deleteCategory(deleteCat.id)
-    setCategories(prev => prev.filter(c => c.id !== deleteCat.id))
-    setDeleteCat(null)
-  }
-
-  const handleUpdateFilter = async (cat: WcCategory, filter: WcFilter | null) => {
-    const updated = await worldcupApi.updateCategory(cat.id, cat.name, filter as object | null) as WcCategory
-    setCategories(prev => prev.map(c => c.id === updated.id ? updated : c))
-    setFilterCat(null)
-  }
-
-  // ── Render ───────────────────────────────────────────────────────────────
+function NumInput({ value, onChange, min = 0, step = 1, className = '' }: {
+  value: number; onChange: (v: number) => void; min?: number; step?: number; className?: string
+}) {
   return (
-    <div className="h-full flex flex-col bg-gray-900">
+    <input
+      type="number"
+      min={min}
+      step={step}
+      value={value}
+      onChange={e => onChange(Number(e.target.value))}
+      className={`bg-gray-700 text-white text-center rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500 w-16 ${className}`}
+    />
+  )
+}
 
-      {/* ── 홈 뷰 ── */}
-      {subView === 'home' && (
-        <div className="h-full flex flex-col">
-          {/* 헤더 바 */}
-          <div className="p-4 shrink-0">
-            <div className="flex items-center gap-2">
-              {/* 정렬 */}
-              <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
-                <select
-                  value={wcSortBy}
-                  onChange={e => { const v = e.target.value as typeof wcSortBy; setWcSortBy(v); localStorage.setItem('worldcup:sortBy', v) }}
-                  className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
-                >
-                  <option value="name">월드컵명</option>
-                  <option value="created_at">등록일</option>
-                </select>
-                <button
-                  onClick={() => { const d = wcSortDir === 'asc' ? 'desc' : 'asc'; setWcSortDir(d); localStorage.setItem('worldcup:sortDir', d) }}
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-2 py-1.5 rounded"
-                >
-                  {wcSortDir === 'asc' ? '↑' : '↓'}
-                </button>
-              </div>
+function RankingSettingsModal({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<'actor' | 'work'>('actor')
+  const [settings, setSettings] = useState<Record<'actor' | 'work', RankingSettings | null>>({ actor: null, work: null })
+  const [saving, setSaving] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
-              {/* 검색 + 타입 필터 */}
-              <div className="w-[38rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
-                <input
-                  type="text"
-                  value={wcSearch}
-                  onChange={e => { setWcSearch(e.target.value); localStorage.setItem('worldcup:search', e.target.value) }}
-                  placeholder="월드컵명 검색"
-                  className="flex-1 bg-gray-700 text-white text-sm px-2 py-1.5 rounded focus:outline-none"
-                />
-                <div className="flex shrink-0">
-                  {(['all', 'actor', 'work'] as const).map((v, i) => (
-                    <button
-                      key={v}
-                      onClick={() => { setWcTypeFilter(v); localStorage.setItem('worldcup:typeFilter', v) }}
-                      className={`text-sm px-3 py-1.5 border-gray-600 ${i === 0 ? 'rounded-l border-r' : i === 2 ? 'rounded-r' : 'border-r'} ${wcTypeFilter === v ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >
-                      {v === 'all' ? '전체' : v === 'actor' ? '배우' : '작품'}
-                    </button>
-                  ))}
-                </div>
-                <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 whitespace-nowrap">
-                  결과: {filteredCategories.length}
-                </div>
-                <button
-                  onClick={() => { setWcSearch(''); localStorage.removeItem('worldcup:search') }}
-                  className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"
-                >초기화</button>
-              </div>
+  useEffect(() => {
+    const load = async (t: 'actor' | 'work') => {
+      const s = await rankingSettingsApi.get(t) as RankingSettings | null
+      if (s) setSettings(prev => ({ ...prev, [t]: s }))
+    }
+    load('actor')
+    load('work')
+  }, [])
 
-              {/* 월드컵 추가 */}
-              <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
-                <button
-                  onClick={() => { setAddName(''); setAddType('actor'); setAddFilter(null); setShowAddModal(true) }}
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded"
-                >+ 월드컵 추가</button>
-              </div>
-            </div>
-          </div>
+  const cur = settings[tab]
 
-          <div className="flex-1 overflow-y-auto p-4 pt-0">
-          <div className="grid grid-cols-5 gap-3">
-            {filteredCategories.map(cat => {
-              const existing    = catSessions[cat.id]
-              const curRound    = cardRounds[cat.id] ?? 16
-              const excl        = cardExclude[cat.id] ?? false
-              const exCurMatch  = existing ? currentMatch(existing.matches) : null
-              const exRoundAll  = exCurMatch ? existing!.matches.filter(m => m.round === exCurMatch.round).sort((a, b) => a.match_index - b.match_index) : []
-              const exMatchNum  = exCurMatch ? exRoundAll.findIndex(m => m.id === exCurMatch.id) + 1 : 0
-              const exTotalMatchCount = exRoundAll.length
-              const exFirstRound = existing ? Math.max(...existing.matches.map(m => m.round)) : 0
-              const exByeCount = existing ? existing.matches.filter(m => m.round === exFirstRound && m.is_bye).length : 0
-              const exParticipantCount = exFirstRound - exByeCount
-              const exIsFullMode = existing?.session.round_total === 0
-              const exIsFirstRound = exCurMatch?.round === exFirstRound
-              const exBracketPrefix = exIsFullMode
-                ? (exCurMatch ? roundLabel(exCurMatch.round) : '')
-                : (exIsFirstRound && exParticipantCount > 0 && exParticipantCount !== exFirstRound
-                  ? `${roundLabel(exFirstRound)}(${exParticipantCount}강)`
-                  : exCurMatch ? roundLabel(exCurMatch.round) : '')
-              const progressLabel = exCurMatch ? `${exBracketPrefix}-${exMatchNum}/${exTotalMatchCount}경기` : null
-              const winner = catWinners[cat.id]
-              const winnerImg = cat.type === 'actor' ? winner?.photo_path : winner?.cover_path
-              return (
-                <div key={cat.id} className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden flex flex-col">
-                  {/* 썸네일 */}
-                  <div className="relative h-40 bg-gray-700 shrink-0">
-                    <ImagePreview
-                      path={winnerImg ?? null}
-                      alt={cat.name}
-                      className="w-full h-full"
-                      objectPosition="center 10%"
-                    />
-                    {existing && progressLabel && (
-                      <span className="absolute top-1.5 left-1.5 z-10 bg-blue-600/90 text-white text-xs px-1.5 py-0.5 rounded font-medium">
-                        진행중: {progressLabel}
-                      </span>
-                    )}
-                    {/* MFX 버튼 — 우측 하단 */}
-                    <div className="absolute bottom-1.5 right-1.5 flex gap-1 z-10">
-                      <button onClick={e => { e.stopPropagation(); setEditCat(cat); setEditName(cat.name) }} className="bg-gray-900/80 hover:bg-gray-700 text-gray-300 text-xs px-1.5 py-1 rounded">M</button>
-                      <button onClick={e => { e.stopPropagation(); setFilterCat(cat) }} className={`bg-gray-900/80 hover:bg-gray-700 text-xs px-1.5 py-1 rounded ${countActiveFilters(cat.filter_json ? JSON.parse(cat.filter_json) : null) > 0 ? 'text-blue-400' : 'text-gray-300'}`}>F</button>
-                      <button onClick={e => { e.stopPropagation(); setDeleteCat(cat) }} className="bg-gray-900/80 hover:bg-gray-700 text-gray-300 text-xs px-1.5 py-1 rounded">X</button>
-                    </div>
-                  </div>
-                  {/* 내용 */}
-                  <div className="p-3 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <p className="text-white font-bold text-sm truncate flex-1">{cat.name}</p>
-                    </div>
-                    {/* 라운드 + 제외 */}
-                    <div className="flex gap-1.5 items-center">
-                      <select
-                        value={curRound}
-                        onChange={e => { const v = Number(e.target.value); setCardRounds(prev => ({ ...prev, [cat.id]: v })); localStorage.setItem(`worldcup:round:${cat.id}`, String(v)) }}
-                        className="flex-1 bg-gray-700 text-white text-xs px-2 py-1.5 rounded"
-                      >
-                        {ROUND_OPTIONS.map(opt => {
-                          const total = catItemCounts[cat.id] ?? 0
-                          let label = opt.label
-                          if (total > 0) {
-                            if (opt.value === 0) label = `전체 (${total})`
-                            else if (total < opt.value) label = `${opt.label} (부족)`
-                            else label = `${opt.label} (풀${calcPoolSize(total, opt.value)})`
-                          }
-                          return <option key={opt.value} value={opt.value} disabled={opt.value > 0 && total > 0 && total < opt.value}>{label}</option>
-                        })}
-                      </select>
-                      {cat.type === 'actor' && (
-                        <label className="flex items-center gap-1 cursor-pointer select-none shrink-0 bg-gray-700 px-2 py-1.5 rounded">
-                          <input type="checkbox" checked={excl} onChange={e => {
-                            const v = e.target.checked
-                            setCardExclude(prev => ({ ...prev, [cat.id]: v }))
-                            localStorage.setItem(`worldcup:exclude:${cat.id}`, String(v))
-                          }} className="accent-blue-500" />
-                          <span className="text-xs text-gray-300">제외</span>
-                        </label>
-                      )}
-                    </div>
-                    {/* 버튼 행 */}
-                    <div className="flex gap-1">
-                      <button onClick={() => handleStartRequest(cat.id, curRound, excl)} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1.5 rounded transition">시작하기</button>
-                      <button onClick={() => { setSelCatId(cat.id); setRankPage(0); setSubView('rankings') }} className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1.5 rounded transition">순위보기</button>
-                      <button onClick={e => { e.stopPropagation(); setSelCatId(cat.id); worldcupApi.categoryStats(cat.id).then(d => { setCatStats(d); setStatsModal(true) }) }} className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1.5 rounded transition">통계보기</button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+  const update = (fn: (s: RankingSettings) => RankingSettings) => {
+    setSettings(prev => {
+      const s = prev[tab]
+      if (!s) return prev
+      return { ...prev, [tab]: fn(s) }
+    })
+  }
+
+  const setWeight = (key: 'divisionWeights' | 'opponentWeights', idx: number, val: number) => {
+    update(s => {
+      const arr = [...s[key]]
+      arr[idx] = val
+      return { ...s, [key]: arr }
+    })
+  }
+
+  const setBonus = (pool: string, rank: string, val: number) => {
+    update(s => ({
+      ...s,
+      rankBonus: {
+        ...s.rankBonus,
+        [pool]: { ...s.rankBonus[pool], [rank]: val }
+      }
+    }))
+  }
+
+  const handleSave = async () => {
+    const s = settings[tab]
+    if (!s) return
+    setSaving(true)
+    setErrorMsg('')
+    try {
+      await rankingSettingsApi.update(tab, s)
+      onClose()
+    } catch (e) {
+      setErrorMsg((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const tabBtn = (t: 'actor' | 'work') => (
+    <button
+      onClick={() => setTab(t)}
+      className={`px-4 py-1.5 rounded text-sm font-medium transition ${tab === t ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+    >
+      {t === 'actor' ? '배우' : '작품'}
+    </button>
+  )
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700 shrink-0">
+          <h2 className="text-white font-bold text-base">랭킹 설정</h2>
+          <div className="flex gap-2">
+            {tabBtn('actor')}
+            {tabBtn('work')}
           </div>
         </div>
-      )}
 
-      {/* ── 게임 뷰 ── */}
-      {subView === 'game' && (
-        cur ? (
-          <div className="flex flex-col h-full">
-            {/* 헤더 */}
-            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-700 shrink-0">
-              <button onClick={() => setSubView('home')} className="text-gray-400 hover:text-white text-sm">← 홈</button>
-              <p className="text-white font-bold">{bracketLabel} — {matchNumber}/{totalMatchCount}경기</p>
-              <div className="w-16" />
-            </div>
+        {!cur ? (
+          <div className="flex-1 flex items-center justify-center text-gray-500">로딩 중...</div>
+        ) : (
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
 
-            {/* 카드 영역 */}
-            {cur.item2_id === null ? (
-              /* 부전승 — 카드 1장 가운데 */
-              <div className={`flex-1 flex flex-col justify-center items-center gap-3 p-6 min-h-0 transition-opacity duration-500 ${cardsVisible ? 'opacity-100' : 'opacity-0'}`}>
-                <p className="text-gray-400 text-sm">부전승 — 클릭하여 다음 라운드로 진출</p>
-                <div className={`w-[40%] overflow-hidden ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${
-                  picking?.fadeOut ? 'opacity-0' : 'opacity-100'
-                }`}>
-                  <GameCard
-                    itemId={cur.item1_id}
-                    type={selCategory?.type ?? 'actor'}
-                    categoryId={selCatId ?? 0}
-                    onPick={() => handleCardPick(cur.id, cur.item1_id, null)}
-                    onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item1_id) : onNavigateToWork(cur.item1_id)}
-                    onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item1_id, x: e.clientX, y: e.clientY })}
-                    onMouseLeave={() => setTooltip(null)}
-                    disabled={!!picking}
-                  />
-                </div>
+            {/* 기본 승점 */}
+            <section>
+              <h3 className="text-gray-300 font-semibold text-sm mb-3">기본 승점</h3>
+              <div className="flex gap-6">
+                {(['win', 'draw', 'loss'] as const).map(k => (
+                  <div key={k} className="flex flex-col items-center gap-1">
+                    <label className="text-xs text-gray-400">{k === 'win' ? '승' : k === 'draw' ? '무' : '패'}</label>
+                    <NumInput
+                      value={cur.basePoints[k]}
+                      onChange={v => update(s => ({ ...s, basePoints: { ...s.basePoints, [k]: v } }))}
+                    />
+                  </div>
+                ))}
               </div>
-            ) : (
-              /* 일반 매치 — 카드 2장 */
-              <div className={`flex-1 flex justify-center items-center gap-4 p-6 min-h-0 transition-opacity duration-500 ${cardsVisible ? 'opacity-100' : 'opacity-0'}`}>
-                {/* 카드 1 */}
-                <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${
-                  picking?.loserId === cur.item1_id ? 'w-0 opacity-0'
-                  : picking?.fadeOut && picking?.winnerId === cur.item1_id ? 'w-[40%] opacity-0'
-                  : 'w-[40%] opacity-100'
-                }`}>
-                  <GameCard
-                    itemId={cur.item1_id}
-                    type={selCategory?.type ?? 'actor'}
-                    categoryId={selCatId ?? 0}
-                    onPick={() => handleCardPick(cur.id, cur.item1_id, cur.item2_id)}
-                    onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item1_id) : onNavigateToWork(cur.item1_id)}
-                    onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item1_id, x: e.clientX, y: e.clientY })}
-                    onMouseLeave={() => setTooltip(null)}
-                    disabled={!!picking}
-                  />
-                </div>
+            </section>
 
-                {/* VS */}
-                <div className={`flex items-center justify-center shrink-0 overflow-hidden ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${picking ? 'w-0 opacity-0' : 'w-10 opacity-100'}`}>
-                  <span className="text-gray-500 font-bold text-xl">VS</span>
-                </div>
-
-                {/* 카드 2 */}
-                <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-500' : 'transition-none'} ${
-                  picking?.loserId === cur.item2_id ? 'w-0 opacity-0'
-                  : picking?.fadeOut && picking?.winnerId === cur.item2_id ? 'w-[40%] opacity-0'
-                  : 'w-[40%] opacity-100'
-                }`}>
-                  <GameCard
-                    itemId={cur.item2_id}
-                    type={selCategory?.type ?? 'actor'}
-                    categoryId={selCatId ?? 0}
-                    onPick={() => handleCardPick(cur.id, cur.item2_id!, cur.item1_id)}
-                    onNavigate={() => selCategory?.type === 'actor' ? onNavigateToActor(cur.item2_id!) : onNavigateToWork(cur.item2_id!)}
-                    onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: cur.item2_id!, x: e.clientX, y: e.clientY })}
-                    onMouseLeave={() => setTooltip(null)}
-                    disabled={!!picking}
-                  />
-                </div>
+            {/* 부별 가중치 */}
+            <section>
+              <h3 className="text-gray-300 font-semibold text-sm mb-1">부별 가중치 <span className="text-gray-500 font-normal text-xs">(부별 대회: 자기 부 기준)</span></h3>
+              <div className="flex gap-3 flex-wrap mt-2">
+                {DIV_LABELS.map((label, i) => (
+                  <div key={i} className="flex flex-col items-center gap-1">
+                    <label className="text-xs text-gray-400">{label}</label>
+                    <NumInput
+                      value={cur.divisionWeights[i] ?? 0}
+                      onChange={v => setWeight('divisionWeights', i, v)}
+                      step={0.5}
+                    />
+                  </div>
+                ))}
               </div>
+            </section>
+
+            {/* 섞인 대회 가중치 */}
+            <section>
+              <h3 className="text-gray-300 font-semibold text-sm mb-1">섞인 대회 가중치 <span className="text-gray-500 font-normal text-xs">(복수 부: 상대방 부 기준)</span></h3>
+              <div className="flex gap-3 flex-wrap mt-2">
+                {DIV_LABELS.map((label, i) => (
+                  <div key={i} className="flex flex-col items-center gap-1">
+                    <label className="text-xs text-gray-400">{label}</label>
+                    <NumInput
+                      value={cur.opponentWeights[i] ?? 0}
+                      onChange={v => setWeight('opponentWeights', i, v)}
+                      step={0.5}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* 순위 보너스 */}
+            <section>
+              <h3 className="text-gray-300 font-semibold text-sm mb-3">순위 보너스</h3>
+              <div className="overflow-x-auto">
+                <table className="text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-gray-400 text-xs text-left pr-4 pb-2 font-normal">순위 \ 참가수</th>
+                      {POOL_SIZES.map(p => (
+                        <th key={p} className="text-gray-400 text-xs text-center px-2 pb-2 font-normal">{p}강</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {RANK_THRESHOLDS.map(rank => (
+                      <tr key={rank}>
+                        <td className="text-gray-400 text-xs pr-4 py-1">{rank}위 이내</td>
+                        {POOL_SIZES.map(pool => {
+                          const poolNum = parseInt(pool)
+                          const rankNum = parseInt(rank)
+                          const disabled = rankNum >= poolNum
+                          return (
+                            <td key={pool} className="px-2 py-1 text-center">
+                              {disabled ? (
+                                <span className="text-gray-700 text-xs">-</span>
+                              ) : (
+                                <NumInput
+                                  value={cur.rankBonus[pool]?.[rank] ?? 0}
+                                  onChange={v => setBonus(pool, rank, v)}
+                                  className="w-14"
+                                />
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* 푸터 */}
+        <div className="px-5 py-4 border-t border-gray-700 shrink-0">
+          {errorMsg && <p className="text-red-400 text-xs mb-2">{errorMsg}</p>}
+          <div className="flex gap-2 justify-end">
+            <button onClick={onClose} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">취소</button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !cur}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded text-sm font-semibold"
+            >
+              {saving ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── TournamentRankingsView ─────────────────────────────────────────────────
+const RANK_PAGE_SIZE = 50
+const RANK_LIMIT_OPTIONS = [25, 50, 100]
+
+function TournamentRankingsView({
+  tournamentId,
+  onBack,
+  onNavigateToActor,
+  onNavigateToWork,
+}: {
+  tournamentId: number
+  onBack: () => void
+  onNavigateToActor: (id: number) => void
+  onNavigateToWork: (id: number) => void
+}) {
+  const [tournament, setTournament] = useState<CupTournament | null>(null)
+  const [rankMode, setRankMode] = useState<'overall' | 'last'>('overall')
+  const [rows, setRows] = useState<TournamentRankRow[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const [limit, setLimit] = useState(() => Number(localStorage.getItem('tournamentRank:limit') || '50'))
+  const [sortBy, setSortBy] = useState('win_rate')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [search, setSearch] = useState('')
+  const [lastRows, setLastRows] = useState<LastRunRankRow[]>([])
+  const [lastTotal, setLastTotal] = useState(0)
+  const [lastPage, setLastPage] = useState(0)
+  const [lastFormat, setLastFormat] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    cupApi.list({ sortBy: 'created_at' }).then(list => {
+      const found = (list as CupTournament[]).find(t => t.id === tournamentId)
+      if (found) setTournament(found)
+    })
+  }, [tournamentId])
+
+  const loadOverall = useCallback(async (p: number, lb: number, sb: string, sd: string, s: string) => {
+    setLoading(true)
+    try {
+      const res = await cupApi.tournamentRankings(tournamentId, { limit: lb, offset: p * lb, sortBy: sb, sortDir: sd, search: s || undefined })
+      setRows(res.rows as TournamentRankRow[])
+      setTotal(res.total)
+    } finally {
+      setLoading(false)
+    }
+  }, [tournamentId])
+
+  const loadLast = useCallback(async (p: number, lb: number) => {
+    setLoading(true)
+    try {
+      const res = await cupApi.lastRunRankings(tournamentId, { limit: lb, offset: p * lb })
+      setLastRows(res.rows as LastRunRankRow[])
+      setLastTotal(res.total)
+      if (res.format) setLastFormat(res.format)
+    } finally {
+      setLoading(false)
+    }
+  }, [tournamentId])
+
+  useEffect(() => { setPage(0) }, [sortBy, sortDir, search, limit])
+  useEffect(() => { if (rankMode === 'overall') loadOverall(page, limit, sortBy, sortDir, search) }, [rankMode, page, limit, sortBy, sortDir, search, loadOverall])
+  useEffect(() => { if (rankMode === 'last') loadLast(lastPage, limit) }, [rankMode, lastPage, limit, loadLast])
+
+  const totalPages = Math.ceil(total / limit)
+  const lastTotalPages = Math.ceil(lastTotal / limit)
+  const type = tournament?.type ?? 'actor'
+
+  const imgPath = (row: TournamentRankRow | LastRunRankRow) =>
+    (row as TournamentRankRow).photo_path ?? (row as TournamentRankRow).cover_path ?? null
+  const label = (row: TournamentRankRow | LastRunRankRow) =>
+    (row as any).name ?? (row as any).title ?? (row as any).product_number ?? `#${(row as any).item_id}`
+
+  const sortTh = (col: string, colLabel: string, sub?: string) => {
+    const active = sortBy === col
+    const nextDir: 'asc' | 'desc' = active ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
+    return (
+      <th
+        className={`px-2 text-right cursor-pointer select-none hover:text-white whitespace-nowrap ${active ? 'text-white' : 'text-gray-400'}`}
+        onClick={() => { setSortBy(col); setSortDir(nextDir) }}
+      >
+        <div className="text-xs">{colLabel}{active ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</div>
+        {sub && <div className="text-[10px] text-gray-500 font-normal">{sub}</div>}
+      </th>
+    )
+  }
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* 상단 바 */}
+      <div className="shrink-0 px-4 py-3 border-b border-gray-700">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={onBack} className="text-gray-400 hover:text-white text-sm transition">← 목록</button>
+          <h2 className="text-white font-bold truncate">{tournament?.name ?? '...'} 순위</h2>
+          <span className="text-gray-500 text-xs">
+            ({rankMode === 'overall' ? total : lastTotal}{type === 'work' ? '작품' : '명'})
+          </span>
+
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            {rankMode === 'overall' && (
+              <input
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(0) }}
+                placeholder={type === 'actor' ? '이름 검색' : '제목/품번 검색'}
+                className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-36 placeholder-gray-500 outline-none"
+              />
             )}
+            <select
+              value={limit}
+              onChange={e => { const v = Number(e.target.value); setLimit(v); localStorage.setItem('tournamentRank:limit', String(v)); setPage(0); setLastPage(0) }}
+              className="bg-gray-700 text-white text-xs px-2 py-1 rounded"
+            >
+              {RANK_LIMIT_OPTIONS.map(l => <option key={l} value={l}>{l}개</option>)}
+            </select>
+            <div className="flex">
+              <button
+                onClick={() => { setRankMode('overall'); setPage(0) }}
+                className={`text-sm px-3 py-1.5 rounded-l border-r border-gray-600 ${rankMode === 'overall' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >전체 순위</button>
+              <button
+                onClick={() => { setRankMode('last'); setLastPage(0) }}
+                className={`text-sm px-3 py-1.5 rounded-r ${rankMode === 'last' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >마지막 순위</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 본문 */}
+      <div className="flex-1 overflow-y-auto">
+        {loading && rows.length === 0 && lastRows.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-gray-500">로딩 중...</div>
+        ) : rankMode === 'overall' ? (
+          rows.length === 0 ? (
+            <p className="text-gray-500 text-sm mt-8 text-center">순위 데이터가 없습니다.<br />대회를 완료하면 순위가 집계됩니다.</p>
+          ) : (
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col style={{ width: '3rem' }} />
+                <col style={{ width: '4rem' }} />
+                {type === 'work' && <col style={{ width: '7rem' }} />}
+                <col />
+                <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '5rem' }} />
+                <col style={{ width: '5rem' }} />
+                <col style={{ width: '6rem' }} />
+              </colgroup>
+              <thead className="sticky top-0 bg-gray-900 z-10">
+                <tr className="text-gray-400 text-xs border-b border-gray-700 h-12">
+                  <th className="px-2 text-left">#</th>
+                  <th className="px-2 text-left">썸네일</th>
+                  {type === 'work' && <th className="px-2 text-left text-xs">품번</th>}
+                  <th className="px-2 text-left">{type === 'work' ? '제목' : '이름'}</th>
+                  {sortTh('win_rate', '우승률', '(우승/참가)')}
+                  {sortTh('match_win_rate', '매치승률', '(승/경기)')}
+                  {sortTh('run_wins', '우승수')}
+                  {sortTh('total_runs', '참가수')}
+                  {sortTh('total_pts', '누적승점')}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, idx) => {
+                  const img = imgPath(row)
+                  const lbl = label(row)
+                  return (
+                    <tr key={row.item_id} className="border-b border-gray-800 hover:bg-gray-800 h-14">
+                      <td className="px-2 text-gray-400 text-xs text-center">{page * limit + idx + 1}</td>
+                      <td className="p-0 h-14">
+                        <ImagePreview path={img} alt={lbl} className="w-full h-14 object-cover" objectPosition="center 10%" />
+                      </td>
+                      {type === 'work' && (
+                        <td className="px-2 overflow-hidden">
+                          <div className="truncate text-gray-400 text-xs">{row.product_number}</div>
+                        </td>
+                      )}
+                      <td className="px-2 overflow-hidden">
+                        <span
+                          className="text-white font-medium hover:underline cursor-pointer truncate block"
+                          onClick={() => type === 'actor' ? onNavigateToActor(row.item_id) : onNavigateToWork(row.item_id)}
+                        >{lbl}</span>
+                      </td>
+                      <td className="px-2 text-right text-yellow-400">
+                        <div>{row.win_rate.toFixed(1)}%</div>
+                        <div className="text-[11px] text-gray-500">({row.run_wins}/{row.total_runs})</div>
+                      </td>
+                      <td className="px-2 text-right text-blue-400">
+                        <div>{row.match_win_rate.toFixed(1)}%</div>
+                        <div className="text-[11px] text-gray-500">({row.match_wins}/{row.total_matches})</div>
+                      </td>
+                      <td className="px-2 text-right text-white">{row.run_wins}</td>
+                      <td className="px-2 text-right text-gray-400">{row.total_runs}</td>
+                      <td className="px-2 text-right text-green-400">{row.total_pts > 0 ? row.total_pts.toFixed(1) : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )
+        ) : (
+          lastRows.length === 0 ? (
+            <p className="text-gray-500 text-sm mt-8 text-center">마지막 순위 데이터가 없습니다.</p>
+          ) : (
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col style={{ width: '3rem' }} />
+                <col style={{ width: '4rem' }} />
+                {type === 'work' && <col style={{ width: '7rem' }} />}
+                <col />
+                <col style={{ width: '7rem' }} />
+              </colgroup>
+              <thead className="sticky top-0 bg-gray-900 z-10">
+                <tr className="text-gray-400 text-xs border-b border-gray-700 h-12">
+                  <th className="px-2 text-left">#</th>
+                  <th className="px-2 text-left">썸네일</th>
+                  {type === 'work' && <th className="px-2 text-left text-xs">품번</th>}
+                  <th className="px-2 text-left">{type === 'work' ? '제목' : '이름'}</th>
+                  <th className="px-2 text-left text-xs">
+                    {lastFormat === 'league' ? '최종점수' : '탈락라운드'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lastRows.map(row => {
+                  const img = imgPath(row)
+                  const lbl = label(row)
+                  return (
+                    <tr key={row.item_id} className="border-b border-gray-800 hover:bg-gray-800 h-14">
+                      <td className="px-2 text-gray-400 font-bold text-center">{row.rank}</td>
+                      <td className="p-0 h-14">
+                        <ImagePreview path={img} alt={lbl} className="w-full h-14 object-cover" objectPosition="center 10%" />
+                      </td>
+                      {type === 'work' && (
+                        <td className="px-2 overflow-hidden">
+                          <div className="truncate text-gray-400 text-xs">{row.product_number}</div>
+                        </td>
+                      )}
+                      <td className="px-2 overflow-hidden">
+                        <span
+                          className="text-white font-medium hover:underline cursor-pointer truncate block"
+                          onClick={() => type === 'actor' ? onNavigateToActor(row.item_id) : onNavigateToWork(row.item_id)}
+                        >{lbl}</span>
+                      </td>
+                      <td className="px-2 text-gray-300 text-xs">
+                        {lastFormat === 'league'
+                          ? <span className="text-blue-400 font-semibold">{row.pts}pt</span>
+                          : row.elim_round === null
+                            ? <span className="text-yellow-400 font-semibold">🏆 우승</span>
+                            : roundLabel(row.elim_round)
+                        }
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )
+        )}
+      </div>
+
+      {/* 페이지네이션 */}
+      {rankMode === 'overall' && totalPages > 1 && (
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+      )}
+      {rankMode === 'last' && lastTotalPages > 1 && (
+        <Pagination page={lastPage} totalPages={lastTotalPages} onPageChange={setLastPage} />
+      )}
+    </div>
+  )
+}
+
+// ── MasterRankingView ──────────────────────────────────────────────────────
+type MasterRankRow = {
+  rank: number
+  id: number
+  name?: string
+  photo_path?: string | null
+  title?: string | null
+  product_number?: string | null
+  cover_path?: string | null
+  total_points: number
+  total_cups: number
+  cup_wins: number
+}
+
+const RANK_MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+const PAGE_SIZE = 50
+
+function MasterRankingView({
+  onBack,
+  onNavigateToActor,
+  onNavigateToWork,
+}: {
+  onBack: () => void
+  onNavigateToActor: (id: number) => void
+  onNavigateToWork: (id: number) => void
+}) {
+  const [type, setType] = useState<'actor' | 'work'>(() =>
+    (localStorage.getItem('masterRank:type') as 'actor' | 'work') || 'actor'
+  )
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
+  const [rows, setRows] = useState<MasterRankRow[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+
+  const load = useCallback(async (t: 'actor' | 'work', s: string, p: number) => {
+    setLoading(true)
+    try {
+      const data = await masterRankingApi.list({ type: t, limit: PAGE_SIZE, offset: p * PAGE_SIZE, search: s || undefined })
+      setRows(data.rows as MasterRankRow[])
+      setTotal(data.total)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { setPage(0) }, [type, search])
+  useEffect(() => { load(type, search, page) }, [type, search, page, load])
+  useEffect(() => { localStorage.setItem('masterRank:type', type) }, [type])
+
+  const imgPath = (row: MasterRankRow) => row.photo_path ?? row.cover_path ?? null
+  const label = (row: MasterRankRow) => row.name ?? row.title ?? row.product_number ?? `#${row.id}`
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* 상단 */}
+      <div className="p-4 shrink-0">
+        <div className="flex items-center gap-2">
+          {/* 뒤로 + 타이틀 */}
+          <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
+            <button onClick={onBack} className="text-gray-400 hover:text-white text-sm transition">← 목록</button>
+            <span className="text-gray-600 text-xs">|</span>
+            <span className="text-yellow-400 font-semibold text-sm">★ 마스터 랭킹</span>
+          </div>
+
+          {/* 유형 토글 */}
+          <div className="flex items-center gap-1 bg-gray-800 rounded-lg px-2 py-1">
+            {(['actor', 'work'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                className={`px-3 py-1 rounded text-xs font-medium transition ${type === t ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              >
+                {t === 'actor' ? '배우' : '작품'}
+              </button>
+            ))}
+          </div>
+
+          {/* 검색 */}
+          <div className="flex-1 flex items-center bg-gray-800 rounded-lg px-3 py-1.5">
+            <input
+              className="flex-1 bg-transparent text-white text-sm outline-none placeholder-gray-500"
+              placeholder={type === 'actor' ? '배우명 검색' : '작품명 / 품번 검색'}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="text-gray-500 hover:text-gray-300 text-xs ml-2">✕</button>
+            )}
+          </div>
+
+          {/* 설정 */}
+          <div className="bg-gray-800 rounded-lg px-3 py-1.5">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-gray-400 hover:text-gray-200 text-sm transition"
+            >
+              ⚙ 설정
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {showSettings && <RankingSettingsModal onClose={() => setShowSettings(false)} />}
+
+      {/* 랭킹 테이블 */}
+      <div className="flex-1 overflow-y-auto">
+        {loading && rows.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-gray-500">로딩 중...</div>
+        ) : rows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-32 text-gray-500">
+            <p>아직 마스터 랭킹 데이터가 없습니다.</p>
+            <p className="text-sm mt-1">마스터 대회를 완료하면 자동으로 집계됩니다.</p>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-400">매치를 불러오는 중...</p>
-          </div>
-        )
-      )}
-
-      {/* ── 결과 뷰 ── */}
-      {subView === 'result' && (
-        <div className="flex flex-col items-center justify-center h-full gap-6 px-8">
-          <p className="text-yellow-400 font-bold text-xl">🏆 우승!</p>
-          {winnerInfo && (
-            <>
-              <div className="cursor-pointer" onClick={() => selCategory?.type === 'actor' ? onNavigateToActor(winnerInfo.id) : onNavigateToWork(winnerInfo.id)}>
-                <ImagePreview
-                  path={winnerInfo.imgPath}
-                  alt={winnerInfo.label}
-                  className={`h-64 rounded-xl border-2 border-yellow-500 ${selCategory?.type === 'actor' ? 'w-64' : 'w-[379px]'}`}
-                  objectPosition="center 10%"
-                />
-              </div>
-              <p className="text-white font-bold text-lg">{winnerInfo.label}</p>
-              <div className="w-full max-w-md flex flex-col gap-2">
-                <p className="text-gray-400 text-sm">코멘트 편집</p>
-                <textarea
-                  value={commentDraft}
-                  onChange={e => { setCommentDraft(e.target.value); setCommentSaved(false) }}
-                  rows={4}
-                  className="bg-gray-800 text-white text-sm rounded-lg border border-gray-600 p-3 resize-none focus:outline-none focus:border-blue-500"
-                />
-                <button onClick={handleSaveComment} className="self-end bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-1.5 rounded">
-                  {commentSaved ? '저장됨 ✓' : '저장'}
-                </button>
-              </div>
-            </>
-          )}
-          <div className="flex gap-3">
-            <button onClick={() => setSubView('home')} className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-5 py-2 rounded-lg">홈으로</button>
-            <button onClick={() => { setRankMode('last'); setRankPage(0); setSubView('rankings') }} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-5 py-2 rounded-lg">순위 보기</button>
-          </div>
-        </div>
-      )}
-
-      {/* ── 순위 뷰 ── */}
-      {subView === 'rankings' && (
-        <div className="flex flex-col h-full">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-700 shrink-0">
-            <button onClick={() => setSubView('home')} className="text-gray-400 hover:text-white text-sm">← 홈</button>
-            <h2 className="text-white font-bold">{selCategory?.name} 순위</h2>
-            <span className="text-gray-500 text-xs">
-              ({rankMode === 'overall' ? rankTotal : lastRankTotal}{selCategory?.type === 'work' ? '작품' : '명'})
-            </span>
-            <div className="ml-auto flex items-center gap-2">
-              {rankMode === 'overall' && (
-                <input
-                  value={rankSearch}
-                  onChange={e => { setRankSearch(e.target.value); setRankPage(0) }}
-                  placeholder="이름/품번 검색"
-                  className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-36 placeholder-gray-500"
-                />
-              )}
-              <button
-                onClick={() => { if (selCatId) worldcupApi.categoryStats(selCatId).then(d => { setCatStats(d); setStatsModal(true) }) }}
-                className="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-3 py-1 rounded"
-              >통계</button>
-              <select
-                value={rankLimit}
-                onChange={e => { const v = Number(e.target.value); setRankLimit(v); localStorage.setItem('worldcup:rankLimit', String(v)); setRankPage(0); setLastRankPage(0) }}
-                className="bg-gray-700 text-white text-xs px-2 py-1 rounded"
-              >
-                {LIMIT_OPTIONS.map(l => <option key={l} value={l}>{l}개</option>)}
-              </select>
-              <div className="flex">
-                <button
-                  onClick={() => { setRankMode('overall'); setRankPage(0) }}
-                  className={`text-sm px-3 py-1.5 rounded-l border-r border-gray-600 ${rankMode === 'overall' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >전체 순위</button>
-                <button
-                  onClick={() => { setRankMode('last'); setLastRankPage(0) }}
-                  className={`text-sm px-3 py-1.5 rounded-r ${rankMode === 'last' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >마지막 순위</button>
-              </div>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto px-4 py-2">
-            {rankMode === 'overall' ? (
-              rankRows.length === 0 ? (
-                <p className="text-gray-500 text-sm mt-8 text-center">순위 데이터가 없습니다.<br />게임을 완료하면 순위가 집계됩니다.</p>
-              ) : (
-                <table className="w-full table-fixed text-sm">
-                  <colgroup>
-                    <col style={{ width: '3%' }} />
-                    <col style={{ width: '5%' }} />
-                    <col style={{ width: '7%' }} />
-                    {selCategory?.type === 'work' && <col style={{ width: '8%' }} />}
-                    <col />
-                    <col style={{ width: '8%' }} />
-                    <col style={{ width: '8%' }} />
-                    <col style={{ width: '7%' }} />
-                    <col style={{ width: '15%' }} />
-                  </colgroup>
-                  <thead>
-                    <tr className="text-gray-400 text-xs border-b border-gray-700">
-                      <th className="py-2 text-left">#</th>
-                      <th className="py-2 text-left">순위</th>
-                      <th className="py-2 text-left">썸네일</th>
-                      {selCategory?.type === 'work' && <th className="py-2 text-left">품번</th>}
-                      <th className="py-2 text-left">{selCategory?.type === 'work' ? '타이틀' : '이름'}</th>
-                      {(['win_rate', 'match_win_rate', 'adj_gap'] as const).map((col) => {
-                        const label = col === 'win_rate' ? '우승률' : col === 'match_win_rate' ? '승률' : '격차'
-                        const subtitle = col === 'win_rate' ? '(우승/세션)' : col === 'match_win_rate' ? '(승리/매치)' : null
-                        const active = rankSortBy === col
-                        const nextDir = active ? (rankSortDir === 'desc' ? 'asc' : 'desc') : 'desc'
-                        return (
-                          <th key={col} className={`py-2 text-right cursor-pointer select-none hover:text-white ${active ? 'text-white' : ''}`}
-                            onClick={() => { setRankSortBy(col); setRankSortDir(nextDir); setRankPage(0) }}
-                          >
-                            <div>{label}{active ? (rankSortDir === 'desc' ? ' ↓' : ' ↑') : ''}</div>
-                            {subtitle && <div className="text-[10px] text-gray-500 font-normal">{subtitle}</div>}
-                          </th>
-                        )
-                      })}
-                      <th className="py-2 text-center">순위추이</th>
+          <>
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-gray-900 z-10">
+                <tr className="border-b border-gray-700 text-gray-400 text-xs">
+                  <th className="px-4 py-2.5 text-left w-12">순위</th>
+                  <th className="px-4 py-2.5 text-left">이름</th>
+                  <th className="px-4 py-2.5 text-right">마스터 점수</th>
+                  <th className="px-4 py-2.5 text-right">대회 참가</th>
+                  <th className="px-4 py-2.5 text-right">우승</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const img = imgPath(row)
+                  const medal = RANK_MEDAL[row.rank]
+                  return (
+                    <tr
+                      key={row.id}
+                      className={`border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer transition ${row.rank <= 3 ? 'bg-yellow-950/10' : ''}`}
+                      onClick={() => type === 'actor' ? onNavigateToActor(row.id) : onNavigateToWork(row.id)}
+                    >
+                      <td className="px-4 py-2 text-center">
+                        {medal
+                          ? <span className="text-base">{medal}</span>
+                          : <span className="text-gray-400 text-xs">{row.rank}</span>
+                        }
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-10 rounded overflow-hidden bg-gray-700 shrink-0">
+                            {img
+                              ? <ImagePreview path={img} alt={label(row)} className="w-full h-full object-cover" />
+                              : <span className="flex items-center justify-center h-full text-gray-600 text-xs">?</span>
+                            }
+                          </div>
+                          <div>
+                            <p className="text-white font-medium leading-tight">{label(row)}</p>
+                            {row.product_number && row.title && (
+                              <p className="text-gray-500 text-xs">{row.product_number}</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <span className={`font-bold ${row.total_points > 0 ? 'text-yellow-400' : 'text-gray-600'}`}>
+                          {row.total_points.toFixed(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right text-gray-400">{row.total_cups}</td>
+                      <td className="px-4 py-2 text-right">
+                        <span className={row.cup_wins > 0 ? 'text-yellow-500 font-semibold' : 'text-gray-600'}>
+                          {row.cup_wins}
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {rankRows.map((row, index) => {
-                      const imgPath = selCategory?.type === 'actor' ? row.photo_path : row.cover_path
-                      const label   = selCategory?.type === 'actor' ? row.name : (row.title ?? row.product_number)
-                      const recentHistory = (rankHistories[row.id] ?? []).slice(-10)
-                      return (
-                        <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800 h-16">
-                          <td className="px-2 text-gray-500 text-xs">{rankPage * rankLimit + index + 1}</td>
-                          <td className="px-2 text-gray-300 font-bold text-sm">{row.rank}위</td>
-                          <td className="p-0"
-                            onMouseEnter={() => setRankImgPreview(imgPath ?? null)}
-                            onMouseLeave={() => setRankImgPreview(null)}
-                          >
-                            <ImagePreview path={imgPath ?? null} alt={label ?? ''} className="w-full h-16 object-cover" objectPosition="center 10%" />
-                          </td>
-                          {selCategory?.type === 'work' && (
-                            <td className="px-2 overflow-hidden">
-                              <div className="truncate text-gray-400 text-xs">{row.product_number}</div>
-                            </td>
-                          )}
-                          <td className="px-2 overflow-hidden">
-                            <div className="truncate">
-                              <span
-                                className="text-white font-medium hover:underline cursor-pointer"
-                                onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: row.id, x: e.clientX, y: e.clientY })}
-                                onMouseLeave={() => setTooltip(null)}
-                                onClick={() => selCategory?.type === 'actor' ? onNavigateToActor(row.id) : onNavigateToWork(row.id)}
-                              >{label}</span>
-                            </div>
-                          </td>
-                          <td className="px-2 text-right text-yellow-400">
-                            <div>{row.win_rate.toFixed(1)}%</div>
-                            <div className="text-[12px] text-gray-500">({row.session_wins}/{row.total_sessions})</div>
-                          </td>
-                          <td className="px-2 text-right text-blue-400">
-                            <div>{row.match_win_rate.toFixed(1)}%</div>
-                            <div className="text-[12px] text-gray-500">({row.match_wins}/{row.total_matches})</div>
-                          </td>
-                          <td className="px-2 text-right">
-                            <div className={row.adj_gap >= 0 ? 'text-green-400' : 'text-red-400'}>{row.adj_gap >= 0 ? '+' : ''}{row.adj_gap.toFixed(1)}%</div>
-                          </td>
-                          <td className="px-2 cursor-pointer" onClick={() => setTrendModal({ id: row.id, label: label ?? '', imgPath: imgPath ?? null })}>
-                            <div className="flex justify-center"><RankTrendChart history={recentHistory} /></div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              )
-            ) : (
-              lastRankRows.length === 0 ? (
-                <p className="text-gray-500 text-sm mt-8 text-center">마지막 순위 데이터가 없습니다.</p>
-              ) : (
-                <table className="w-full table-fixed text-sm">
-                  <colgroup>
-                    <col style={{ width: '5%' }} />
-                    <col style={{ width: '8%' }} />
-                    {selCategory?.type === 'work' && <col style={{ width: '10%' }} />}
-                    <col />
-                    <col style={{ width: '15%' }} />
-                  </colgroup>
-                  <thead>
-                    <tr className="text-gray-400 text-xs border-b border-gray-700">
-                      <th className="py-2 text-left">#</th>
-                      <th className="py-2 text-left">썸네일</th>
-                      {selCategory?.type === 'work' && <th className="py-2 text-left">품번</th>}
-                      <th className="py-2 text-left">{selCategory?.type === 'work' ? '타이틀' : '이름'}</th>
-                      <th className="py-2 text-left">라운드</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lastRankRows.map(row => {
-                      const imgPath = selCategory?.type === 'actor' ? row.photo_path : row.cover_path
-                      const label   = selCategory?.type === 'actor' ? row.name : (row.title ?? row.product_number)
-                      return (
-                        <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800 h-16">
-                          <td className="px-2 text-gray-400 font-bold">{row.rank}</td>
-                          <td className="p-0"
-                            onMouseEnter={() => setRankImgPreview(imgPath ?? null)}
-                            onMouseLeave={() => setRankImgPreview(null)}
-                          >
-                            <ImagePreview path={imgPath ?? null} alt={label ?? ''} className="w-full h-16 object-cover" objectPosition="center 10%" />
-                          </td>
-                          {selCategory?.type === 'work' && (
-                            <td className="px-2 overflow-hidden">
-                              <div className="truncate text-gray-400 text-xs">{row.product_number}</div>
-                            </td>
-                          )}
-                          <td className="px-2 overflow-hidden">
-                            <div className="truncate">
-                              <span
-                                className="text-white font-medium hover:underline cursor-pointer"
-                                onMouseMove={e => setTooltip({ type: selCategory?.type ?? 'actor', id: row.id, x: e.clientX, y: e.clientY })}
-                                onMouseLeave={() => setTooltip(null)}
-                                onClick={() => selCategory?.type === 'actor' ? onNavigateToActor(row.id) : onNavigateToWork(row.id)}
-                              >{label}</span>
-                            </div>
-                          </td>
-                          <td className="px-2 text-gray-400 text-xs">
-                            {row.elim_round === null ? '🏆 우승' : roundLabel(row.elim_round)}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              )
+                  )
+                })}
+              </tbody>
+            </table>
+
+            {/* 페이지네이션 */}
+            {Math.ceil(total / PAGE_SIZE) > 1 && (
+              <Pagination page={page} totalPages={Math.ceil(total / PAGE_SIZE)} onPageChange={setPage} />
             )}
-          </div>
-          {rankMode === 'overall' && totalPages > 1 && (
-            <Pagination page={rankPage} totalPages={totalPages} onPageChange={setRankPage} />
-          )}
-          {rankMode === 'last' && Math.ceil(lastRankTotal / rankLimit) > 1 && (
-            <Pagination page={lastRankPage} totalPages={Math.ceil(lastRankTotal / rankLimit)} onPageChange={setLastRankPage} />
-          )}
-        </div>
-      )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
 
-      {/* ── 확인 모달 ── */}
-      {confirmExisting && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-80 border border-gray-700">
-            <p className="text-white font-bold mb-4">진행하던 월드컵이 있습니다 이어 하시겠습니까?</p>
-            <div className="flex gap-2">
-              <button onClick={handleContinue} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 rounded">예</button>
-              <button onClick={handleNewStart} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded">아니오</button>
-            </div>
-          </div>
-        </div>
-      )}
+// ── Main Component ─────────────────────────────────────────────────────────
+export default function Worldcup({
+  onNavigateToActor,
+  onNavigateToWork,
+}: {
+  onNavigateToActor: (id: number) => void
+  onNavigateToWork: (id: number) => void
+}) {
+  const [view, setView] = useState<'list' | 'play' | 'ranking' | 'tournament-rankings'>('list')
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<number | undefined>(undefined)
+  const [selectedTab, setSelectedTab] = useState<'match' | 'standings'>('match')
+  const [selectedRankId, setSelectedRankId] = useState<number | null>(null)
+  const [tournaments, setTournaments] = useState<CupTournament[]>([])
+  const [typeFilter, setTypeFilter] = useState<'all' | 'actor' | 'work'>(() => (localStorage.getItem('cup:typeFilter') as 'all' | 'actor' | 'work') || 'all')
+  const [formatFilter, setFormatFilter] = useState<'all' | 'tournament' | 'league' | 'worldcup'>(() => (localStorage.getItem('cup:formatFilter') as 'all' | 'tournament' | 'league' | 'worldcup') || 'all')
+  const [masterFilter, setMasterFilter] = useState<'all' | 'master' | 'normal'>(() => (localStorage.getItem('cup:masterFilter') as 'all' | 'master' | 'normal') || 'all')
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'created_at' | 'name'>(() => (localStorage.getItem('cup:sortBy') as 'created_at' | 'name') || 'created_at')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('cup:sortDir') as 'asc' | 'desc') || 'desc')
+  const [showCreate, setShowCreate] = useState(false)
 
-      {/* ── 월드컵 수정 모달 ── */}
-      {editCat && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-80 border border-gray-700 flex flex-col gap-4">
-            <p className="text-white font-bold">월드컵 수정</p>
-            <input
-              type="text"
-              value={editName}
-              onChange={e => setEditName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleUpdateCategory() }}
-              autoFocus
-              className="bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <div className="flex gap-2">
-              <button onClick={handleUpdateCategory} disabled={!editName.trim()} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm py-2 rounded">저장</button>
-              <button onClick={() => setEditCat(null)} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded">취소</button>
-            </div>
-          </div>
-        </div>
-      )}
+  const loadList = useCallback(async () => {
+    const params: Record<string, unknown> = { sortBy, sortDir }
+    if (typeFilter !== 'all') params.type = typeFilter
+    if (formatFilter !== 'all') params.format = formatFilter
+    if (masterFilter === 'master') params.isMaster = true
+    if (masterFilter === 'normal') params.isMaster = false
+    if (search) params.search = search
+    const list = await cupApi.list(params) as CupTournament[]
+    setTournaments(list)
+  }, [typeFilter, formatFilter, masterFilter, search, sortBy, sortDir])
 
-      {/* ── 월드컵 삭제 확인 모달 ── */}
-      {deleteCat && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-80 border border-gray-700 flex flex-col gap-4">
-            <p className="text-white font-bold">월드컵 삭제</p>
-            <p className="text-gray-400 text-sm">
-              <span className="text-white">"{deleteCat.name}"</span>과 모든 기록(세션, 순위 등)이 삭제됩니다.
-            </p>
-            <div className="flex gap-2">
-              <button onClick={handleDeleteCategory} className="flex-1 bg-red-700 hover:bg-red-600 text-white text-sm py-2 rounded">삭제</button>
-              <button onClick={() => setDeleteCat(null)} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded">취소</button>
-            </div>
-          </div>
-        </div>
-      )}
+  useEffect(() => { loadList() }, [loadList])
 
-      {/* ── 월드컵 추가 모달 ── */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-80 border border-gray-700 flex flex-col gap-4">
-            <p className="text-white font-bold">월드컵 추가</p>
-            <input
-              type="text"
-              value={addName}
-              onChange={e => setAddName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddCategory() }}
-              placeholder="월드컵 이름"
-              autoFocus
-              className="bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <div className="flex gap-2">
-              {(['actor', 'work'] as const).map((v, i) => (
-                <button
-                  key={v}
-                  onClick={() => { setAddType(v); setAddFilter(null) }}
-                  className={`flex-1 text-sm py-1.5 rounded ${i === 0 ? 'rounded-l' : 'rounded-r'} ${addType === v ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  {v === 'actor' ? '배우' : '작품'}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowAddFilter(true)}
-              className={`flex items-center justify-between text-sm px-3 py-2 rounded border ${countActiveFilters(addFilter) > 0 ? 'border-blue-500 text-blue-400 bg-blue-500/10' : 'border-gray-600 text-gray-400 bg-gray-700 hover:bg-gray-600'}`}
+  useEffect(() => { localStorage.setItem('cup:typeFilter', typeFilter) }, [typeFilter])
+  useEffect(() => { localStorage.setItem('cup:formatFilter', formatFilter) }, [formatFilter])
+  useEffect(() => { localStorage.setItem('cup:masterFilter', masterFilter) }, [masterFilter])
+  useEffect(() => { localStorage.setItem('cup:sortBy', sortBy) }, [sortBy])
+  useEffect(() => { localStorage.setItem('cup:sortDir', sortDir) }, [sortDir])
+
+  const handleDelete = async (id: number) => {
+    await cupApi.delete(id)
+    loadList()
+  }
+
+  const handlePlay = (id: number, runId?: number, tab: 'match' | 'standings' = 'match') => {
+    setSelectedId(id)
+    setSelectedRunId(runId)
+    setSelectedTab(tab)
+    setView('play')
+  }
+
+  const handleRankings = (id: number) => {
+    setSelectedRankId(id)
+    setView('tournament-rankings')
+  }
+
+  if (view === 'play' && selectedId !== null) {
+    return (
+      <PlayView
+        tournamentId={selectedId}
+        runId={selectedRunId}
+        initialTab={selectedTab}
+        onBack={() => { setView('list'); loadList() }}
+        onNavigateToActor={onNavigateToActor}
+        onNavigateToWork={onNavigateToWork}
+      />
+    )
+  }
+
+  if (view === 'ranking') {
+    return (
+      <MasterRankingView
+        onBack={() => setView('list')}
+        onNavigateToActor={onNavigateToActor}
+        onNavigateToWork={onNavigateToWork}
+      />
+    )
+  }
+
+  if (view === 'tournament-rankings' && selectedRankId !== null) {
+    return (
+      <TournamentRankingsView
+        tournamentId={selectedRankId}
+        onBack={() => { setView('list'); loadList() }}
+        onNavigateToActor={onNavigateToActor}
+        onNavigateToWork={onNavigateToWork}
+      />
+    )
+  }
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* 상단 바 */}
+      <div className="p-4 shrink-0">
+        <div className="flex items-center">
+          {/* 정렬박스 */}
+          <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
+            <select
+              value={sortBy}
+              onChange={e => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('cup:sortBy', v) }}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
             >
-              <span>필터 설정</span>
-              {countActiveFilters(addFilter) > 0
-                ? <span className="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded-full">{countActiveFilters(addFilter)}</span>
-                : <span className="text-xs text-gray-500">없음</span>
-              }
+              <option value="created_at">등록순</option>
+              <option value="name">대회명</option>
+            </select>
+            <button
+              onClick={() => { const next = sortDir === 'asc' ? 'desc' : 'asc'; setSortDir(next); localStorage.setItem('cup:sortDir', next) }}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-2 py-1.5 rounded"
+            >
+              {sortDir === 'asc' ? '↑' : '↓'}
             </button>
-            <div className="flex gap-2">
-              <button onClick={handleAddCategory} disabled={!addName.trim()} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm py-2 rounded">추가</button>
-              <button onClick={() => setShowAddModal(false)} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded">취소</button>
-            </div>
+          </div>
+
+          {/* 검색박스 */}
+          <div className="w-[38rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <input
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0 outline-none placeholder-gray-500"
+              placeholder="대회명 검색"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value as 'all' | 'actor' | 'work')}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-26"
+            >
+              <option value="all">배우+작품</option>
+              <option value="actor">배우</option>
+              <option value="work">작품</option>
+            </select>
+            <select
+              value={formatFilter}
+              onChange={e => setFormatFilter(e.target.value as 'all' | 'tournament' | 'league' | 'worldcup')}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-26"
+            >
+              <option value="all">대회 전체</option>
+              <option value="tournament">토너먼트</option>
+              <option value="league">리그전</option>
+              <option value="worldcup">월드컵</option>
+            </select>
+            <select
+              value={masterFilter}
+              onChange={e => setMasterFilter(e.target.value as 'all' | 'master' | 'normal')}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-30"
+            >
+              <option value="all">마스터+일반</option>
+              <option value="master">마스터</option>
+              <option value="normal">일반</option>
+            </select>
+            <button
+              onClick={() => { setSearch(''); setTypeFilter('all'); setFormatFilter('all'); setMasterFilter('all') }}
+              className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"
+            >
+              초기화
+            </button>
+          </div>
+
+          {/* 액션 그룹 */}
+          <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
+            <button
+              onClick={() => setShowCreate(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
+            >
+              + 대회 등록
+            </button>
+            <button
+              onClick={() => setView('ranking')}
+              className="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1.5 rounded text-sm"
+            >
+              ★ 마스터 랭킹
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* ── 순위 썸네일 중앙 프리뷰 ── */}
-      {rankImgPreview && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-40">
-          <ImagePreview path={rankImgPreview} alt="" className="max-h-[70vh] w-auto rounded-xl shadow-2xl border border-gray-600" objectPosition="center 10%" />
-        </div>
-      )}
-
-      {/* ── 전체 추이 모달 ── */}
-      {trendModal && (() => {
-        const history = rankHistories[trendModal.id] ?? []
-        const W = 420, H = 180, PX = 36, PY = 16
-        const ranks = history.map(h => h.rank)
-        const minR = ranks.length ? Math.min(...ranks) : 1
-        const maxR = ranks.length ? Math.max(...ranks) : 1
-        const range = maxR - minR || 1
-        const pts = history.map((h, i) => {
-          const x = PX + (history.length > 1 ? (i / (history.length - 1)) : 0.5) * (W - PX * 2)
-          const y = PY + ((h.rank - minR) / range) * (H - PY * 2)
-          return { x, y, rank: h.rank }
-        })
-        const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-        const last = ranks[ranks.length - 1] ?? 0
-        const prev = ranks[ranks.length - 2] ?? last
-        const color = last < prev ? '#4ade80' : last > prev ? '#f87171' : '#9ca3af'
-        return (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setTrendModal(null)}>
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700" style={{ width: W + 80 }} onClick={e => e.stopPropagation()}>
-              <div className="flex items-center gap-3 mb-4">
-                <ImagePreview path={trendModal.imgPath} alt={trendModal.label} className="w-10 h-10 rounded object-cover shrink-0" objectPosition="center 10%" />
-                <p className="text-white font-bold flex-1 truncate">{trendModal.label} 순위 추이</p>
-                <button onClick={() => setTrendModal(null)} className="text-gray-400 hover:text-white text-sm ml-auto shrink-0">✕</button>
-              </div>
-              {history.length < 2 ? (
-                <p className="text-gray-500 text-sm text-center py-8">추이 데이터가 부족합니다.</p>
-              ) : (
-                <svg width={W} height={H} className="overflow-visible">
-                  {/* y축 눈금선 */}
-                  {Array.from(new Set([minR, maxR])).map(r => {
-                    const y = PY + ((r - minR) / range) * (H - PY * 2)
-                    return (
-                      <g key={r}>
-                        <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="#374151" strokeDasharray="3,3" />
-                        <text x={PX - 6} y={y + 4} fill="#9ca3af" fontSize="11" textAnchor="end">{r}</text>
-                      </g>
-                    )
-                  })}
-                  {/* 라인 */}
-                  <polyline points={polyPts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-                  {/* 점 + 라벨 */}
-                  {pts.map((p, i) => (
-                    <g key={i}>
-                      <circle cx={p.x} cy={p.y} r="4" fill={color} />
-                      <text x={p.x} y={p.y - 8} fill="#e5e7eb" fontSize="11" textAnchor="middle">{p.rank}</text>
-                    </g>
-                  ))}
-                </svg>
-              )}
-              <p className="text-gray-500 text-xs mt-2 text-right">최근 {history.length}회</p>
-            </div>
+      {/* 대회 목록 */}
+      <div className="flex-1 overflow-y-auto p-4 pt-0">
+        {tournaments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-gray-500">
+            <p className="text-lg mb-1">대회가 없습니다</p>
+            <p className="text-sm">새 대회를 만들어 시작하세요</p>
           </div>
-        )
-      })()}
+        ) : (
+          <div className="grid grid-cols-5 gap-3">
+            {tournaments.map(t => (
+              <TournamentCard
+                key={t.id}
+                t={t}
+                onPlay={(runId, tab) => handlePlay(t.id, runId, tab)}
+                onRankings={handleRankings}
+                onDelete={() => handleDelete(t.id)}
+                onUpdate={loadList}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* ── 추가 시 필터 모달 ── */}
-      {showAddFilter && (
-        <WorldcupFilterModal
-          type={addType}
-          filter={addFilter}
-          onSave={f => { setAddFilter(f); setShowAddFilter(false) }}
-          onClose={() => setShowAddFilter(false)}
+      {showCreate && (
+        <CreateModal
+          onClose={() => setShowCreate(false)}
+          onCreated={t => {
+            setShowCreate(false)
+            loadList()
+          }}
         />
       )}
 
-      {/* ── 필터 모달 ── */}
-      {filterCat && (
-        <WorldcupFilterModal
-          type={filterCat.type}
-          filter={filterCat.filter_json ? JSON.parse(filterCat.filter_json) as WcFilter : null}
-          onSave={filter => handleUpdateFilter(filterCat, filter)}
-          onClose={() => setFilterCat(null)}
-        />
-      )}
-
-      {tooltip && <CardTooltip tooltip={tooltip} />}
-
-      {/* ── 통계 모달 ── */}
-      {statsModal && catStats && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setStatsModal(false)}>
-          <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 w-[640px] max-w-full" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-white font-bold text-base">{selCategory?.name} 통계</h3>
-              <button onClick={() => setStatsModal(false)} className="text-gray-400 hover:text-white">✕</button>
-            </div>
-
-            {/* 세션 통계 */}
-            <div className="mb-4">
-              <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">세션 통계</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-gray-700 rounded-lg p-3 text-center">
-                  <p className="text-gray-400 text-xs mb-1">전체 세션</p>
-                  <p className="text-white text-xl font-bold">{catStats.total_sessions}</p>
-                </div>
-                <div className="bg-gray-700 rounded-lg p-3 text-center">
-                  <p className="text-gray-400 text-xs mb-1">완료</p>
-                  <p className="text-white text-xl font-bold">{catStats.completed_sessions}</p>
-                </div>
-                <div className="bg-gray-700 rounded-lg p-3 text-center">
-                  <p className="text-gray-400 text-xs mb-1">마지막 세션</p>
-                  <p className="text-white text-sm font-bold">{catStats.last_session_at ? catStats.last_session_at.slice(0, 10) : '-'}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 참가자 통계 */}
-            <div className="mb-5">
-              <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">참가자 통계</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-700 rounded-lg p-3 text-center">
-                  <p className="text-gray-400 text-xs mb-1">전체 항목</p>
-                  <p className="text-white text-xl font-bold">{catStats.total_items}</p>
-                </div>
-                <div className="bg-gray-700 rounded-lg p-3 text-center">
-                  <p className="text-gray-400 text-xs mb-1">미참가</p>
-                  <p className="text-white text-xl font-bold">
-                    {catStats.no_session_items}
-                    <span className="text-gray-400 text-sm font-normal ml-1">
-                      ({catStats.total_items > 0 ? (catStats.no_session_items / catStats.total_items * 100).toFixed(1) : 0}%)
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* 세션수 분포 차트 */}
-            <div>
-              <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">세션수 분포 <span className="text-gray-600 normal-case">(X: 세션수, Y: 항목수)</span></p>
-              <div className="bg-gray-700 rounded-lg p-3">
-                <SessionDistChart data={catStats.session_dist} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

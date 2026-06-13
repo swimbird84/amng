@@ -214,7 +214,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
 
   const handleDelete = async () => {
     if (selected && confirm('정말 삭제하시겠습니까?')) {
-      await actorsApi.delete(selected.id)
+      const res = await actorsApi.delete(selected.id) as { blocked: boolean }
+      if (res?.blocked) { alert('진행 중인 월드컵에 참가 중인 배우는 삭제할 수 없습니다.'); return }
       setSelected(null)
       loadActors()
     }
@@ -257,9 +258,12 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   }
 
   const handleBulkDelete = async () => {
+    let blockedCount = 0
     for (const id of selectedDeleteIds) {
-      await actorsApi.delete(id)
+      const res = await actorsApi.delete(id) as { blocked: boolean }
+      if (res?.blocked) blockedCount++
     }
+    if (blockedCount > 0) alert(`진행 중인 월드컵에 참가 중인 배우 ${blockedCount}명은 삭제할 수 없습니다.`)
     setSelected(null)
     exitDeleteMode()
     loadActors()
@@ -333,7 +337,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 pt-0">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-5 gap-3">
             {displayActors.map((a) => (
               <div
                 key={a.id}

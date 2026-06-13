@@ -401,7 +401,8 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   const handleDeleteActor = async (actorId: number, actorName: string) => {
     if (!confirm(`"${actorName}" 배우를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return
     scrollTopRef.current = listRef.current?.scrollTop ?? 0
-    await actorsApi.delete(actorId)
+    const res = await actorsApi.delete(actorId) as { blocked: boolean }
+    if (res?.blocked) { alert('진행 중인 월드컵에 참가 중인 배우는 삭제할 수 없습니다.'); return }
     const data = await actorsApi.physicalData()
     setActors(data as ActorPhysicalData[])
   }
