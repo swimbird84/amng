@@ -3458,15 +3458,19 @@ export function registerIpcHandlers(): void {
       : 0
 
     const rankRows = db().prepare(`
-      SELECT e.item_id,
-        CAST(SUM(CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(DISTINCT e.run_id) AS win_rate
-      FROM cup_entries e
-      JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ? AND r.status = 'completed'
-      GROUP BY e.item_id
-      ORDER BY win_rate DESC
-    `).all(tournamentId) as { item_id: number; win_rate: number }[]
+      SELECT item_id, RANK() OVER (ORDER BY win_rate DESC, match_win_rate DESC) AS rank
+      FROM (
+        SELECT e.item_id,
+          CAST(SUM(CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(DISTINCT e.run_id) AS win_rate,
+          CAST(SUM(CASE WHEN m.winner_id = e.item_id THEN 1 ELSE 0 END) AS REAL) * 100.0 / MAX(1, SUM(CASE WHEN (m.item1_id = e.item_id OR m.item2_id = e.item_id) AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END)) AS match_win_rate
+        FROM cup_entries e
+        JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ? AND r.status = 'completed'
+        LEFT JOIN cup_matches m ON m.run_id = r.id AND (m.item1_id = e.item_id OR m.item2_id = e.item_id)
+        GROUP BY e.item_id
+      )
+    `).all(tournamentId) as { item_id: number; rank: number }[]
 
-    const rank = rankRows.findIndex(r => r.item_id === itemId) + 1
+    const rank = rankRows.find(r => r.item_id === itemId)?.rank ?? 0
 
     return { total_runs: runStats.total_runs, run_wins: runStats.run_wins, total_matches: matchStats.total_matches, match_wins: matchStats.match_wins, win_rate, match_win_rate, rank }
   })
