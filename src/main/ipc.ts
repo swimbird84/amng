@@ -2300,11 +2300,13 @@ export function registerIpcHandlers(): void {
     let divWhere = ''
     if (division !== undefined && division !== null) {
       if (division === 0) {
-        divWhere = ' AND (total_points = 0 OR rank > 2016)'
+        divWhere = ' AND master_run_count = 0'
       } else {
         const lo = division === 1 ? 1 : (divBoundaries[division - 2] + 1)
         const hi = divBoundaries[division - 1]
-        divWhere = ` AND total_points > 0 AND rank BETWEEN ${lo} AND ${hi}`
+        divWhere = division === 6
+          ? ` AND master_run_count > 0 AND rank >= ${lo}`
+          : ` AND master_run_count > 0 AND rank BETWEEN ${lo} AND ${hi}`
       }
     }
     const searchWhere = search ? (type === 'actor' ? ` AND name LIKE ?` : ` AND (title LIKE ? OR product_number LIKE ?)`) : ''
@@ -2315,7 +2317,8 @@ export function registerIpcHandlers(): void {
           SELECT
             RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
             a.id, a.name, a.photo_path,
-            COALESCE(pts.total_points, 0) AS total_points
+            COALESCE(pts.total_points, 0) AS total_points,
+            COALESCE(mrc.master_run_count, 0) AS master_run_count
           FROM actors a
           LEFT JOIN (
             SELECT mh.item_id, SUM(mh.points) AS total_points
@@ -2327,8 +2330,15 @@ export function registerIpcHandlers(): void {
               WHERE mh2.type = 'actor'
             ) mh WHERE rn <= 10 GROUP BY mh.item_id
           ) pts ON pts.item_id = a.id
+          LEFT JOIN (
+            SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
+            FROM cup_entries e
+            JOIN cup_runs r ON r.id = e.run_id
+            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'actor'
+            GROUP BY e.item_id
+          ) mrc ON mrc.item_id = a.id
         )
-        SELECT ranked.rank, ranked.id, ranked.name, ranked.photo_path, ranked.total_points,
+        SELECT ranked.rank, ranked.id, ranked.name, ranked.photo_path, ranked.total_points, ranked.master_run_count,
           COALESCE(cs2.total_cups, 0) AS total_cups,
           COALESCE(cs2.cup_wins, 0) AS cup_wins,
           COALESCE(cs2.total_matches, 0) AS total_matches,
@@ -2346,7 +2356,8 @@ export function registerIpcHandlers(): void {
           SELECT
             RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
             w.id, w.title, w.product_number, w.cover_path,
-            COALESCE(pts.total_points, 0) AS total_points
+            COALESCE(pts.total_points, 0) AS total_points,
+            COALESCE(mrc.master_run_count, 0) AS master_run_count
           FROM works w
           LEFT JOIN (
             SELECT mh.item_id, SUM(mh.points) AS total_points
@@ -2358,8 +2369,15 @@ export function registerIpcHandlers(): void {
               WHERE mh2.type = 'work'
             ) mh WHERE rn <= 10 GROUP BY mh.item_id
           ) pts ON pts.item_id = w.id
+          LEFT JOIN (
+            SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
+            FROM cup_entries e
+            JOIN cup_runs r ON r.id = e.run_id
+            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
+            GROUP BY e.item_id
+          ) mrc ON mrc.item_id = w.id
         )
-        SELECT ranked.rank, ranked.id, ranked.title, ranked.product_number, ranked.cover_path, ranked.total_points,
+        SELECT ranked.rank, ranked.id, ranked.title, ranked.product_number, ranked.cover_path, ranked.total_points, ranked.master_run_count,
           COALESCE(cs2.total_cups, 0) AS total_cups,
           COALESCE(cs2.cup_wins, 0) AS cup_wins,
           COALESCE(cs2.total_matches, 0) AS total_matches,
@@ -2504,17 +2522,27 @@ export function registerIpcHandlers(): void {
         SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY recorded_at DESC) AS rn FROM master_ranking_history WHERE type = ?) WHERE rn <= 10
       GROUP BY item_id
     `).all(type) as { item_id: number; total_points: number }[]
+    const masterRunRows = db().prepare(`
+      SELECT e.item_id, COUNT(DISTINCT r.id) AS cnt
+      FROM cup_entries e
+      JOIN cup_runs r ON r.id = e.run_id
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+      GROUP BY e.item_id
+    `).all(type) as { item_id: number; cnt: number }[]
     const pointsMap = new Map(rankingRows.map(r => [r.item_id, r.total_points]))
+    const masterRunMap = new Map(masterRunRows.map(r => [r.item_id, r.cnt]))
     const sorted = [...allItems].sort((a, b) => (pointsMap.get(b.id) ?? 0) - (pointsMap.get(a.id) ?? 0))
     const divBoundaries = [32, 96, 224, 480, 992, 2016]
     const countMap = new Map<number, number>()
     sorted.forEach((item, idx) => {
       const rank = idx + 1
+      const masterRuns = masterRunMap.get(item.id) ?? 0
       let div = 0
-      if ((pointsMap.get(item.id) ?? 0) > 0) {
+      if (masterRuns > 0) {
         for (let d = 0; d < divBoundaries.length; d++) {
           if (rank <= divBoundaries[d]) { div = d + 1; break }
         }
+        if (div === 0) div = 6
       }
       countMap.set(div, (countMap.get(div) ?? 0) + 1)
     })

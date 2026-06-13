@@ -2076,12 +2076,12 @@ const DIV_COLOR: Record<number, string> = {
   0: 'bg-gray-700/50 text-gray-500 border-gray-600/30',
 }
 
-function getDivision(rank: number, totalPoints: number): number {
-  if (totalPoints <= 0) return 0
+function getDivision(rank: number, masterRunCount: number): number {
+  if (masterRunCount === 0) return 0
   for (let d = 0; d < DIV_BOUNDARIES.length; d++) {
     if (rank <= DIV_BOUNDARIES[d]) return d + 1
   }
-  return 0
+  return 6
 }
 
 function MasterRankingView({
@@ -2328,7 +2328,7 @@ function MasterRankingView({
                   const img = imgPath(row)
                   const lbl = label(row)
                   const medal = RANK_MEDAL[row.rank]
-                  const division = getDivision(row.rank, row.total_points)
+                  const division = getDivision(row.rank, (row as any).master_run_count ?? 0)
                   const prevRank = rankTrends.get(row.id)
                   const winRate = row.total_cups > 0 ? row.cup_wins / row.total_cups * 100 : null
                   const matchWinRate = row.total_matches > 0 ? row.match_wins / row.total_matches * 100 : null
