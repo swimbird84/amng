@@ -314,7 +314,7 @@ function RunDistChart({ data }: { data: { run_count: number; count: number }[] }
         return (
           <g key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ cursor: 'default' }}>
             <rect x={x + 1} y={y} width={Math.max(barW - 2, 1)} height={bH} fill={isH ? '#60a5fa' : '#3b82f6'} rx="2" />
-            {i % showEvery === 0 && bH > 12 && (
+            {i % showEvery === 0 && bH > 0 && (
               <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="white">{d.count}</text>
             )}
             {i % showEvery === 0 && (
