@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { cupApi, masterRankingApi, rankingSettingsApi, actorsApi, worksApi } from '../api'
+import { cupApi, masterRankingApi, rankingSettingsApi, actorsApi, worksApi, shellApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
+import CardTooltip, { type TooltipState } from '../components/CardTooltip'
+import WorldcupFilterModal, { type WcFilter, countActiveFilters } from '../components/WorldcupFilterModal'
+import MasterFilterModal, { type MasterFilter, countActiveMasterFilters } from '../components/MasterFilterModal'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type CupTournament = {
@@ -56,6 +59,8 @@ type ItemInfo = {
   product_number?: string | null
   cover_path?: string | null
   rating?: number | null
+  comment?: string | null
+  files?: { id: number; file_path: string; type: string }[]
 }
 
 type StandingsRow = { item_id: number; pts: number; w: number; d: number; l: number }
@@ -81,6 +86,7 @@ type LastRunRankRow = {
   item_id: number
   elim_round: number | null
   pts: number | null
+  run_pts: number | null
   name?: string
   photo_path?: string | null
   title?: string | null
@@ -163,12 +169,16 @@ function CreateModal({
   const [format, setFormat] = useState<'tournament' | 'league' | 'worldcup'>('tournament')
   const [isMaster, setIsMaster] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [filterJson, setFilterJson] = useState<WcFilter | null>(null)
+  const [masterFilter, setMasterFilter] = useState<MasterFilter | null>(null)
+  const [showFilterModal, setShowFilterModal] = useState(false)
 
   const handleCreate = async () => {
     if (!name.trim()) return
     setSaving(true)
     try {
-      const t = await cupApi.create({ type, name: name.trim(), isMaster, format }) as CupTournament
+      const effectiveFilter = isMaster ? (masterFilter ?? null) : (filterJson ?? null)
+      const t = await cupApi.create({ type, name: name.trim(), isMaster, format, filterJson: effectiveFilter }) as CupTournament
       onCreated(t)
     } finally {
       setSaving(false)
@@ -176,6 +186,7 @@ function CreateModal({
   }
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-xl p-6 w-[420px] shadow-2xl">
         <h2 className="text-lg font-bold text-white mb-4">대회 등록</h2>
@@ -193,14 +204,14 @@ function CreateModal({
             />
           </div>
 
-          <label className="flex items-center gap-3 cursor-pointer select-none">
+          <label className={`flex items-center gap-3 select-none ${format === 'worldcup' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
             <div
-              onClick={() => setIsMaster(v => !v)}
+              onClick={() => format !== 'worldcup' && setIsMaster(v => !v)}
               className={`w-10 h-5 rounded-full transition-colors ${isMaster ? 'bg-yellow-500' : 'bg-gray-600'} relative`}
             >
               <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isMaster ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </div>
-            <span className="text-sm text-gray-200">마스터 대회 <span className="text-yellow-400 text-xs">(랭킹 반영)</span></span>
+            <span className="text-sm text-gray-200">마스터 대회 <span className="text-yellow-400 text-xs">(랭킹 반영)</span>{format === 'worldcup' && <span className="text-gray-500 text-xs ml-1">(월드컵 고정)</span>}</span>
           </label>
 
           <div className="flex gap-2">
@@ -219,7 +230,7 @@ function CreateModal({
             {(['tournament', 'league', 'worldcup'] as const).map(f => (
               <button
                 key={f}
-                onClick={() => setFormat(f)}
+                onClick={() => { setFormat(f); if (f === 'worldcup') setIsMaster(true) }}
                 className={`flex-1 py-2 rounded text-sm font-medium transition ${format === f ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
               >
                 {FORMAT_LABEL[f]}
@@ -227,12 +238,18 @@ function CreateModal({
             ))}
           </div>
 
-          <button
-            className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-sm"
-            onClick={() => {/* TODO: 필터 설정 모달 */}}
-          >
-            필터 설정
-          </button>
+          {format !== 'worldcup' && (
+            <button
+              className={`w-full py-2 rounded text-sm ${
+                (isMaster ? countActiveMasterFilters(masterFilter) : countActiveFilters(filterJson)) > 0
+                  ? 'bg-blue-700 hover:bg-blue-600 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
+              onClick={() => setShowFilterModal(true)}
+            >
+              필터 설정
+            </button>
+          )}
         </div>
 
         <div className="flex gap-2 mt-6">
@@ -247,21 +264,85 @@ function CreateModal({
         </div>
       </div>
     </div>
+    {showFilterModal && (isMaster ? (
+      <MasterFilterModal
+        type={type}
+        filter={masterFilter}
+        onSave={f => { setMasterFilter(f); setShowFilterModal(false) }}
+        onClose={() => setShowFilterModal(false)}
+      />
+    ) : (
+      <WorldcupFilterModal
+        type={type}
+        filter={filterJson}
+        onSave={f => { setFilterJson(f); setShowFilterModal(false) }}
+        onClose={() => setShowFilterModal(false)}
+      />
+    ))}
+    </>
   )
 }
 
+
+// ── RunDistChart ───────────────────────────────────────────────────────────
+function RunDistChart({ data }: { data: { run_count: number; count: number }[] }) {
+  const [hovered, setHovered] = useState<number | null>(null)
+  if (data.length === 0) return <p className="text-gray-500 text-sm text-center py-4">데이터 없음</p>
+  const W = 580, H = 180, PL = 44, PR = 12, PT = 18, PB = 32
+  const cW = W - PL - PR, cH = H - PT - PB
+  const maxCount = Math.max(...data.map(d => d.count))
+  const barW = cW / data.length
+  const showEvery = data.length > 30 ? Math.ceil(data.length / 30) : 1
+  const yTicks = [0, 0.25, 0.5, 0.75, 1]
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }}>
+      {yTicks.map(r => {
+        const y = PT + cH * (1 - r)
+        const val = Math.round(maxCount * r)
+        return (
+          <g key={r}>
+            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#374151" strokeWidth="1" />
+            <text x={PL - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{val}</text>
+          </g>
+        )
+      })}
+      {data.map((d, i) => {
+        const x = PL + i * barW
+        const bH = maxCount > 0 ? (d.count / maxCount) * cH : 0
+        const y = PT + cH - bH
+        const isH = hovered === i
+        return (
+          <g key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ cursor: 'default' }}>
+            <rect x={x + 1} y={y} width={Math.max(barW - 2, 1)} height={bH} fill={isH ? '#60a5fa' : '#3b82f6'} rx="2" />
+            {i % showEvery === 0 && bH > 12 && (
+              <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="white">{d.count}</text>
+            )}
+            {i % showEvery === 0 && (
+              <text x={x + barW / 2} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.run_count}</text>
+            )}
+          </g>
+        )
+      })}
+      <line x1={PL} y1={PT} x2={PL} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
+      <line x1={PL} y1={PT + cH} x2={W - PR} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
+      <text x={W / 2} y={H + 2} textAnchor="middle" fontSize="9" fill="#6b7280">참가 횟수</text>
+    </svg>
+  )
+}
 
 // ── TournamentCard ─────────────────────────────────────────────────────────
 function TournamentCard({
   t,
   onPlay,
   onRankings,
+  onStats,
   onDelete,
   onUpdate,
 }: {
   t: CupTournament
   onPlay: (runId?: number, tab?: 'match' | 'standings') => void
   onRankings: (id: number) => void
+  onStats: (id: number) => void
   onDelete: () => void
   onUpdate: () => void
 }) {
@@ -269,24 +350,47 @@ function TournamentCard({
   const [editName, setEditName] = useState(t.name)
   const [showConfirmDel, setShowConfirmDel] = useState(false)
   const [showInProgress, setShowInProgress] = useState(false)
+  const [showFilterModal, setShowFilterModal] = useState(false)
+  const [cardFilter, setCardFilter] = useState<WcFilter | MasterFilter | null>(t.filter_json ? JSON.parse(t.filter_json) : null)
   const [itemCount, setItemCount] = useState(0)
   const [roundValue, setRoundValue] = useState(0)
   const [starting, setStarting] = useState(false)
+  const [runProgress, setRunProgress] = useState<{ match: { round: number; match_index: number; phase: string; group_id: number | null } | null; total: number; done: number } | null>(null)
 
   useEffect(() => {
     cupApi.itemCount(t.id).then(count => {
       setItemCount(count as number)
-      if (t.latest_run_status !== 'in_progress') {
-        const validOptions = ROUND_OPTIONS.filter(o => o.value === 0 || o.value <= (count as number))
-        const best = validOptions.find(o => o.value !== 0 && o.value >= (count as number))
-          ?? validOptions.find(o => o.value !== 0)
-          ?? validOptions[0]
-        if (best) setRoundValue(best.value)
+      const validOptions = ROUND_OPTIONS.filter(o => o.value === 0 || o.value <= (count as number))
+      if (t.latest_run_status === 'in_progress' && t.round_total !== undefined && t.round_total !== null) {
+        setRoundValue(t.round_total)
+      } else {
+        const saved = Number(localStorage.getItem(`cup:roundValue:${t.id}`) ?? '')
+        const savedValid = validOptions.some(o => o.value === saved)
+        if (savedValid) {
+          setRoundValue(saved)
+        } else {
+          const best = validOptions.find(o => o.value !== 0 && o.value >= (count as number))
+            ?? validOptions.find(o => o.value !== 0)
+            ?? validOptions[0]
+          if (best) setRoundValue(best.value)
+        }
       }
     })
-  }, [t.id, t.latest_run_status])
+  }, [t.id, t.latest_run_status, t.round_total])
 
-  const validOptions = ROUND_OPTIONS.filter(o => o.value === 0 || o.value <= itemCount)
+  useEffect(() => {
+    if (t.latest_run_status === 'in_progress' && t.latest_run_id) {
+      cupApi.runProgress(t.latest_run_id).then(setRunProgress)
+    } else {
+      setRunProgress(null)
+    }
+  }, [t.latest_run_id, t.latest_run_status])
+
+  const validOptions = ROUND_OPTIONS.filter(o => {
+    if (o.value === 0) return t.format !== 'worldcup'
+    if (t.format === 'worldcup') return itemCount >= o.value * 2 // 조 수(round/2) × 최소 4명
+    return o.value <= itemCount
+  })
 
   const doStart = async (force = false) => {
     setStarting(true)
@@ -324,22 +428,44 @@ function TournamentCard({
         {/* 썸네일 */}
         <div className="relative rounded-t-lg overflow-hidden">
           <ImagePreview path={t.winner_photo ?? null} alt={t.name} className="w-full h-40" objectPosition="center 10%" />
-          {/* 상태 뱃지 (진행중만 표시) */}
-          {runStatus === 'in_progress' && (
-            <span className={`absolute top-1 left-1 px-1.5 py-0.5 text-xs rounded font-semibold ${STATUS_COLOR[runStatus]} bg-gray-900/70`}>
-              {STATUS_LABEL[runStatus]}
-            </span>
-          )}
+          {/* 진행 상황 칩 */}
+          {runStatus === 'in_progress' && (() => {
+            const m = runProgress?.match
+            let label = '진행중'
+            if (m) {
+              const pos = `${m.match_index + 1}/${Math.ceil(m.round / 2)}경기`
+              if (t.format === 'tournament') {
+                label = `${roundLabel(m.round)} ${pos}`
+              } else if (t.format === 'league') {
+                label = `${runProgress!.done + 1}/${runProgress!.total}경기`
+              } else if (t.format === 'worldcup') {
+                label = m.phase === 'group'
+                  ? `예선 ${m.group_id}조 ${pos}`
+                  : `본선 ${roundLabel(m.round)} ${pos}`
+              }
+            }
+            return (
+              <span className="absolute top-1 left-1 px-1.5 py-0.5 text-xs rounded font-semibold text-green-300 bg-gray-900/80">
+                {label}
+              </span>
+            )
+          })()}
           {/* M / F / X 버튼 */}
           <div className="absolute bottom-1 right-1 flex gap-1">
             <button
               onClick={e => { e.stopPropagation(); setEditName(t.name); setShowEditName(true) }}
               className="w-6 h-6 rounded bg-gray-900/70 hover:bg-gray-700 text-white text-xs font-bold flex items-center justify-center"
             >M</button>
-            <button
-              onClick={e => { e.stopPropagation() }}
-              className="w-6 h-6 rounded bg-gray-900/70 hover:bg-gray-700 text-white text-xs font-bold flex items-center justify-center"
-            >F</button>
+            {t.format !== 'worldcup' && (
+              <button
+                onClick={e => { e.stopPropagation(); setShowFilterModal(true) }}
+                className={`w-6 h-6 rounded text-xs font-bold flex items-center justify-center ${
+                  (t.is_master === 1 ? countActiveMasterFilters(cardFilter as MasterFilter) : countActiveFilters(cardFilter as WcFilter)) > 0
+                    ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                    : 'bg-gray-900/70 hover:bg-gray-700 text-white'
+                }`}
+              >F</button>
+            )}
             <button
               onClick={e => { e.stopPropagation(); setShowConfirmDel(true) }}
               className="w-6 h-6 rounded bg-gray-900/70 hover:bg-red-700 text-red-400 hover:text-white text-xs font-bold flex items-center justify-center"
@@ -363,44 +489,31 @@ function TournamentCard({
             </span>
           </div>
 
-          <div className="text-xs text-gray-500 flex gap-2">
-            {hasRun && t.format === 'tournament' && t.round_total !== null && (
-              <span>{t.round_total === 0 ? '전체' : roundLabel(t.round_total)}</span>
-            )}
-            <span>{t.created_at.slice(0, 10)}</span>
-          </div>
 
           <div className="flex flex-col gap-1 mt-auto pt-1">
             {/* 강수 selectbox: 진행중일 때만 disabled */}
-            {runStatus !== 'in_progress' ? (
-              <select
-                value={roundValue}
-                onChange={e => setRoundValue(Number(e.target.value))}
-                className="w-full bg-gray-700 text-white text-xs px-2 py-1.5 rounded"
-              >
-                {validOptions.map(o => (
-                  <option key={o.value} value={o.value}>
-                    {o.value === 0
-                      ? `전체 (${itemCount}${t.type === 'actor' ? '명' : '작품'})`
+            <select
+              value={roundValue}
+              onChange={e => { const v = Number(e.target.value); setRoundValue(v); localStorage.setItem(`cup:roundValue:${t.id}`, String(v)) }}
+              className="w-full bg-gray-700 text-white text-xs px-2 py-1.5 rounded"
+            >
+              {validOptions.map(o => (
+                <option key={o.value} value={o.value}>
+                  {o.value === 0
+                    ? `전체 (${itemCount}${t.type === 'actor' ? '명' : '작품'})`
+                    : t.format === 'worldcup'
+                      ? `${o.label} (${o.value / 2}조)`
                       : `${o.label} (풀${calcPoolSize(itemCount, o.value)}${t.type === 'actor' ? '명' : '작품'})`
-                    }
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <select disabled className="w-full bg-gray-700 text-gray-500 text-xs px-2 py-1.5 rounded opacity-60">
-                <option>
-                  {t.round_total === 0 ? '전체' : t.round_total ? `${t.round_total}강` : '-'}
-                  ({t.type === 'actor' ? '배우' : '작품'})
+                  }
                 </option>
-              </select>
-            )}
-            {/* 대회시작 / 순위보기 */}
+              ))}
+            </select>
+            {/* 대회시작 / 순위보기 / 통계보기 */}
             <div className="flex gap-1">
               <button
                 onClick={handleStartClick}
                 disabled={starting}
-                className="flex-1 py-1.5 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white text-xs rounded font-semibold"
+                className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs rounded font-semibold"
               >
                 {starting ? '시작 중...' : '대회시작'}
               </button>
@@ -410,6 +523,13 @@ function TournamentCard({
                 className="flex-1 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-xs rounded"
               >
                 순위보기
+              </button>
+              <button
+                onClick={() => onStats(t.id)}
+                disabled={!hasRun}
+                className="flex-1 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-xs rounded"
+              >
+                통계보기
               </button>
             </div>
           </div>
@@ -473,27 +593,130 @@ function TournamentCard({
           </div>
         </div>
       )}
+
+      {/* 필터 모달 */}
+      {showFilterModal && (t.is_master === 1 ? (
+        <MasterFilterModal
+          type={t.type}
+          filter={cardFilter as MasterFilter}
+          onSave={async f => {
+            await cupApi.update({ id: t.id, filterJson: f })
+            setCardFilter(f)
+            setShowFilterModal(false)
+            onUpdate()
+          }}
+          onClose={() => setShowFilterModal(false)}
+        />
+      ) : (
+        <WorldcupFilterModal
+          type={t.type}
+          filter={cardFilter as WcFilter}
+          onSave={async f => {
+            await cupApi.update({ id: t.id, filterJson: f })
+            setCardFilter(f)
+            setShowFilterModal(false)
+            onUpdate()
+          }}
+          onClose={() => setShowFilterModal(false)}
+        />
+      ))}
     </>
   )
 }
 
 // ── MatchCard ──────────────────────────────────────────────────────────────
-function MatchCard({ item, onClick, disabled }: { item: ItemInfo; onClick: () => void; disabled: boolean }) {
+function MatchCard({
+  item, type, tournamentId, onClick, onNavigate, disabled,
+}: {
+  item: ItemInfo
+  type: 'actor' | 'work'
+  tournamentId: number
+  onClick: () => void
+  onNavigate: () => void
+  disabled: boolean
+}) {
   const imgPath = itemImagePath(item)
+  const [stats, setStats] = useState<{ total_runs: number; run_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number; rank: number } | null>(null)
+  const [fileExists, setFileExists] = useState(false)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+
+  useEffect(() => {
+    cupApi.itemTournamentStats(tournamentId, item.id).then(setStats)
+  }, [tournamentId, item.id])
+
+  useEffect(() => {
+    const first = item.files?.[0]
+    if (!first) { setFileExists(false); return }
+    if (first.type === 'url') { setFileExists(true); return }
+    shellApi.fileExists(first.file_path).then(setFileExists)
+  }, [item.files])
+
+  const firstFile = item.files?.[0]
+
+  const handlePlay = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!firstFile) return
+    if (firstFile.type === 'url') shellApi.openExternal(firstFile.file_path)
+    else shellApi.openPath(firstFile.file_path)
+  }
+
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex-1 flex flex-col items-center gap-3 p-4 bg-gray-800 hover:bg-gray-700 active:scale-95 disabled:opacity-40 rounded-xl transition border-2 border-transparent hover:border-blue-500 cursor-pointer"
-    >
-      <div className="w-40 h-52 rounded-lg overflow-hidden bg-gray-700 flex items-center justify-center">
+    <div className="flex flex-col rounded-xl overflow-hidden border-[5px] border-gray-700 hover:border-blue-500 bg-gray-800 w-full transition-colors">
+      {/* 썸네일 — 클릭 시 승리 선택 */}
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className={`relative overflow-hidden cursor-pointer disabled:cursor-not-allowed block w-full ${
+          type === 'actor' ? 'aspect-square' : 'aspect-[800/540]'
+        }`}
+      >
         {imgPath
-          ? <ImagePreview path={imgPath} alt={itemLabel(item)} className="w-full h-full object-cover" />
-          : <span className="text-gray-500 text-4xl">?</span>
+          ? <ImagePreview path={imgPath} alt="" className="w-full h-full object-cover" objectPosition="center 10%" />
+          : <div className="w-full h-full bg-gray-700 flex items-center justify-center"><span className="text-gray-500 text-4xl">?</span></div>
         }
+      </button>
+
+      {/* 정보 — 클릭 시 상세 모달 */}
+      <div
+        className={`p-3 bg-gray-800 border-t border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors overflow-hidden${type === 'work' ? ' h-[168px]' : ''}`}
+        onClick={onNavigate}
+        onMouseMove={e => setTooltip({ type, id: item.id, x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setTooltip(null)}
+      >
+        {/* 통계 행 */}
+        {stats && stats.total_runs > 0 ? (
+          <p className="text-[0.85rem] text-gray-400 mb-1.5 text-center whitespace-nowrap">
+            {stats.rank}위&nbsp;&nbsp;
+            우승률: {stats.win_rate}%({stats.run_wins}/{stats.total_runs})&nbsp;&nbsp;
+            승률: {stats.match_win_rate}%({stats.match_wins}/{stats.total_matches})
+          </p>
+        ) : (
+          <p className="text-[0.85rem] text-gray-600 mb-1.5 text-center">-</p>
+        )}
+        {/* 이름 / 작품 정보 */}
+        {type === 'actor' ? (
+          <p className="text-[1.47rem] font-bold text-white text-center truncate">{item.name ?? '...'}</p>
+        ) : (
+          <div className="flex items-start gap-2" onClick={e => e.stopPropagation()}>
+            <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
+              <p className="text-sm text-gray-400 truncate">{item.product_number ?? ''}</p>
+              <p className="text-base font-bold text-white mt-0.5 line-clamp-4">{item.title ?? item.product_number ?? '...'}</p>
+            </div>
+            {firstFile && (
+              <button
+                onClick={handlePlay}
+                disabled={!fileExists}
+                className={`shrink-0 w-8 h-8 rounded flex items-center justify-center transition ${fileExists ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
+                title="재생"
+              >
+                <span className="text-white text-sm">▶</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
-      <p className="text-white font-semibold text-sm text-center line-clamp-2 max-w-[160px]">{itemLabel(item)}</p>
-    </button>
+      {tooltip && <CardTooltip tooltip={tooltip} />}
+    </div>
   )
 }
 
@@ -503,6 +726,7 @@ function PlayView({
   runId: initialRunId,
   initialTab = 'match',
   onBack,
+  onRankings,
   onNavigateToActor,
   onNavigateToWork,
 }: {
@@ -510,15 +734,17 @@ function PlayView({
   runId?: number
   initialTab?: 'match' | 'standings'
   onBack: () => void
+  onRankings: (id: number) => void
   onNavigateToActor: (id: number) => void
   onNavigateToWork: (id: number) => void
 }) {
-  const [tab, setTab] = useState<'match' | 'standings'>(initialTab)
+  const [tab, setTab] = useState<'match' | 'standings' | 'rank'>(initialTab)
   const [tournament, setTournament] = useState<CupTournament | null>(null)
   const [run, setRun] = useState<CupRun | null>(null)
   const [currentMatch, setCurrentMatch] = useState<CupMatch | null | 'done'>(null)
   const [progress, setProgress] = useState<{ total: number; done: number }>({ total: 0, done: 0 })
   const [items, setItems] = useState<Map<number, ItemInfo>>(new Map())
+  const [liveScores, setLiveScores] = useState<{ item_id: number; pts: number; rank: number }[]>([])
   const [standings, setStandings] = useState<{
     type: string
     standings?: StandingsRow[]
@@ -526,8 +752,10 @@ function PlayView({
     groupStandings?: { group_id: number; standings: StandingsRow[] }[]
     mainMatches?: CupMatch[]
   } | null>(null)
-  const [picking, setPicking] = useState(false)
-  const [completing, setCompleting] = useState(false)
+  const [picking, setPicking] = useState<{ winnerId: number | null; loserId: number | null; fadeOut?: boolean } | null>(null)
+  const [cardsVisible, setCardsVisible] = useState(true)
+  const [commentDraft, setCommentDraft] = useState('')
+  const [commentSaved, setCommentSaved] = useState(false)
   const itemFetchQueue = useRef(new Set<number>())
 
   const fetchItemInfo = useCallback(async (id: number, type: 'actor' | 'work') => {
@@ -554,13 +782,22 @@ function PlayView({
     const runStatus = result.run?.status
     const isDone = runStatus === 'completed' || cm === null
     setCurrentMatch(isDone ? 'done' : cm)
-    if (isDone) setTab('standings')
+    if (isDone) setTab('match')
     if (cm) {
       fetchItemInfo(cm.item1_id, result.tournament.type)
       if (cm.item2_id) fetchItemInfo(cm.item2_id, result.tournament.type)
     }
     if (result.run?.winner_id) {
       fetchItemInfo(result.run.winner_id, result.tournament.type)
+    }
+    if (result.run?.status === 'completed' && result.run?.winner_id) {
+      const type = result.tournament.type
+      const wid = result.run.winner_id
+      if (type === 'actor') {
+        actorsApi.get(wid).then((a: any) => { setCommentDraft(a?.comment ?? ''); setCommentSaved(false) })
+      } else {
+        worksApi.get(wid).then((w: any) => { setCommentDraft(w?.comment ?? ''); setCommentSaved(false) })
+      }
     }
   }, [tournamentId, fetchItemInfo])
 
@@ -579,19 +816,26 @@ function PlayView({
     }
   }, [run?.id, tournament, fetchItemInfo])
 
+  const loadLiveScores = useCallback(async () => {
+    const runId = run?.id
+    if (!runId || !tournament) return
+    const scores = await cupApi.runLiveScores(runId)
+    setLiveScores(scores)
+    for (const s of scores) fetchItemInfo(s.item_id, tournament.type)
+  }, [run?.id, tournament, fetchItemInfo])
+
   useEffect(() => { load() }, [load])
   useEffect(() => { if (tab === 'standings') loadStandings() }, [tab, loadStandings])
+  useEffect(() => { if (tab === 'rank') loadLiveScores() }, [tab, loadLiveScores])
 
-  const handlePick = async (winnerId: number | null, isDraw = false) => {
-    if (!currentMatch || currentMatch === 'done' || picking) return
-    const match = currentMatch as CupMatch
-    setPicking(true)
+  const doPickApi = async (matchId: number, winnerId: number | null, isDraw = false) => {
     try {
-      const next = await cupApi.pick(match.id, winnerId, isDraw) as CupMatch | { done: boolean }
+      const next = await cupApi.pick(matchId, winnerId, isDraw) as CupMatch | { done: boolean }
       setProgress(p => ({ ...p, done: p.done + 1 }))
       if ('done' in next && next.done) {
         setCurrentMatch('done')
         load()
+        if (tab === 'rank') loadLiveScores()
       } else {
         const m = next as CupMatch
         setCurrentMatch(m)
@@ -599,25 +843,26 @@ function PlayView({
           fetchItemInfo(m.item1_id, tournament.type)
           if (m.item2_id) fetchItemInfo(m.item2_id, tournament.type)
         }
+        if (tab === 'rank') loadLiveScores()
       }
     } catch (e) {
       alert((e as Error).message)
-    } finally {
-      setPicking(false)
     }
   }
 
-  const handleComplete = async () => {
-    if (!run) return
-    setCompleting(true)
-    try {
-      await cupApi.complete(run.id)
-      load()
-    } catch (e) {
-      alert((e as Error).message)
-    } finally {
-      setCompleting(false)
-    }
+  const handlePick = async (winnerId: number | null, loserId: number | null = null, isDraw = false) => {
+    if (!currentMatch || currentMatch === 'done' || picking) return
+    const match = currentMatch as CupMatch
+    setPicking({ winnerId, loserId })
+    await new Promise(r => setTimeout(r, 300))         // 패자 축소
+    await new Promise(r => setTimeout(r, 150))         // 가운데 정지
+    setPicking({ winnerId, loserId, fadeOut: true })
+    await new Promise(r => setTimeout(r, 200))         // 승자 페이드아웃
+    setCardsVisible(false)
+    await doPickApi(match.id, winnerId, isDraw)        // 새 매치 로드
+    await new Promise(r => setTimeout(r, 50))          // 렌더 대기
+    setPicking(null)
+    setCardsVisible(true)
   }
 
   const item1 = currentMatch && currentMatch !== 'done' ? items.get((currentMatch as CupMatch).item1_id) : null
@@ -631,8 +876,8 @@ function PlayView({
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 상단 바 */}
-      <div className="shrink-0">
-        <div className="p-4 pb-0">
+      <div className="shrink-0 border-b border-gray-700/50">
+        <div className="p-4 pb-3">
           <div className="flex items-center gap-2">
             {/* 뒤로 + 대회 정보 */}
             <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 min-w-0">
@@ -642,37 +887,24 @@ function PlayView({
                   <span className="text-gray-600 text-xs shrink-0">|</span>
                   {tournament.is_master === 1 && <span className="text-yellow-400 text-xs font-semibold shrink-0">★</span>}
                   <span className="text-white text-sm font-semibold truncate">{tournament.name}</span>
-                  {runStatus && <span className={`text-xs shrink-0 ${STATUS_COLOR[runStatus]}`}>{STATUS_LABEL[runStatus]}</span>}
-                  {progress.total > 0 && (
-                    <span className="text-xs text-gray-500 shrink-0">{progress.done}/{progress.total}</span>
-                  )}
                 </>
               )}
             </div>
 
             {/* 탭 */}
             <div className="flex items-center gap-1 bg-gray-800 rounded-lg px-2 py-1 ml-auto shrink-0">
-              {(['match', 'standings'] as const).map(key => (
+              {(['match', 'standings', 'rank'] as const).map(key => (
                 <button
                   key={key}
                   onClick={() => setTab(key)}
                   className={`px-3 py-1 rounded text-xs font-medium transition ${tab === key ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
                 >
-                  {key === 'match' ? '매치' : '현황'}
+                  {key === 'match' ? '매치' : key === 'standings' ? '현황' : '순위'}
                 </button>
               ))}
             </div>
           </div>
         </div>
-        {/* 진행률 바 */}
-        {progress.total > 0 && runStatus === 'in_progress' && (
-          <div className="h-1 bg-gray-700 mt-3">
-            <div
-              className="h-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -681,106 +913,128 @@ function PlayView({
             {!tournament && <p className="text-gray-500">로딩 중...</p>}
 
             {tournament && currentMatch === 'done' && (
-              <div className="text-center">
+              <div className="flex flex-col items-center gap-6">
                 {runStatus === 'completed' ? (
                   <>
-                    <p className="text-2xl font-bold text-white mb-1">대회 완료!</p>
+                    <p className="text-yellow-400 font-bold text-xl">🏆 우승!</p>
                     {winnerItem && (
-                      <div className="mt-4">
-                        <p className="text-yellow-400 text-sm mb-3">🏆 우승</p>
-                        <button
-                          className="group relative mx-auto block"
-                          onClick={() => tournament.type === 'actor'
-                            ? onNavigateToActor(winnerItem.id)
-                            : onNavigateToWork(winnerItem.id)
-                          }
+                      <>
+                        <div
+                          className="cursor-pointer"
+                          onClick={() => tournament.type === 'actor' ? onNavigateToActor(winnerItem.id) : onNavigateToWork(winnerItem.id)}
                         >
-                          <div className="w-36 h-44 rounded-xl overflow-hidden bg-gray-700 mb-2 ring-2 ring-yellow-500 group-hover:ring-yellow-400 transition">
-                            {itemImagePath(winnerItem)
-                              ? <ImagePreview path={itemImagePath(winnerItem)!} alt="우승자" className="w-full h-full object-cover" />
-                              : <span className="flex items-center justify-center h-full text-gray-500 text-4xl">?</span>
-                            }
-                          </div>
-                          <p className="text-white font-bold text-base group-hover:text-yellow-300 transition">{itemLabel(winnerItem)}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">클릭하여 상세 보기</p>
-                        </button>
-                      </div>
+                          <ImagePreview
+                            path={itemImagePath(winnerItem)}
+                            alt={itemLabel(winnerItem)}
+                            className={`h-64 rounded-xl border-2 border-yellow-500 hover:border-yellow-400 transition ${tournament.type === 'actor' ? 'w-64' : 'w-[379px]'}`}
+                            objectPosition="center 10%"
+                          />
+                        </div>
+                        <p className="text-white font-bold text-lg">{itemLabel(winnerItem)}</p>
+                        <div className="w-full max-w-md flex flex-col gap-2">
+                          <p className="text-gray-400 text-sm">코멘트 편집</p>
+                          <textarea
+                            value={commentDraft}
+                            onChange={e => { setCommentDraft(e.target.value); setCommentSaved(false) }}
+                            rows={4}
+                            className="bg-gray-800 text-white text-sm rounded-lg border border-gray-600 p-3 resize-none focus:outline-none focus:border-blue-500"
+                          />
+                          <button
+                            onClick={async () => {
+                              if (tournament.type === 'actor') await actorsApi.update(winnerItem.id, { comment: commentDraft })
+                              else await worksApi.update(winnerItem.id, { comment: commentDraft })
+                              setCommentSaved(true)
+                            }}
+                            className="self-end bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-1.5 rounded"
+                          >
+                            {commentSaved ? '저장됨 ✓' : '저장'}
+                          </button>
+                        </div>
+                      </>
                     )}
                     <button
-                      onClick={() => setTab('standings')}
-                      className="mt-6 px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm"
+                      onClick={() => onRankings(tournamentId)}
+                      className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm"
                     >
-                      전체 현황 보기
+                      순위 보기
                     </button>
                   </>
                 ) : (
-                  <div className="text-center">
-                    <p className="text-white text-lg font-semibold mb-2">모든 매치 완료</p>
-                    <p className="text-gray-400 text-sm mb-4">아래 버튼으로 최종 결과를 확정하세요.</p>
-                    <button
-                      onClick={handleComplete}
-                      disabled={completing}
-                      className="px-8 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg font-semibold"
-                    >
-                      {completing ? '처리 중...' : '대회 완료 확정'}
-                    </button>
-                  </div>
+                  <p className="text-gray-400">처리 중...</p>
                 )}
               </div>
             )}
 
             {tournament && match && (
-              <div className="w-full max-w-2xl">
+              <div className="w-full">
                 {/* 라운드/진행 정보 */}
                 <div className="text-center mb-6">
+                  {match.item2_id === null && (
+                    <p className="text-gray-400 text-sm mb-1">부전승 — 클릭하여 다음 라운드로 진출</p>
+                  )}
                   {tournament.format === 'tournament' && (
-                    <p className="text-yellow-400 font-bold text-lg">{roundLabel(match.round)}</p>
+                    <p className="text-yellow-400 font-bold text-lg">
+                      {roundLabel(match.round)} — {match.match_index + 1}/{Math.ceil(match.round / 2)}경기
+                    </p>
                   )}
                   {tournament.format === 'league' && (
-                    <>
-                      <p className="text-gray-300 font-semibold text-base">리그전</p>
-                      <p className="text-gray-500 text-sm mt-0.5">
-                        {progress.done + 1}번째 매치 · 남은 경기 {progress.total - progress.done}
-                      </p>
-                    </>
+                    <p className="text-gray-300 font-semibold text-base">
+                      리그전 — {progress.done + 1}/{progress.total}경기
+                    </p>
                   )}
                   {tournament.format === 'worldcup' && (
-                    <>
-                      <p className="text-purple-400 font-bold text-lg">
-                        {match.phase === 'group' ? `${match.group_id}조 예선` : `본선 ${roundLabel(match.round)}`}
-                      </p>
-                      <p className="text-gray-500 text-sm mt-0.5">
-                        {progress.done + 1}번째 매치 · 남은 경기 {progress.total - progress.done}
-                      </p>
-                    </>
+                    <p className={`font-bold text-lg ${match.phase === 'group' ? 'text-purple-400' : 'text-yellow-400'}`}>
+                      {match.phase === 'group'
+                        ? `${match.group_id}조 예선 — ${progress.done + 1}/${progress.total}경기`
+                        : `본선 ${roundLabel(match.round)} — ${match.match_index + 1}/${Math.ceil(match.round / 2)}경기`
+                      }
+                    </p>
                   )}
                 </div>
 
                 {/* 매치 카드 */}
-                <div className="flex gap-6 justify-center items-center">
-                  {item1
-                    ? <MatchCard item={item1} onClick={() => handlePick(match.item1_id)} disabled={picking} />
-                    : <div className="flex-1 h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
-                  }
-                  <div className="flex flex-col items-center gap-2 shrink-0">
-                    <span className="text-gray-500 font-bold text-xl">VS</span>
-                    {(tournament.format === 'league' || (tournament.format === 'worldcup' && match.phase === 'group')) && (
-                      <button
-                        onClick={() => handlePick(null, true)}
-                        disabled={picking}
-                        className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-300 rounded-lg text-xs"
-                      >
-                        무승부
-                      </button>
-                    )}
+                <div className={`flex gap-6 justify-center items-center transition-opacity duration-300 ${cardsVisible ? 'opacity-100' : 'opacity-0'}`}>
+                  {/* 카드 1 */}
+                  <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-300' : 'transition-none'} ${
+                    picking?.loserId === match.item1_id ? 'w-0 opacity-0'
+                    : picking?.fadeOut && picking?.winnerId === match.item1_id ? 'w-[40%] opacity-0'
+                    : 'w-[40%] opacity-100'
+                  }`}>
+                    {item1
+                      ? <MatchCard item={item1} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item1_id, match.item2_id ?? null)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item1.id) : onNavigateToWork(item1.id)} disabled={!!picking} />
+                      : <div className="h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
+                    }
                   </div>
-                  {match.item2_id
-                    ? (item2
-                        ? <MatchCard item={item2} onClick={() => handlePick(match.item2_id!)} disabled={picking} />
-                        : <div className="flex-1 h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
-                      )
-                    : <div className="flex-1 h-64 bg-gray-700 rounded-xl flex items-center justify-center text-gray-400">BYE</div>
-                  }
+
+                  {/* VS / 무승부 (부전승이면 숨김) */}
+                  {match.item2_id !== null && (
+                    <div className={`flex flex-col items-center gap-2 shrink-0 overflow-hidden ${cardsVisible ? 'transition-all duration-300' : 'transition-none'} ${picking ? 'w-0 opacity-0' : 'w-16 opacity-100'}`}>
+                      <span className="text-gray-500 font-bold text-xl">VS</span>
+                      {(tournament.format === 'league' || (tournament.format === 'worldcup' && match.phase === 'group')) && (
+                        <button
+                          onClick={() => handlePick(null, null, true)}
+                          disabled={!!picking}
+                          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-300 rounded-lg text-xs whitespace-nowrap"
+                        >
+                          무승부
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 카드 2 (부전승이면 표시 안 함) */}
+                  {match.item2_id !== null && (
+                    <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-300' : 'transition-none'} ${
+                      picking?.loserId === match.item2_id ? 'w-0 opacity-0'
+                      : picking?.fadeOut && picking?.winnerId === match.item2_id ? 'w-[40%] opacity-0'
+                      : 'w-[40%] opacity-100'
+                    }`}>
+                      {item2
+                        ? <MatchCard item={item2} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item2_id!, match.item1_id)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item2.id) : onNavigateToWork(item2.id)} disabled={!!picking} />
+                        : <div className="h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
+                      }
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -788,7 +1042,7 @@ function PlayView({
         )}
 
         {tab === 'standings' && (
-          <div className="p-4 max-w-2xl mx-auto space-y-4">
+          <div className="p-4 space-y-4">
             {!standings && <p className="text-gray-500 text-center py-8">로딩 중...</p>}
 
             {/* ── 리그전 순위표 ── */}
@@ -864,14 +1118,14 @@ function PlayView({
                     return acc
                   }, {})
                 )
-                .sort(([a], [b]) => Number(b) - Number(a))
+                .sort(([a], [b]) => Number(a) - Number(b))
                 .map(([round, roundMatches]) => (
                   <div key={round} className="bg-gray-800 rounded-xl overflow-hidden">
                     <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40">
                       <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
                     </div>
                     <div className="divide-y divide-gray-700/50">
-                      {(roundMatches as CupMatch[]).filter(m => !m.is_bye).map(m => {
+                      {(roundMatches as CupMatch[]).map(m => {
                         const i1 = items.get(m.item1_id)
                         const i2 = m.item2_id ? items.get(m.item2_id) : null
                         return (
@@ -904,7 +1158,7 @@ function PlayView({
                 {standings.groupStandings && standings.groupStandings.length > 0 && (
                   <div>
                     <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">조별 예선</h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-4 gap-3">
                       {standings.groupStandings.map(({ group_id, standings: gs }) => (
                         <div key={group_id} className="bg-gray-800 rounded-xl overflow-hidden">
                           <div className="px-3 py-1.5 border-b border-gray-700 bg-gray-700/40">
@@ -959,14 +1213,14 @@ function PlayView({
                           return acc
                         }, {})
                       )
-                      .sort(([a], [b]) => Number(b) - Number(a))
+                      .sort(([a], [b]) => Number(a) - Number(b))
                       .map(([round, roundMatches]) => (
                         <div key={round} className="bg-gray-800 rounded-xl overflow-hidden">
                           <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40">
                             <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
                           </div>
                           <div className="divide-y divide-gray-700/50">
-                            {(roundMatches as CupMatch[]).filter(m => !m.is_bye).map(m => {
+                            {(roundMatches as CupMatch[]).map(m => {
                               const i1 = items.get(m.item1_id)
                               const i2 = m.item2_id ? items.get(m.item2_id) : null
                               return (
@@ -989,6 +1243,76 @@ function PlayView({
                   </div>
                 )}
               </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'rank' && (
+          <div className="p-4">
+            {liveScores.length === 0 ? (
+              <p className="text-gray-500 text-center py-8 text-sm">아직 진행된 매치가 없습니다.</p>
+            ) : (
+              <>
+                {tournament && (tournament.format === 'tournament' || tournament.format === 'worldcup') && (
+                  <p className="text-xs text-gray-500 mb-3">
+                    진출 중인 참가자는 보장된 최소 순위 기준 예상 점수로 표시됩니다.
+                  </p>
+                )}
+                {tournament && tournament.format === 'league' && (
+                  <p className="text-xs text-gray-500 mb-3">
+                    순위 보너스는 대회 완료 후 최종 반영됩니다.
+                  </p>
+                )}
+                <div className="bg-gray-800 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-700 text-gray-400 text-xs">
+                        <th className="px-3 py-2 text-center w-10">순위</th>
+                        <th className="px-3 py-2 text-left">이름</th>
+                        <th className="px-3 py-2 text-right">점수</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {liveScores.map((row, idx) => {
+                        const item = items.get(row.item_id)
+                        const imgPath = item ? itemImagePath(item) : null
+                        const prevPts = idx > 0 ? liveScores[idx - 1].pts : null
+                        const isTied = prevPts !== null && prevPts === row.pts
+                        return (
+                          <tr
+                            key={row.item_id}
+                            className="border-b border-gray-700/50 hover:bg-gray-700/30 transition"
+                          >
+                            <td className="px-3 py-2 text-center">
+                              <span className={`font-bold text-sm ${row.rank === 1 ? 'text-yellow-400' : row.rank === 2 ? 'text-gray-300' : row.rank === 3 ? 'text-amber-600' : 'text-gray-500'}`}>
+                                {isTied ? '=' : row.rank}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                {imgPath && (
+                                  <div className="w-7 h-7 rounded overflow-hidden shrink-0">
+                                    <ImagePreview path={imgPath} alt="" className="w-full h-full" objectPosition="center 10%" />
+                                  </div>
+                                )}
+                                <span
+                                  className="text-gray-200 truncate max-w-[200px] cursor-pointer hover:text-blue-400"
+                                  onClick={() => item && (tournament?.type === 'actor' ? onNavigateToActor(item.id) : onNavigateToWork(item.id))}
+                                >
+                                  {item ? itemLabel(item) : `#${row.item_id}`}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <span className="text-green-400 font-semibold">{row.pts.toFixed(1)}</span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -1223,25 +1547,51 @@ function RankingSettingsModal({ onClose }: { onClose: () => void }) {
 
 // ── TournamentRankingsView ─────────────────────────────────────────────────
 const RANK_PAGE_SIZE = 50
-const RANK_LIMIT_OPTIONS = [25, 50, 100]
+// ── RankTrendChart ─────────────────────────────────────────────────────────
+function RankTrendChart({ history }: { history: { rank: number }[] }) {
+  if (history.length < 2) return <span className="text-gray-600 text-xs">-</span>
+  const W = 160, H = 28, P = 3
+  const ranks = history.map(h => h.rank)
+  const minR = Math.min(...ranks), maxR = Math.max(...ranks)
+  const range = maxR - minR || 1
+  const pts = history.map((h, i) => {
+    const x = P + (i / (history.length - 1)) * (W - P * 2)
+    const y = P + ((h.rank - minR) / range) * (H - P * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  const last = ranks[ranks.length - 1], prev = ranks[ranks.length - 2]
+  const color = last < prev ? '#4ade80' : last > prev ? '#f87171' : '#9ca3af'
+  const [lx, ly] = pts[pts.length - 1].split(',')
+  return (
+    <svg width={W} height={H} className="shrink-0">
+      <polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx={lx} cy={ly} r="2.5" fill={color} />
+    </svg>
+  )
+}
+
+const RANK_LIMIT_OPTIONS = [100, 200, 500, 1000]
 
 function TournamentRankingsView({
   tournamentId,
   onBack,
+  onPlay,
   onNavigateToActor,
   onNavigateToWork,
 }: {
   tournamentId: number
   onBack: () => void
+  onPlay: (runId: number, tab: 'standings') => void
   onNavigateToActor: (id: number) => void
   onNavigateToWork: (id: number) => void
 }) {
   const [tournament, setTournament] = useState<CupTournament | null>(null)
   const [rankMode, setRankMode] = useState<'overall' | 'last'>('overall')
+  const [lastRunId, setLastRunId] = useState<number | null>(null)
   const [rows, setRows] = useState<TournamentRankRow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
-  const [limit, setLimit] = useState(() => Number(localStorage.getItem('tournamentRank:limit') || '50'))
+  const [limit, setLimit] = useState(() => Number(localStorage.getItem('tournamentRank:limit') || '100'))
   const [sortBy, setSortBy] = useState('win_rate')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [search, setSearch] = useState('')
@@ -1250,6 +1600,10 @@ function TournamentRankingsView({
   const [lastPage, setLastPage] = useState(0)
   const [lastFormat, setLastFormat] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [rankHistories, setRankHistories] = useState<Record<number, { rank: number }[]>>({})
+  const [trendModal, setTrendModal] = useState<{ item_id: number; label: string; img: string | null } | null>(null)
+  const [imgOverlay, setImgOverlay] = useState<{ path: string } | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   useEffect(() => {
     cupApi.list({ sortBy: 'created_at' }).then(list => {
@@ -1262,8 +1616,14 @@ function TournamentRankingsView({
     setLoading(true)
     try {
       const res = await cupApi.tournamentRankings(tournamentId, { limit: lb, offset: p * lb, sortBy: sb, sortDir: sd, search: s || undefined })
-      setRows(res.rows as TournamentRankRow[])
+      const rankRows = res.rows as TournamentRankRow[]
+      setRows(rankRows)
       setTotal(res.total)
+      const histories: Record<number, { rank: number }[]> = {}
+      await Promise.all(rankRows.map(async row => {
+        histories[row.item_id] = await cupApi.rankHistory(tournamentId, row.item_id)
+      }))
+      setRankHistories(prev => ({ ...prev, ...histories }))
     } finally {
       setLoading(false)
     }
@@ -1276,6 +1636,7 @@ function TournamentRankingsView({
       setLastRows(res.rows as LastRunRankRow[])
       setLastTotal(res.total)
       if (res.format) setLastFormat(res.format)
+      if (res.runId) setLastRunId(res.runId)
     } finally {
       setLoading(false)
     }
@@ -1328,6 +1689,12 @@ function TournamentRankingsView({
                 className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-36 placeholder-gray-500 outline-none"
               />
             )}
+            {rankMode === 'last' && lastRunId && (
+              <button
+                onClick={() => onPlay(lastRunId, 'standings')}
+                className="text-xs px-2 py-1 bg-gray-700 text-gray-300 hover:bg-gray-600 rounded"
+              >매치결과</button>
+            )}
             <select
               value={limit}
               onChange={e => { const v = Number(e.target.value); setLimit(v); localStorage.setItem('tournamentRank:limit', String(v)); setPage(0); setLastPage(0) }}
@@ -1365,9 +1732,8 @@ function TournamentRankingsView({
                 <col />
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
-                <col style={{ width: '5rem' }} />
-                <col style={{ width: '5rem' }} />
                 <col style={{ width: '6rem' }} />
+                <col style={{ width: '11rem' }} />
               </colgroup>
               <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr className="text-gray-400 text-xs border-b border-gray-700 h-12">
@@ -1377,19 +1743,19 @@ function TournamentRankingsView({
                   <th className="px-2 text-left">{type === 'work' ? '제목' : '이름'}</th>
                   {sortTh('win_rate', '우승률', '(우승/참가)')}
                   {sortTh('match_win_rate', '매치승률', '(승/경기)')}
-                  {sortTh('run_wins', '우승수')}
-                  {sortTh('total_runs', '참가수')}
                   {sortTh('total_pts', '누적승점')}
+                  <th className="px-2 text-center text-xs text-gray-400">순위추이</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, idx) => {
                   const img = imgPath(row)
                   const lbl = label(row)
+                  const recentHistory = (rankHistories[row.item_id] ?? []).slice(-10)
                   return (
                     <tr key={row.item_id} className="border-b border-gray-800 hover:bg-gray-800 h-14">
                       <td className="px-2 text-gray-400 text-xs text-center">{page * limit + idx + 1}</td>
-                      <td className="p-0 h-14">
+                      <td className="p-0 h-14" onMouseEnter={() => img && setImgOverlay({ path: img })} onMouseLeave={() => setImgOverlay(null)}>
                         <ImagePreview path={img} alt={lbl} className="w-full h-14 object-cover" objectPosition="center 10%" />
                       </td>
                       {type === 'work' && (
@@ -1401,6 +1767,8 @@ function TournamentRankingsView({
                         <span
                           className="text-white font-medium hover:underline cursor-pointer truncate block"
                           onClick={() => type === 'actor' ? onNavigateToActor(row.item_id) : onNavigateToWork(row.item_id)}
+                          onMouseMove={e => setTooltip({ type, id: row.item_id, x: e.clientX, y: e.clientY })}
+                          onMouseLeave={() => setTooltip(null)}
                         >{lbl}</span>
                       </td>
                       <td className="px-2 text-right text-yellow-400">
@@ -1411,9 +1779,15 @@ function TournamentRankingsView({
                         <div>{row.match_win_rate.toFixed(1)}%</div>
                         <div className="text-[11px] text-gray-500">({row.match_wins}/{row.total_matches})</div>
                       </td>
-                      <td className="px-2 text-right text-white">{row.run_wins}</td>
-                      <td className="px-2 text-right text-gray-400">{row.total_runs}</td>
                       <td className="px-2 text-right text-green-400">{row.total_pts > 0 ? row.total_pts.toFixed(1) : '—'}</td>
+                      <td
+                        className="px-2 cursor-pointer"
+                        onClick={() => setTrendModal({ item_id: row.item_id, label: lbl, img })}
+                      >
+                        <div className="flex justify-center">
+                          <RankTrendChart history={recentHistory} />
+                        </div>
+                      </td>
                     </tr>
                   )
                 })}
@@ -1431,6 +1805,7 @@ function TournamentRankingsView({
                 {type === 'work' && <col style={{ width: '7rem' }} />}
                 <col />
                 <col style={{ width: '7rem' }} />
+                <col style={{ width: '6rem' }} />
               </colgroup>
               <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr className="text-gray-400 text-xs border-b border-gray-700 h-12">
@@ -1441,6 +1816,7 @@ function TournamentRankingsView({
                   <th className="px-2 text-left text-xs">
                     {lastFormat === 'league' ? '최종점수' : '탈락라운드'}
                   </th>
+                  <th className="px-2 text-right text-xs">획득 승점</th>
                 </tr>
               </thead>
               <tbody>
@@ -1450,7 +1826,7 @@ function TournamentRankingsView({
                   return (
                     <tr key={row.item_id} className="border-b border-gray-800 hover:bg-gray-800 h-14">
                       <td className="px-2 text-gray-400 font-bold text-center">{row.rank}</td>
-                      <td className="p-0 h-14">
+                      <td className="p-0 h-14" onMouseEnter={() => img && setImgOverlay({ path: img })} onMouseLeave={() => setImgOverlay(null)}>
                         <ImagePreview path={img} alt={lbl} className="w-full h-14 object-cover" objectPosition="center 10%" />
                       </td>
                       {type === 'work' && (
@@ -1462,6 +1838,8 @@ function TournamentRankingsView({
                         <span
                           className="text-white font-medium hover:underline cursor-pointer truncate block"
                           onClick={() => type === 'actor' ? onNavigateToActor(row.item_id) : onNavigateToWork(row.item_id)}
+                          onMouseMove={e => setTooltip({ type, id: row.item_id, x: e.clientX, y: e.clientY })}
+                          onMouseLeave={() => setTooltip(null)}
                         >{lbl}</span>
                       </td>
                       <td className="px-2 text-gray-300 text-xs">
@@ -1471,6 +1849,9 @@ function TournamentRankingsView({
                             ? <span className="text-yellow-400 font-semibold">🏆 우승</span>
                             : roundLabel(row.elim_round)
                         }
+                      </td>
+                      <td className="px-2 text-right text-green-400 text-xs">
+                        {row.run_pts != null ? row.run_pts.toFixed(1) : '—'}
                       </td>
                     </tr>
                   )
@@ -1488,6 +1869,70 @@ function TournamentRankingsView({
       {rankMode === 'last' && lastTotalPages > 1 && (
         <Pagination page={lastPage} totalPages={lastTotalPages} onPageChange={setLastPage} />
       )}
+
+      {/* 순위 추이 모달 */}
+      {trendModal && (() => {
+        const history = rankHistories[trendModal.item_id] ?? []
+        const W = 420, H = 180, PX = 36, PY = 16
+        const ranks = history.map(h => h.rank)
+        const minR = ranks.length ? Math.min(...ranks) : 1
+        const maxR = ranks.length ? Math.max(...ranks) : 1
+        const range = maxR - minR || 1
+        const pts = history.map((h, i) => {
+          const x = PX + (history.length > 1 ? i / (history.length - 1) : 0.5) * (W - PX * 2)
+          const y = PY + ((h.rank - minR) / range) * (H - PY * 2)
+          return { x, y, rank: h.rank }
+        })
+        const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+        const last = ranks[ranks.length - 1] ?? 0
+        const prev = ranks[ranks.length - 2] ?? last
+        const color = last < prev ? '#4ade80' : last > prev ? '#f87171' : '#9ca3af'
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setTrendModal(null)}>
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700" style={{ width: W + 80 }} onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-4">
+                <ImagePreview path={trendModal.img} alt={trendModal.label} className="w-10 h-10 rounded object-cover shrink-0" objectPosition="center 10%" />
+                <p className="text-white font-bold flex-1 truncate">{trendModal.label} 순위 추이</p>
+                <button onClick={() => setTrendModal(null)} className="text-gray-400 hover:text-white text-sm ml-2 shrink-0">✕</button>
+              </div>
+              {history.length < 2 ? (
+                <p className="text-gray-500 text-sm text-center py-8">추이 데이터가 부족합니다.</p>
+              ) : (
+                <svg width={W} height={H} className="overflow-visible">
+                  {Array.from(new Set([minR, maxR])).map(r => {
+                    const y = PY + ((r - minR) / range) * (H - PY * 2)
+                    return (
+                      <g key={r}>
+                        <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="#374151" strokeDasharray="3,3" />
+                        <text x={PX - 6} y={y + 4} fill="#9ca3af" fontSize="11" textAnchor="end">{r}위</text>
+                      </g>
+                    )
+                  })}
+                  <polyline points={polyPts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+                  {pts.map((p, i) => (
+                    <g key={i}>
+                      <circle cx={p.x} cy={p.y} r="4" fill={color} />
+                      <text x={p.x} y={p.y - 8} fill="#e5e7eb" fontSize="11" textAnchor="middle">{p.rank}위</text>
+                    </g>
+                  ))}
+                </svg>
+              )}
+              <p className="text-gray-500 text-xs mt-3 text-right">최근 {history.length}회 기록</p>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* 썸네일 확대 오버레이 */}
+      {imgOverlay && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+          <div className="w-48 h-64 rounded-lg overflow-hidden shadow-2xl border border-gray-600">
+            <ImagePreview path={imgOverlay.path} alt="" className="w-full h-full object-cover" />
+          </div>
+        </div>
+      )}
+
+      {tooltip && <CardTooltip tooltip={tooltip} />}
     </div>
   )
 }
@@ -1504,10 +1949,46 @@ type MasterRankRow = {
   total_points: number
   total_cups: number
   cup_wins: number
+  total_matches: number
+  match_wins: number
+}
+
+type FormatStat = {
+  format: 'worldcup' | 'tournament' | 'league'
+  total_cups: number
+  cup_wins: number
+  total_matches: number
+  match_wins: number
+}
+
+type RateTooltip = {
+  itemId: number
+  statType: 'win' | 'match'
+  top: number
+  left: number
 }
 
 const RANK_MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
-const PAGE_SIZE = 50
+const MASTER_PAGE_SIZES = [100, 200, 500, 1000]
+const DIV_BOUNDARIES = [32, 96, 224, 480, 992, 2016]
+const DIV_LABEL: Record<number, string> = { 1: '1부', 2: '2부', 3: '3부', 4: '4부', 5: '5부', 6: '6부', 0: '미분류' }
+const DIV_COLOR: Record<number, string> = {
+  1: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+  2: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+  3: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  4: 'bg-green-500/20 text-green-300 border-green-500/30',
+  5: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  6: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  0: 'bg-gray-700/50 text-gray-500 border-gray-600/30',
+}
+
+function getDivision(rank: number, totalPoints: number): number {
+  if (totalPoints <= 0) return 0
+  for (let d = 0; d < DIV_BOUNDARIES.length; d++) {
+    if (rank <= DIV_BOUNDARIES[d]) return d + 1
+  }
+  return 0
+}
 
 function MasterRankingView({
   onBack,
@@ -1523,15 +2004,36 @@ function MasterRankingView({
   )
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
+  const [divFilter, setDivFilter] = useState<number | null>(null)
+  const [sortBy, setSortBy] = useState<string>(() => localStorage.getItem('masterRank:sortBy') || 'total_points')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('masterRank:sortDir') as 'asc' | 'desc') || 'desc')
   const [rows, setRows] = useState<MasterRankRow[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const saved = parseInt(localStorage.getItem('masterRank:pageSize') ?? '', 10)
+    return MASTER_PAGE_SIZES.includes(saved) ? saved : MASTER_PAGE_SIZES[0]
+  })
+  const [divisionCounts, setDivisionCounts] = useState<{ division: number; count: number }[]>([])
+  const [rankTrends, setRankTrends] = useState<Map<number, number | null>>(new Map())
+  const [rateTooltip, setRateTooltip] = useState<RateTooltip | null>(null)
+  const formatStatsCache = useRef<Map<number, FormatStat[]>>(new Map())
+  const [imgOverlay, setImgOverlay] = useState<{ path: string } | null>(null)
+  const [nameTooltip, setNameTooltip] = useState<TooltipState | null>(null)
+  const [trendModal, setTrendModal] = useState<{ itemId: number; lbl: string; img: string | null } | null>(null)
+  const [trendHistory, setTrendHistory] = useState<{ rank: number; recorded_at: string }[] | null>(null)
+  const rankHistCache = useRef<Map<number, { rank: number; recorded_at: string }[]>>(new Map())
 
-  const load = useCallback(async (t: 'actor' | 'work', s: string, p: number) => {
+  const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc') => {
     setLoading(true)
     try {
-      const data = await masterRankingApi.list({ type: t, limit: PAGE_SIZE, offset: p * PAGE_SIZE, search: s || undefined })
+      const data = await masterRankingApi.list({
+        type: t, limit: ps, offset: p * ps,
+        search: s || undefined,
+        ...(div !== null ? { division: div } : {}),
+        sortBy: sb, sortDir: sd,
+      })
       setRows(data.rows as MasterRankRow[])
       setTotal(data.total)
     } finally {
@@ -1539,17 +2041,74 @@ function MasterRankingView({
     }
   }, [])
 
-  useEffect(() => { setPage(0) }, [type, search])
-  useEffect(() => { load(type, search, page) }, [type, search, page, load])
+  const loadTrends = useCallback(async (t: 'actor' | 'work') => {
+    const trends = await masterRankingApi.rankTrends(t)
+    setRankTrends(new Map(trends.map(r => [r.item_id, r.prev_rank])))
+  }, [])
+
+  useEffect(() => { setPage(0); setDivFilter(null) }, [type])
+  useEffect(() => { setPage(0) }, [search, divFilter, pageSize, sortBy, sortDir])
+  useEffect(() => { load(type, search, page, divFilter, pageSize, sortBy, sortDir) }, [type, search, page, divFilter, pageSize, sortBy, sortDir, load])
+  useEffect(() => { loadTrends(type) }, [type, loadTrends])
   useEffect(() => { localStorage.setItem('masterRank:type', type) }, [type])
+  useEffect(() => { localStorage.setItem('masterRank:pageSize', String(pageSize)) }, [pageSize])
+  useEffect(() => { localStorage.setItem('masterRank:sortBy', sortBy) }, [sortBy])
+  useEffect(() => { localStorage.setItem('masterRank:sortDir', sortDir) }, [sortDir])
+  useEffect(() => {
+    cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+  }, [type])
 
   const imgPath = (row: MasterRankRow) => row.photo_path ?? row.cover_path ?? null
   const label = (row: MasterRankRow) => row.name ?? row.title ?? row.product_number ?? `#${row.id}`
 
+  const handleRateHover = async (e: React.MouseEvent, row: MasterRankRow, statType: 'win' | 'match') => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setRateTooltip({ itemId: row.id, statType, top: rect.bottom + 4, left: rect.left + rect.width / 2 })
+    if (!formatStatsCache.current.has(row.id)) {
+      const data = await masterRankingApi.itemFormatStats(type, row.id)
+      formatStatsCache.current.set(row.id, data)
+      setRateTooltip(prev => prev?.itemId === row.id ? { ...prev } : prev)
+    }
+  }
+
+  const handleSort = (col: string) => {
+    if (sortBy === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    else { setSortBy(col); setSortDir('desc') }
+  }
+
+  const SortTh = ({ col, label, subLabel, className }: { col: string; label: string; subLabel?: React.ReactNode; className?: string }) => {
+    const active = sortBy === col
+    return (
+      <th
+        className={`px-3 py-2.5 cursor-pointer select-none hover:text-white transition ${active ? 'text-white' : 'text-gray-400'} ${className ?? ''}`}
+        onClick={() => handleSort(col)}
+      >
+        <div className="flex items-center justify-end gap-1">
+          <span>{label}{subLabel && <><br/><span className="text-gray-600 font-normal">{subLabel}</span></>}</span>
+          <span className="text-[10px]">{active ? (sortDir === 'desc' ? '▼' : '▲') : <span className="text-gray-700">▼</span>}</span>
+        </div>
+      </th>
+    )
+  }
+
+  const openTrendModal = async (row: MasterRankRow) => {
+    const lbl = label(row)
+    const img = imgPath(row)
+    setTrendModal({ itemId: row.id, lbl, img })
+    if (rankHistCache.current.has(row.id)) {
+      setTrendHistory(rankHistCache.current.get(row.id)!)
+    } else {
+      setTrendHistory(null)
+      const h = await masterRankingApi.rankHistory(type, row.id)
+      rankHistCache.current.set(row.id, h)
+      setTrendHistory(h)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 상단 */}
-      <div className="p-4 shrink-0">
+      <div className="p-4 border-b border-gray-700/50 shrink-0">
         <div className="flex items-center gap-2">
           {/* 뒤로 + 타이틀 */}
           <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5">
@@ -1584,6 +2143,17 @@ function MasterRankingView({
             )}
           </div>
 
+          {/* 페이지 크기 */}
+          <select
+            value={pageSize}
+            onChange={e => setPageSize(Number(e.target.value))}
+            className="bg-gray-800 text-gray-300 text-xs rounded-lg px-2 py-1.5 border-none outline-none cursor-pointer hover:text-white"
+          >
+            {MASTER_PAGE_SIZES.map(s => (
+              <option key={s} value={s}>{s}개</option>
+            ))}
+          </select>
+
           {/* 설정 */}
           <div className="bg-gray-800 rounded-lg px-3 py-1.5">
             <button
@@ -1594,12 +2164,37 @@ function MasterRankingView({
             </button>
           </div>
         </div>
+
+        {/* 부별 필터 */}
+        {divisionCounts.length > 0 && (
+          <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+            <button
+              onClick={() => setDivFilter(null)}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition ${divFilter === null ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}
+            >
+              전체
+            </button>
+            {divisionCounts.map(({ division, count }) => (
+              <button
+                key={division}
+                onClick={() => setDivFilter(divFilter === division ? null : division)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition border ${
+                  divFilter === division
+                    ? 'bg-blue-600 text-white border-blue-500'
+                    : `${DIV_COLOR[division] ?? 'bg-gray-800 text-gray-400 border-gray-700'} hover:opacity-80`
+                }`}
+              >
+                {DIV_LABEL[division] ?? `${division}부`} <span className="opacity-70">{count}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {showSettings && <RankingSettingsModal onClose={() => setShowSettings(false)} />}
 
       {/* 랭킹 테이블 */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" onMouseLeave={() => { setImgOverlay(null); setNameTooltip(null) }}>
         {loading && rows.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-gray-500">로딩 중...</div>
         ) : rows.length === 0 ? (
@@ -1609,58 +2204,131 @@ function MasterRankingView({
           </div>
         ) : (
           <>
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col style={{ width: '2.5rem' }} />
+                <col style={{ width: '3rem' }} />
+                <col style={{ width: '3.5rem' }} />
+                <col style={{ width: '4rem' }} />
+                <col />
+                <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '5.5rem' }} />
+              </colgroup>
               <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr className="border-b border-gray-700 text-gray-400 text-xs">
-                  <th className="px-4 py-2.5 text-left w-12">순위</th>
-                  <th className="px-4 py-2.5 text-left">이름</th>
-                  <th className="px-4 py-2.5 text-right">마스터 점수</th>
-                  <th className="px-4 py-2.5 text-right">대회 참가</th>
-                  <th className="px-4 py-2.5 text-right">우승</th>
+                  <th className="px-2 py-2.5 text-center text-gray-400">#</th>
+                  <th className="px-2 py-2.5 text-center text-gray-400">순위</th>
+                  <th className="px-2 py-2.5 text-center text-gray-400">리그</th>
+                  <th className="px-2 py-2.5 text-left text-gray-400">썸네일</th>
+                  <th className="px-3 py-2.5 text-left text-gray-400">이름</th>
+                  <SortTh col="total_points" label="마스터" subLabel="점수" />
+                  <SortTh col="win_rate" label="우승률" subLabel="(우승/런)" />
+                  <SortTh col="match_win_rate" label="승률" subLabel="(승리/매치)" />
+                  <th className="px-3 py-2.5 text-center text-gray-400">추이</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {rows.map((row, idx) => {
                   const img = imgPath(row)
+                  const lbl = label(row)
                   const medal = RANK_MEDAL[row.rank]
+                  const division = getDivision(row.rank, row.total_points)
+                  const prevRank = rankTrends.get(row.id)
+                  const winRate = row.total_cups > 0 ? row.cup_wins / row.total_cups * 100 : null
+                  const matchWinRate = row.total_matches > 0 ? row.match_wins / row.total_matches * 100 : null
+                  let trendBadge: React.ReactNode = <span className="text-gray-700 text-xs">—</span>
+                  if (prevRank !== undefined && prevRank !== null) {
+                    const delta = prevRank - row.rank
+                    if (delta > 0) trendBadge = <span className="text-green-400 text-xs font-medium">▲{delta}</span>
+                    else if (delta < 0) trendBadge = <span className="text-red-400 text-xs font-medium">▼{Math.abs(delta)}</span>
+                    else trendBadge = <span className="text-gray-500 text-xs">=</span>
+                  } else if (prevRank === null && row.total_points > 0) {
+                    trendBadge = <span className="text-blue-400 text-xs">NEW</span>
+                  }
                   return (
                     <tr
                       key={row.id}
-                      className={`border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer transition ${row.rank <= 3 ? 'bg-yellow-950/10' : ''}`}
-                      onClick={() => type === 'actor' ? onNavigateToActor(row.id) : onNavigateToWork(row.id)}
+                      className={`border-b border-gray-800 hover:bg-gray-800/40 transition ${row.rank <= 3 ? 'bg-yellow-950/10' : ''}`}
                     >
-                      <td className="px-4 py-2 text-center">
+                      {/* # */}
+                      <td className="px-2 py-2 text-center text-gray-600 text-xs">{page * pageSize + idx + 1}</td>
+                      {/* 순위 */}
+                      <td className="px-2 py-2 text-center">
                         {medal
                           ? <span className="text-base">{medal}</span>
-                          : <span className="text-gray-400 text-xs">{row.rank}</span>
+                          : <span className="text-gray-300 text-xs font-medium">{row.rank}</span>
                         }
                       </td>
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-10 rounded overflow-hidden bg-gray-700 shrink-0">
-                            {img
-                              ? <ImagePreview path={img} alt={label(row)} className="w-full h-full object-cover" />
-                              : <span className="flex items-center justify-center h-full text-gray-600 text-xs">?</span>
-                            }
-                          </div>
-                          <div>
-                            <p className="text-white font-medium leading-tight">{label(row)}</p>
-                            {row.product_number && row.title && (
-                              <p className="text-gray-500 text-xs">{row.product_number}</p>
-                            )}
-                          </div>
+                      {/* 리그 */}
+                      <td className="px-2 py-2 text-center">
+                        <span className={`inline-block px-1.5 py-0.5 rounded border text-xs font-medium ${DIV_COLOR[division] ?? ''}`}>
+                          {DIV_LABEL[division] ?? `${division}부`}
+                        </span>
+                      </td>
+                      {/* 썸네일 */}
+                      <td className="p-0 h-14" onMouseEnter={() => img && setImgOverlay({ path: img })} onMouseLeave={() => setImgOverlay(null)}>
+                        {img
+                          ? <ImagePreview path={img} alt={lbl} className="w-full h-14 object-cover" objectPosition="center 10%" />
+                          : <div className="w-full h-14 bg-gray-700 flex items-center justify-center text-gray-600 text-xs">?</div>
+                        }
+                      </td>
+                      {/* 이름 */}
+                      <td className="px-3 py-2 max-w-[160px]">
+                        <div
+                          className="cursor-pointer"
+                          onMouseEnter={e => setNameTooltip({ type: type === 'actor' ? 'actor' : 'work', id: row.id, x: e.clientX, y: e.clientY })}
+                          onMouseMove={e => setNameTooltip({ type: type === 'actor' ? 'actor' : 'work', id: row.id, x: e.clientX, y: e.clientY })}
+                          onMouseLeave={() => setNameTooltip(null)}
+                          onClick={() => type === 'actor' ? onNavigateToActor(row.id) : onNavigateToWork(row.id)}
+                        >
+                          <p className="text-white font-medium leading-tight truncate hover:underline">{lbl}</p>
+                          {row.product_number && row.title && (
+                            <p className="text-gray-500 text-xs truncate">{row.product_number}</p>
+                          )}
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-right">
-                        <span className={`font-bold ${row.total_points > 0 ? 'text-yellow-400' : 'text-gray-600'}`}>
+                      {/* 마스터 점수 */}
+                      <td className="px-3 py-2 text-right">
+                        <span className={`font-bold ${row.total_points > 0 ? 'text-green-400' : 'text-gray-600'}`}>
                           {row.total_points.toFixed(1)}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-400">{row.total_cups}</td>
-                      <td className="px-4 py-2 text-right">
-                        <span className={row.cup_wins > 0 ? 'text-yellow-500 font-semibold' : 'text-gray-600'}>
-                          {row.cup_wins}
-                        </span>
+                      {/* 우승률 */}
+                      <td
+                        className="px-3 py-2 text-right cursor-default"
+                        onMouseEnter={e => handleRateHover(e, row, 'win')}
+                        onMouseLeave={() => setRateTooltip(null)}
+                      >
+                        {winRate !== null
+                          ? <>
+                              <div className="text-yellow-400">{winRate.toFixed(1)}%</div>
+                              <div className="text-[11px] text-gray-500">({row.cup_wins}/{row.total_cups})</div>
+                            </>
+                          : <span className="text-gray-600">—</span>
+                        }
+                      </td>
+                      {/* 승률 */}
+                      <td
+                        className="px-3 py-2 text-right cursor-default"
+                        onMouseEnter={e => handleRateHover(e, row, 'match')}
+                        onMouseLeave={() => setRateTooltip(null)}
+                      >
+                        {matchWinRate !== null
+                          ? <>
+                              <div className="text-blue-400">{matchWinRate.toFixed(1)}%</div>
+                              <div className="text-[11px] text-gray-500">({row.match_wins}/{row.total_matches})</div>
+                            </>
+                          : <span className="text-gray-600">—</span>
+                        }
+                      </td>
+                      {/* 추이 */}
+                      <td
+                        className="px-3 py-2 text-center cursor-pointer hover:bg-gray-700/50 transition"
+                        onClick={e => { e.stopPropagation(); openTrendModal(row) }}
+                      >
+                        {trendBadge}
                       </td>
                     </tr>
                   )
@@ -1669,12 +2337,117 @@ function MasterRankingView({
             </table>
 
             {/* 페이지네이션 */}
-            {Math.ceil(total / PAGE_SIZE) > 1 && (
-              <Pagination page={page} totalPages={Math.ceil(total / PAGE_SIZE)} onPageChange={setPage} />
+            {Math.ceil(total / pageSize) > 1 && (
+              <Pagination page={page} totalPages={Math.ceil(total / pageSize)} onPageChange={setPage} />
             )}
           </>
         )}
       </div>
+
+      {/* 썸네일 확대 오버레이 */}
+      {imgOverlay && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+          <div className="w-48 h-64 rounded-lg overflow-hidden shadow-2xl border border-gray-600">
+            <ImagePreview path={imgOverlay.path} alt="" className="w-full h-full object-cover" />
+          </div>
+        </div>
+      )}
+
+      {/* 이름 CardTooltip */}
+      {nameTooltip && <CardTooltip tooltip={nameTooltip} />}
+
+      {/* 포맷별 통계 툴팁 */}
+      {rateTooltip && formatStatsCache.current.has(rateTooltip.itemId) && (() => {
+        const stats = formatStatsCache.current.get(rateTooltip.itemId)!
+        const FORMAT_LABEL: Record<string, string> = { worldcup: '월드컵', tournament: '토너먼트', league: '리그전' }
+        const formats = (['worldcup', 'tournament', 'league'] as const).filter(f => stats.some(s => s.format === f))
+        if (formats.length === 0) return null
+        return (
+          <div
+            className="fixed z-50 bg-gray-800 border border-gray-600 rounded-lg shadow-xl pointer-events-none"
+            style={{ top: rateTooltip.top, left: rateTooltip.left, transform: 'translateX(-50%)' }}
+          >
+            <div className="grid gap-px bg-gray-600 rounded-lg overflow-hidden" style={{ gridTemplateColumns: `repeat(${formats.length}, minmax(80px, 1fr))` }}>
+              {formats.map((fmt) => {
+                const s = stats.find(x => x.format === fmt)!
+                const rate = rateTooltip.statType === 'win'
+                  ? (s.total_cups > 0 ? s.cup_wins / s.total_cups * 100 : null)
+                  : (s.total_matches > 0 ? s.match_wins / s.total_matches * 100 : null)
+                const wins = rateTooltip.statType === 'win' ? s.cup_wins : s.match_wins
+                const tot = rateTooltip.statType === 'win' ? s.total_cups : s.total_matches
+                return (
+                  <div key={fmt} className="bg-gray-800 px-3 py-2 text-center">
+                    <div className="text-gray-400 text-xs mb-1">{FORMAT_LABEL[fmt]}</div>
+                    <div className={`text-sm font-semibold ${rateTooltip.statType === 'win' ? 'text-yellow-400' : 'text-blue-400'}`}>
+                      {rate !== null ? `${rate.toFixed(1)}%` : '—'}
+                    </div>
+                    <div className="text-gray-500 text-xs">({wins}/{tot})</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* 순위 추이 모달 */}
+      {trendModal && (() => {
+        const history = trendHistory ?? []
+        const W = 420, H = 180, PX = 36, PY = 16
+        const ranks = history.map(h => h.rank)
+        const minR = ranks.length ? Math.min(...ranks) : 1
+        const maxR = ranks.length ? Math.max(...ranks) : 1
+        const range = maxR - minR || 1
+        const pts = history.map((h, i) => {
+          const x = PX + (history.length > 1 ? i / (history.length - 1) : 0.5) * (W - PX * 2)
+          const y = PY + ((h.rank - minR) / range) * (H - PY * 2)
+          return { x, y, rank: h.rank }
+        })
+        const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+        const last = ranks[ranks.length - 1] ?? 0
+        const prev = ranks[ranks.length - 2] ?? last
+        const color = last < prev ? '#4ade80' : last > prev ? '#f87171' : '#9ca3af'
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setTrendModal(null)}>
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700" style={{ width: W + 80 }} onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-4">
+                {trendModal.img && (
+                  <div className="w-10 h-10 rounded overflow-hidden shrink-0">
+                    <ImagePreview path={trendModal.img} alt={trendModal.lbl} className="w-full h-full object-cover" objectPosition="center 10%" />
+                  </div>
+                )}
+                <p className="text-white font-bold flex-1 truncate">{trendModal.lbl} 마스터 순위 추이</p>
+                <button onClick={() => setTrendModal(null)} className="text-gray-400 hover:text-white text-sm ml-2 shrink-0">✕</button>
+              </div>
+              {trendHistory === null ? (
+                <p className="text-gray-500 text-sm text-center py-8">로딩 중...</p>
+              ) : history.length < 2 ? (
+                <p className="text-gray-500 text-sm text-center py-8">추이 데이터가 부족합니다.</p>
+              ) : (
+                <svg width={W} height={H} className="overflow-visible">
+                  {Array.from(new Set([minR, maxR])).map(r => {
+                    const y = PY + ((r - minR) / range) * (H - PY * 2)
+                    return (
+                      <g key={r}>
+                        <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="#374151" strokeDasharray="3,3" />
+                        <text x={PX - 6} y={y + 4} fill="#9ca3af" fontSize="11" textAnchor="end">{r}위</text>
+                      </g>
+                    )
+                  })}
+                  <polyline points={polyPts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+                  {pts.map((p, i) => (
+                    <g key={i}>
+                      <circle cx={p.x} cy={p.y} r="4" fill={color} />
+                      <text x={p.x} y={p.y - 8} fill="#e5e7eb" fontSize="11" textAnchor="middle">{p.rank}위</text>
+                    </g>
+                  ))}
+                </svg>
+              )}
+              <p className="text-gray-500 text-xs mt-3 text-right">최근 {history.length}회 기록</p>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -1700,6 +2473,9 @@ export default function Worldcup({
   const [sortBy, setSortBy] = useState<'created_at' | 'name'>(() => (localStorage.getItem('cup:sortBy') as 'created_at' | 'name') || 'created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('cup:sortDir') as 'asc' | 'desc') || 'desc')
   const [showCreate, setShowCreate] = useState(false)
+  const [statsModalId, setStatsModalId] = useState<number | null>(null)
+  const [statsData, setStatsData] = useState<{ total_runs: number; completed_runs: number; last_run_at: string | null; participated_items: number; run_dist: { run_count: number; count: number }[] } | null>(null)
+  const [statsName, setStatsName] = useState('')
 
   const loadList = useCallback(async () => {
     const params: Record<string, unknown> = { sortBy, sortDir }
@@ -1737,6 +2513,14 @@ export default function Worldcup({
     setView('tournament-rankings')
   }
 
+  const handleStats = (id: number) => {
+    const t = tournaments.find(x => x.id === id)
+    setStatsName(t?.name ?? '')
+    setStatsModalId(id)
+    setStatsData(null)
+    cupApi.tournamentStats(id).then(data => setStatsData(data))
+  }
+
   if (view === 'play' && selectedId !== null) {
     return (
       <PlayView
@@ -1744,6 +2528,7 @@ export default function Worldcup({
         runId={selectedRunId}
         initialTab={selectedTab}
         onBack={() => { setView('list'); loadList() }}
+        onRankings={(id) => { setSelectedRankId(id); setView('tournament-rankings') }}
         onNavigateToActor={onNavigateToActor}
         onNavigateToWork={onNavigateToWork}
       />
@@ -1765,6 +2550,7 @@ export default function Worldcup({
       <TournamentRankingsView
         tournamentId={selectedRankId}
         onBack={() => { setView('list'); loadList() }}
+        onPlay={(runId, tab) => { setSelectedId(selectedRankId); setSelectedRunId(runId); setSelectedTab(tab); setView('play') }}
         onNavigateToActor={onNavigateToActor}
         onNavigateToWork={onNavigateToWork}
       />
@@ -1871,6 +2657,7 @@ export default function Worldcup({
                 t={t}
                 onPlay={(runId, tab) => handlePlay(t.id, runId, tab)}
                 onRankings={handleRankings}
+                onStats={handleStats}
                 onDelete={() => handleDelete(t.id)}
                 onUpdate={loadList}
               />
@@ -1887,6 +2674,63 @@ export default function Worldcup({
             loadList()
           }}
         />
+      )}
+
+      {statsModalId !== null && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setStatsModalId(null)}>
+          <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 w-[640px] max-w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-white font-bold text-base">{statsName} 통계</h3>
+              <button onClick={() => setStatsModalId(null)} className="text-gray-400 hover:text-white text-lg leading-none">✕</button>
+            </div>
+
+            {statsData === null ? (
+              <div className="flex items-center justify-center h-32 text-gray-500 text-sm">로딩 중...</div>
+            ) : (
+              <>
+                {/* 런 통계 */}
+                <div className="mb-4">
+                  <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">대회 현황</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-gray-700 rounded-lg p-3 text-center">
+                      <p className="text-gray-400 text-xs mb-1">전체 런</p>
+                      <p className="text-white text-xl font-bold">{statsData.total_runs}</p>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-3 text-center">
+                      <p className="text-gray-400 text-xs mb-1">완료</p>
+                      <p className="text-white text-xl font-bold">{statsData.completed_runs}</p>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-3 text-center">
+                      <p className="text-gray-400 text-xs mb-1">마지막 런</p>
+                      <p className="text-white text-sm font-bold">{statsData.last_run_at ? statsData.last_run_at.slice(0, 10) : '-'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 참가자 통계 */}
+                <div className="mb-5">
+                  <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">참가자 통계</p>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="bg-gray-700 rounded-lg p-3 text-center">
+                      <p className="text-gray-400 text-xs mb-1">참가 고유 항목</p>
+                      <p className="text-white text-xl font-bold">{statsData.participated_items}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 참가 횟수 분포 차트 */}
+                <div>
+                  <p className="text-gray-400 text-xs mb-2 font-semibold uppercase tracking-wide">
+                    참가 횟수 분포 <span className="text-gray-600 normal-case">(X: 참가 횟수, Y: 항목 수)</span>
+                  </p>
+                  <div className="bg-gray-700 rounded-lg p-3">
+                    <RunDistChart data={statsData.run_dist} />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
     </div>

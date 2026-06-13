@@ -176,16 +176,26 @@ export const cupApi = {
     api.invoke('cup:standings', runId),
   itemCount: (tournamentId: number) =>
     api.invoke('cup:item-count', { tournamentId }) as Promise<number>,
+  divisionCounts: (type: 'actor' | 'work') =>
+    api.invoke('cup:division-counts', { type }) as Promise<{ division: number; count: number }[]>,
   start: (tournamentId: number, roundTotal: number, force?: boolean) =>
     api.invoke('cup:start', { tournamentId, roundTotal, force }),
   pick: (matchId: number, winnerId: number | null, isDraw?: boolean) =>
     api.invoke('cup:pick', { matchId, winnerId, isDraw }),
-  complete: (runId: number) =>
-    api.invoke('cup:complete', runId),
   tournamentRankings: (tournamentId: number, params?: { limit?: number; offset?: number; sortBy?: string; sortDir?: string; search?: string }) =>
     api.invoke('cup:tournament-rankings', { tournamentId, ...params }) as Promise<{ rows: unknown[]; total: number }>,
+  runProgress: (runId: number) =>
+    api.invoke('cup:run-progress', runId) as Promise<{ match: { round: number; match_index: number; phase: string; group_id: number | null } | null; total: number; done: number }>,
+  runLiveScores: (runId: number) =>
+    api.invoke('cup:run-live-scores', { runId }) as Promise<{ item_id: number; pts: number; rank: number }[]>,
   lastRunRankings: (tournamentId: number, params?: { limit?: number; offset?: number }) =>
     api.invoke('cup:last-run-rankings', { tournamentId, ...params }) as Promise<{ rows: unknown[]; total: number; runId: number | null; format?: string }>,
+  tournamentStats: (tournamentId: number) =>
+    api.invoke('cup:tournament-stats', tournamentId) as Promise<{ total_runs: number; completed_runs: number; last_run_at: string | null; participated_items: number; run_dist: { run_count: number; count: number }[] } | null>,
+  itemTournamentStats: (tournamentId: number, itemId: number) =>
+    api.invoke('cup:item-tournament-stats', { tournamentId, itemId }) as Promise<{ total_runs: number; run_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number; rank: number }>,
+  rankHistory: (tournamentId: number, itemId: number) =>
+    api.invoke('cup:rank-history', { tournamentId, itemId }) as Promise<{ rank: number; recorded_at: string }[]>,
 }
 
 // 랭킹 설정
@@ -198,8 +208,14 @@ export const rankingSettingsApi = {
 
 // 마스터 랭킹
 export const masterRankingApi = {
-  list: (params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string }) =>
+  list: (params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc' }) =>
     api.invoke('master-ranking:list', params) as Promise<{ rows: unknown[]; total: number }>,
   reset: (type: 'actor' | 'work') =>
     api.invoke('master-ranking:reset', type),
+  rankTrends: (type: 'actor' | 'work') =>
+    api.invoke('master-ranking:rank-trends', type) as Promise<{ item_id: number; prev_rank: number | null }[]>,
+  itemFormatStats: (type: 'actor' | 'work', itemId: number) =>
+    api.invoke('master-ranking:item-format-stats', { type, itemId }) as Promise<{ format: 'worldcup' | 'tournament' | 'league'; total_cups: number; cup_wins: number; total_matches: number; match_wins: number }[]>,
+  rankHistory: (type: 'actor' | 'work', itemId: number) =>
+    api.invoke('master-ranking:rank-history', { type, itemId }) as Promise<{ rank: number; recorded_at: string }[]>,
 }

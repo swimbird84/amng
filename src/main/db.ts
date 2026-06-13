@@ -582,4 +582,16 @@ export function initDatabase(): void {
 
     db.exec(`PRAGMA foreign_keys = ON`)
   }
+
+  // cup_rank_snapshots 테이블 추가
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cup_rank_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL REFERENCES cup_tournaments(id) ON DELETE CASCADE,
+      item_id INTEGER NOT NULL,
+      rank INTEGER NOT NULL,
+      recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cup_rank_snapshots ON cup_rank_snapshots(tournament_id, item_id);
+  `)
 }
