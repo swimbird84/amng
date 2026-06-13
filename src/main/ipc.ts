@@ -277,12 +277,43 @@ function saveRankSnapshot(
   if (!runRow) return
   const { tournament_id: tournamentId } = runRow
   const rankRows = database.prepare(`
-    SELECT mh.item_id, SUM(mh.points) AS total_pts
-    FROM master_ranking_history mh
-    JOIN cup_runs r ON r.id = mh.run_id AND r.tournament_id = ?
-    GROUP BY mh.item_id
-    ORDER BY total_pts DESC
-  `).all(tournamentId) as { item_id: number; total_pts: number }[]
+    WITH entry_stats AS (
+      SELECT e.item_id,
+        COUNT(DISTINCT e.run_id) AS total_runs,
+        SUM(CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END) AS run_wins
+      FROM cup_entries e
+      JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ? AND r.status = 'completed'
+      GROUP BY e.item_id
+    ),
+    match_parts AS (
+      SELECT m.item1_id AS item_id,
+        CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
+        CASE WHEN m.winner_id = m.item1_id THEN 1 ELSE 0 END AS is_win
+      FROM cup_matches m
+      JOIN cup_runs r ON r.id = m.run_id AND r.tournament_id = ? AND r.status = 'completed'
+      UNION ALL
+      SELECT m.item2_id AS item_id,
+        CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
+        CASE WHEN m.winner_id = m.item2_id THEN 1 ELSE 0 END AS is_win
+      FROM cup_matches m
+      JOIN cup_runs r ON r.id = m.run_id AND r.tournament_id = ? AND r.status = 'completed'
+      WHERE m.item2_id IS NOT NULL
+    ),
+    match_stats AS (
+      SELECT item_id, SUM(is_played) AS total_matches, SUM(is_win) AS match_wins
+      FROM match_parts GROUP BY item_id
+    ),
+    ranked AS (
+      SELECT es.item_id,
+        RANK() OVER (ORDER BY
+          CASE WHEN es.total_runs > 0 THEN CAST(es.run_wins AS REAL) / es.total_runs ELSE 0 END DESC,
+          CASE WHEN COALESCE(ms.total_matches, 0) > 0 THEN CAST(COALESCE(ms.match_wins, 0) AS REAL) / COALESCE(ms.total_matches, 0) ELSE 0 END DESC
+        ) AS rank
+      FROM entry_stats es
+      LEFT JOIN match_stats ms ON ms.item_id = es.item_id
+    )
+    SELECT item_id, rank FROM ranked
+  `).all(tournamentId, tournamentId, tournamentId) as { item_id: number; rank: number }[]
   const insertSnap = database.prepare(`INSERT INTO cup_rank_snapshots (tournament_id, item_id, rank) VALUES (?, ?, ?)`)
   const trimSnap = database.prepare(`
     DELETE FROM cup_rank_snapshots
@@ -293,11 +324,9 @@ function saveRankSnapshot(
         ORDER BY id DESC LIMIT 20
       )
   `)
-  let currentRank = 1
-  for (let i = 0; i < rankRows.length; i++) {
-    if (i > 0 && rankRows[i].total_pts !== rankRows[i - 1].total_pts) currentRank = i + 1
-    insertSnap.run(tournamentId, rankRows[i].item_id, currentRank)
-    trimSnap.run(tournamentId, rankRows[i].item_id, tournamentId, rankRows[i].item_id)
+  for (const row of rankRows) {
+    insertSnap.run(tournamentId, row.item_id, row.rank)
+    trimSnap.run(tournamentId, row.item_id, tournamentId, row.item_id)
   }
 }
 

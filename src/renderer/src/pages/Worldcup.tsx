@@ -703,10 +703,9 @@ function MatchCard({
         }
       </button>
 
-      {/* 정보 — 클릭 시 상세 모달 */}
+      {/* 정보 섹션 */}
       <div
-        className={`p-3 bg-gray-800 border-t border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors overflow-hidden${type === 'work' ? ' h-[168px]' : ''}`}
-        onClick={onNavigate}
+        className={`p-3 bg-gray-800 border-t border-gray-700 cursor-default overflow-hidden${type === 'work' ? ' h-[168px]' : ''}`}
         onMouseMove={e => setTooltip({ type, id: item.id, x: e.clientX, y: e.clientY })}
         onMouseLeave={() => setTooltip(null)}
       >
@@ -722,21 +721,27 @@ function MatchCard({
         )}
         {/* 이름 / 작품 정보 */}
         {type === 'actor' ? (
-          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-            <p className="flex-1 text-[1.47rem] font-bold text-white text-center truncate cursor-pointer" onClick={onNavigate}>{item.name ?? '...'}</p>
+          <div className="flex items-center gap-1">
+            <p
+              className="flex-1 text-[1.47rem] font-bold text-white text-center truncate cursor-pointer hover:underline"
+              onClick={onNavigate}
+            >{item.name ?? '...'}</p>
             <button
               onClick={handleOpenMemo}
-              className={`shrink-0 w-7 h-7 rounded flex items-center justify-center transition ${localComment ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-600 hover:text-gray-400'}`}
+              className="shrink-0 w-7 h-7 rounded flex items-center justify-center cursor-pointer hover:border hover:border-gray-500 transition"
               title="코멘트 편집"
             >
-              ✎
+              💬
             </button>
           </div>
         ) : (
-          <div className="flex items-start gap-2" onClick={e => e.stopPropagation()}>
-            <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
               <p className="text-sm text-gray-400 truncate">{item.product_number ?? ''}</p>
-              <p className="text-base font-bold text-white mt-0.5 line-clamp-4">{item.title ?? item.product_number ?? '...'}</p>
+              <p
+                className="text-base font-bold text-white mt-0.5 line-clamp-4 cursor-pointer hover:underline"
+                onClick={onNavigate}
+              >{item.title ?? item.product_number ?? '...'}</p>
             </div>
             <div className="flex flex-col gap-1 shrink-0">
               {firstFile && (
@@ -751,10 +756,10 @@ function MatchCard({
               )}
               <button
                 onClick={handleOpenMemo}
-                className={`w-8 h-8 rounded flex items-center justify-center transition ${localComment ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-600 hover:text-gray-400'}`}
+                className="w-8 h-8 rounded flex items-center justify-center cursor-pointer hover:border hover:border-gray-500 transition"
                 title="코멘트 편집"
               >
-                ✎
+                💬
               </button>
             </div>
           </div>
