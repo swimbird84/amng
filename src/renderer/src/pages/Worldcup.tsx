@@ -325,7 +325,6 @@ function RunDistChart({ data }: { data: { run_count: number; count: number }[] }
       })}
       <line x1={PL} y1={PT} x2={PL} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
       <line x1={PL} y1={PT + cH} x2={W - PR} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
-      <text x={W / 2} y={H + 2} textAnchor="middle" fontSize="9" fill="#6b7280">참가 횟수</text>
     </svg>
   )
 }
@@ -940,7 +939,7 @@ function PlayView({
                           />
                         </div>
                         <p className="text-white font-bold text-lg">{itemLabel(winnerItem)}</p>
-                        <div className="w-full max-w-md flex flex-col gap-2">
+                        <div className="w-full max-w-2xl flex flex-col gap-2">
                           <p className="text-gray-400 text-sm">코멘트 편집</p>
                           <textarea
                             value={commentDraft}
