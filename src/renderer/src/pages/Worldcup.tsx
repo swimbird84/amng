@@ -643,6 +643,10 @@ function MatchCard({
   const [stats, setStats] = useState<{ total_runs: number; run_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number; rank: number } | null>(null)
   const [fileExists, setFileExists] = useState(false)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [showMemo, setShowMemo] = useState(false)
+  const [memoText, setMemoText] = useState(item.comment ?? '')
+  const [localComment, setLocalComment] = useState(item.comment ?? '')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     cupApi.itemTournamentStats(tournamentId, item.id).then(setStats)
@@ -662,6 +666,25 @@ function MatchCard({
     if (!firstFile) return
     if (firstFile.type === 'url') shellApi.openExternal(firstFile.file_path)
     else shellApi.openPath(firstFile.file_path)
+  }
+
+  const handleOpenMemo = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setMemoText(localComment)
+    setShowMemo(true)
+  }
+
+  const handleSaveMemo = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSaving(true)
+    try {
+      if (type === 'actor') await actorsApi.update(item.id, { comment: memoText })
+      else await worksApi.update(item.id, { comment: memoText })
+      setLocalComment(memoText)
+      setShowMemo(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -699,27 +722,75 @@ function MatchCard({
         )}
         {/* 이름 / 작품 정보 */}
         {type === 'actor' ? (
-          <p className="text-[1.47rem] font-bold text-white text-center truncate">{item.name ?? '...'}</p>
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            <p className="flex-1 text-[1.47rem] font-bold text-white text-center truncate cursor-pointer" onClick={onNavigate}>{item.name ?? '...'}</p>
+            <button
+              onClick={handleOpenMemo}
+              className={`shrink-0 w-7 h-7 rounded flex items-center justify-center transition ${localComment ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-600 hover:text-gray-400'}`}
+              title="코멘트 편집"
+            >
+              ✎
+            </button>
+          </div>
         ) : (
           <div className="flex items-start gap-2" onClick={e => e.stopPropagation()}>
             <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
               <p className="text-sm text-gray-400 truncate">{item.product_number ?? ''}</p>
               <p className="text-base font-bold text-white mt-0.5 line-clamp-4">{item.title ?? item.product_number ?? '...'}</p>
             </div>
-            {firstFile && (
+            <div className="flex flex-col gap-1 shrink-0">
+              {firstFile && (
+                <button
+                  onClick={handlePlay}
+                  disabled={!fileExists}
+                  className={`w-8 h-8 rounded flex items-center justify-center transition ${fileExists ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
+                  title="재생"
+                >
+                  <span className="text-white text-sm">▶</span>
+                </button>
+              )}
               <button
-                onClick={handlePlay}
-                disabled={!fileExists}
-                className={`shrink-0 w-8 h-8 rounded flex items-center justify-center transition ${fileExists ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
-                title="재생"
+                onClick={handleOpenMemo}
+                className={`w-8 h-8 rounded flex items-center justify-center transition ${localComment ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-600 hover:text-gray-400'}`}
+                title="코멘트 편집"
               >
-                <span className="text-white text-sm">▶</span>
+                ✎
               </button>
-            )}
+            </div>
           </div>
         )}
       </div>
       {tooltip && <CardTooltip tooltip={tooltip} />}
+
+      {/* 코멘트 편집 모달 */}
+      {showMemo && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowMemo(false)}>
+          <div className="bg-gray-800 rounded-xl p-5 w-[420px] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-sm font-bold text-white mb-3 truncate">
+              {type === 'actor' ? item.name : (item.title ?? item.product_number ?? `#${item.id}`)}
+            </h2>
+            <textarea
+              className="w-full bg-gray-900 text-white text-sm rounded p-2 resize-none border border-gray-600 focus:outline-none focus:border-blue-500"
+              rows={5}
+              value={memoText}
+              onChange={e => setMemoText(e.target.value)}
+              placeholder="코멘트를 입력하세요..."
+              autoFocus
+            />
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={handleSaveMemo}
+                disabled={saving}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded text-sm font-semibold transition"
+              >저장</button>
+              <button
+                onClick={() => setShowMemo(false)}
+                className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition"
+              >취소</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
