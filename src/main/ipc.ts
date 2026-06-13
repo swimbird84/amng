@@ -264,7 +264,7 @@ function calcAndStoreRunPoints(
     } else {
       finalPts = mp + bonus
     }
-    insert.run(runId, type, e.item_id, finalPts)
+    insert.run(runId, type, e.item_id, Math.round(finalPts * 10) / 10)
   }
 }
 

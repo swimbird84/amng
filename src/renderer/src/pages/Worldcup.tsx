@@ -2105,6 +2105,7 @@ function MasterRankingView({
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [pageSize, setPageSize] = useState<number>(() => {
     const saved = parseInt(localStorage.getItem('masterRank:pageSize') ?? '', 10)
     return MASTER_PAGE_SIZES.includes(saved) ? saved : MASTER_PAGE_SIZES[0]
@@ -2248,13 +2249,20 @@ function MasterRankingView({
             ))}
           </select>
 
-          {/* 설정 */}
-          <div className="bg-gray-800 rounded-lg px-3 py-1.5">
+          {/* 설정 / 리셋 */}
+          <div className="bg-gray-800 rounded-lg px-3 py-1.5 flex items-center gap-3">
             <button
               onClick={() => setShowSettings(true)}
               className="text-gray-400 hover:text-gray-200 text-sm transition"
             >
               ⚙ 설정
+            </button>
+            <span className="text-gray-700 text-xs">|</span>
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="text-gray-600 hover:text-gray-400 text-xs transition"
+            >
+              리셋
             </button>
           </div>
         </div>
@@ -2286,6 +2294,34 @@ function MasterRankingView({
       </div>
 
       {showSettings && <RankingSettingsModal onClose={() => setShowSettings(false)} />}
+
+      {showResetConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowResetConfirm(false)}>
+          <div className="bg-gray-800 rounded-xl p-6 w-[360px] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-white mb-2">마스터 랭킹 리셋</h2>
+            <p className="text-sm text-gray-400 mb-6">
+              {type === 'actor' ? '배우' : '작품'} 마스터 랭킹 이력을 전부 삭제합니다.<br />
+              이 작업은 되돌릴 수 없습니다.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  await masterRankingApi.reset(type)
+                  setShowResetConfirm(false)
+                  load(type, search, page, divFilter, pageSize, sortBy, sortDir)
+                  loadTrends(type)
+                  cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+                }}
+                className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white rounded text-sm font-semibold"
+              >삭제</button>
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
+              >취소</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 랭킹 테이블 */}
       <div className="flex-1 overflow-y-auto" onMouseLeave={() => { setImgOverlay(null); setNameTooltip(null) }}>
