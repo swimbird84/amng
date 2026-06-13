@@ -2566,7 +2566,20 @@ export function registerIpcHandlers(): void {
     const existingRun = db().prepare(`SELECT id FROM cup_runs WHERE tournament_id = ? AND status = 'in_progress' LIMIT 1`).get(tournamentId) as { id: number } | undefined
     if (existingRun) {
       if (!force) throw new Error('이미 진행 중인 대회가 있습니다')
-      // force: 기존 진행중 run 삭제 (CASCADE)
+      // force: cup_stats 역산 후 run 삭제 (CASCADE)
+      const playedMatches = db().prepare(
+        `SELECT item1_id, item2_id, winner_id, is_draw FROM cup_matches WHERE run_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`
+      ).all(existingRun.id) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+      for (const m of playedMatches) {
+        if (m.is_draw) {
+          if (m.item1_id) db().prepare(`UPDATE cup_stats SET total_matches = MAX(0, total_matches - 1) WHERE type = ? AND item_id = ?`).run(tournament.type, m.item1_id)
+          if (m.item2_id) db().prepare(`UPDATE cup_stats SET total_matches = MAX(0, total_matches - 1) WHERE type = ? AND item_id = ?`).run(tournament.type, m.item2_id)
+        } else {
+          const loserId = m.item1_id === m.winner_id ? m.item2_id : m.item1_id
+          if (m.winner_id) db().prepare(`UPDATE cup_stats SET total_matches = MAX(0, total_matches - 1), match_wins = MAX(0, match_wins - 1) WHERE type = ? AND item_id = ?`).run(tournament.type, m.winner_id)
+          if (loserId) db().prepare(`UPDATE cup_stats SET total_matches = MAX(0, total_matches - 1) WHERE type = ? AND item_id = ?`).run(tournament.type, loserId)
+        }
+      }
       db().prepare(`DELETE FROM cup_runs WHERE id = ?`).run(existingRun.id)
     }
 
@@ -2742,11 +2755,13 @@ export function registerIpcHandlers(): void {
         : db().prepare(`SELECT id FROM works`).all() as { id: number }[]
     }
 
-    // 리그전: 정확히 roundTotal × 2명 선발
+    // 리그전: calcPoolSize 기준 풀에서 roundTotal × 2명 선발
     if (tournament.format === 'league') {
       const needed = roundTotal * 2
       if (items.length < needed) throw new Error(`참가 항목 부족 (${needed}명 필요, 현재 ${items.length}명)`)
-      const leaguePool = items.slice(0, Math.min(items.length, needed * 3))
+      const multiplier = Math.max(2, Math.sqrt(items.length / needed))
+      const poolSize = Math.min(items.length, Math.round(needed * multiplier))
+      const leaguePool = items.slice(0, poolSize)
       shuffleArr(leaguePool)
       participants = leaguePool.slice(0, needed)
     }
@@ -2997,7 +3012,7 @@ export function registerIpcHandlers(): void {
           for (let i = 0; i < wcFirsts.length; i++) {
             const f = wcFirsts[i]
             const validIdx = secondPool.findIndex((s, si) => si >= i && s.groupId !== f.groupId)
-            if (validIdx >= 0) ;[secondPool[i], secondPool[validIdx]] = [secondPool[validIdx], secondPool[i]]
+            if (validIdx >= 0) { const tmp = secondPool[validIdx]; secondPool[validIdx] = secondPool[i]; secondPool[i] = tmp }
             else {
               const swapIdx = assigned.findIndex(a => secondPool[i].groupId !== a.first.groupId && a.second.groupId !== f.groupId)
               if (swapIdx >= 0) { const tmp = assigned[swapIdx].second; assigned[swapIdx] = { ...assigned[swapIdx], second: secondPool[i] }; secondPool[i] = tmp }

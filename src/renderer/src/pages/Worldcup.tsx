@@ -507,7 +507,7 @@ function TournamentCard({
                     : t.format === 'worldcup'
                       ? `${o.label} (${o.value / 2}조)`
                       : t.format === 'league'
-                        ? `${o.label} (${o.value / 2}조×4명 = ${o.value * 2}명 참가)`
+                        ? `${o.label} (풀${calcPoolSize(itemCount, o.value * 2)}${t.type === 'actor' ? '명' : '작품'})`
                         : `${o.label} (풀${calcPoolSize(itemCount, o.value)}${t.type === 'actor' ? '명' : '작품'})`
                   }
                 </option>
