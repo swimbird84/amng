@@ -2562,25 +2562,26 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('cup:head-to-head', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
     const { type, itemId } = params
     const rows = db().prepare(`
+      WITH h2h AS (
+        SELECT item2_id AS opp_id, m.winner_id, m.is_draw
+        FROM cup_matches m
+        JOIN cup_runs r ON r.id = m.run_id
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = $type
+        WHERE m.item1_id = $itemId AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
+        UNION ALL
+        SELECT item1_id AS opp_id, m.winner_id, m.is_draw
+        FROM cup_matches m
+        JOIN cup_runs r ON r.id = m.run_id
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = $type
+        WHERE m.item2_id = $itemId AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
+      )
       SELECT opp_id,
         COUNT(*) AS total,
-        SUM(CASE WHEN winner_id = ? THEN 1 ELSE 0 END) AS wins,
+        SUM(CASE WHEN winner_id = $itemId THEN 1 ELSE 0 END) AS wins,
         SUM(CASE WHEN is_draw = 1 THEN 1 ELSE 0 END) AS draws
-      FROM (
-        SELECT item2_id AS opp_id, winner_id, is_draw
-        FROM cup_matches m
-        JOIN cup_runs r ON r.id = m.run_id
-        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-        WHERE m.item1_id = ? AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
-        UNION ALL
-        SELECT item1_id AS opp_id, winner_id, is_draw
-        FROM cup_matches m
-        JOIN cup_runs r ON r.id = m.run_id
-        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-        WHERE m.item2_id = ? AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
-      )
+      FROM h2h
       GROUP BY opp_id ORDER BY total DESC, wins DESC
-    `).all(itemId, type, itemId, type, itemId) as { opp_id: number; total: number; wins: number; draws: number }[]
+    `).all({ itemId, type }) as { opp_id: number; total: number; wins: number; draws: number }[]
     if (rows.length === 0) return []
     const ids = rows.map(r => r.opp_id)
     const placeholders = ids.map(() => '?').join(',')

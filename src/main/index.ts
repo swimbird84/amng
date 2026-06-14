@@ -65,6 +65,10 @@ app.whenReady().then(() => {
   globalShortcut.register('CommandOrControl+Shift+R', () => {
     mainWindow?.webContents.reload()
   })
+
+  globalShortcut.register('CommandOrControl+Shift+I', () => {
+    mainWindow?.webContents.toggleDevTools()
+  })
 })
 
 app.on('will-quit', () => {

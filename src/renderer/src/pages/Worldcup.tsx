@@ -2299,7 +2299,7 @@ function MasterRankingView({
     else { setSortBy(col); setSortDir('desc') }
   }
 
-  const SortTh = ({ col, label, subLabel, className }: { col: string; label: string; subLabel?: React.ReactNode; className?: string }) => {
+  const SortTh = ({ col, label, subLabel, subLabelClass, className }: { col: string; label: string; subLabel?: React.ReactNode; subLabelClass?: string; className?: string }) => {
     const active = sortBy === col
     return (
       <th
@@ -2307,7 +2307,7 @@ function MasterRankingView({
         onClick={() => handleSort(col)}
       >
         <div className="flex items-center justify-end gap-1">
-          <span>{label}{subLabel && <><br/><span className="text-gray-600 font-normal">{subLabel}</span></>}</span>
+          <span>{label}{subLabel && <><br/><span className={subLabelClass ?? 'text-gray-600 font-normal'}>{subLabel}</span></>}</span>
           <span className="text-[10px]">{active ? (sortDir === 'desc' ? '▼' : '▲') : <span className="text-gray-700">▼</span>}</span>
         </div>
       </th>
@@ -2339,6 +2339,9 @@ function MasterRankingView({
     try {
       const data = await cupApi.headToHead(type, row.id)
       setH2hData(data)
+    } catch (err) {
+      console.error('[h2h] error:', err)
+      setH2hData([])
     } finally {
       setH2hLoading(false)
     }
@@ -2509,11 +2512,11 @@ function MasterRankingView({
                   <th className="px-2 py-2.5 text-center text-gray-400">리그</th>
                   <th className="px-2 py-2.5 text-left text-gray-400">썸네일</th>
                   <th className="px-3 py-2.5 text-left text-gray-400">이름</th>
-                  <SortTh col="total_points" label="마스터" subLabel="점수" />
-                  <SortTh col="win_rate" label="우승률" subLabel="(우승/런)" />
-                  <SortTh col="match_win_rate" label="승률" subLabel="(승리/매치)" />
+                  <SortTh col="total_points" label="마스터" subLabel="포인트" subLabelClass="font-normal" />
+                  <SortTh col="win_rate" label="우승률" subLabel="(우승/런)" subLabelClass="text-[9px] text-gray-600 font-normal" />
+                  <SortTh col="match_win_rate" label="승률" subLabel="(승리/매치)" subLabelClass="text-[9px] text-gray-600 font-normal" />
                   <th className="px-3 py-2.5 text-right text-gray-400 text-xs">
-                    <div className="leading-tight">갭<br /><span className="text-gray-600 font-normal">매치-우승</span></div>
+                    <div className="leading-tight">갭<br /><span className="text-[9px] text-gray-600 font-normal">(승-우승)</span></div>
                   </th>
                   <th className="px-3 py-2.5 text-center text-gray-400">추이</th>
                 </tr>
@@ -2580,9 +2583,9 @@ function MasterRankingView({
                           </div>
                           <button
                             onClick={e => { e.stopPropagation(); openAnalysisModal(row) }}
-                            className="text-gray-600 hover:text-blue-400 text-xs transition shrink-0 mt-0.5"
+                            className="text-gray-600 hover:text-blue-400 text-xs transition shrink-0 mt-0.5 cursor-pointer"
                             title="분석"
-                          >🔍</button>
+                          >📈</button>
                         </div>
                       </td>
                       {/* 마스터 점수 */}
