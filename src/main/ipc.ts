@@ -119,13 +119,11 @@ function checkLeagueGroupsAdvance(database: DB, runId: number): void {
   }
   shuffleArr(allQualifiers)
   const roundSize = allQualifiers.length
-  const { mx } = database.prepare(`SELECT MAX(match_index) as mx FROM cup_matches WHERE run_id = ?`).get(runId) as { mx: number | null }
   const insertMain = database.prepare(
     `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id) VALUES (?, 'main', ?, ?, ?, ?)`
   )
-  let idx = (mx ?? -1) + 1
   for (let i = 0; i < allQualifiers.length; i += 2)
-    insertMain.run(runId, roundSize, idx++, allQualifiers[i], allQualifiers[i + 1] ?? null)
+    insertMain.run(runId, roundSize, i / 2, allQualifiers[i], allQualifiers[i + 1] ?? null)
 }
 
 // ========== 마스터 랭킹 승점 계산 헬퍼 ==========
@@ -2180,7 +2178,7 @@ export function registerIpcHandlers(): void {
         lr.id AS latest_run_id,
         lr.status AS latest_run_status,
         lr.round_total,
-        lr.winner_id,
+        lc.winner_id,
         lr.started_at,
         lr.completed_at,
         CASE WHEN t.type = 'actor' THEN a.name ELSE w.title END AS winner_name,
@@ -2189,8 +2187,11 @@ export function registerIpcHandlers(): void {
       LEFT JOIN cup_runs lr ON lr.id = (
         SELECT id FROM cup_runs WHERE tournament_id = t.id ORDER BY id DESC LIMIT 1
       )
-      LEFT JOIN actors a ON a.id = lr.winner_id AND t.type = 'actor'
-      LEFT JOIN works w ON w.id = lr.winner_id AND t.type = 'work'
+      LEFT JOIN cup_runs lc ON lc.id = (
+        SELECT id FROM cup_runs WHERE tournament_id = t.id AND status = 'completed' ORDER BY id DESC LIMIT 1
+      )
+      LEFT JOIN actors a ON a.id = lc.winner_id AND t.type = 'actor'
+      LEFT JOIN works w ON w.id = lc.winner_id AND t.type = 'work'
       ${where}
       ORDER BY ${orderCol} ${dir}
     `).all(...bindings)
@@ -2214,7 +2215,7 @@ export function registerIpcHandlers(): void {
     const { done: completedMatches } = db().prepare(
       `SELECT COUNT(*) as done FROM cup_matches WHERE run_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`
     ).get(runId) as { done: number }
-    const cm = currentMatch as { phase: string; group_id: number | null } | null | undefined
+    const cm = currentMatch as { phase: string; group_id: number | null; round: number } | null | undefined
     let groupMatchDone: number | null = null
     let groupMatchTotal: number | null = null
     if (cm?.phase === 'group' || cm?.phase === 'tiebreak') {
@@ -2223,7 +2224,15 @@ export function registerIpcHandlers(): void {
       groupMatchDone = gd
       groupMatchTotal = gt
     }
-    return { tournament, run, currentMatch, totalMatches, completedMatches, groupMatchDone, groupMatchTotal }
+    let mainRoundDone: number | null = null
+    let mainRoundTotal: number | null = null
+    if (cm?.phase === 'main') {
+      const { cnt: mt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ?`).get(runId, cm.round) as { cnt: number }
+      const { cnt: md } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, cm.round) as { cnt: number }
+      mainRoundDone = md
+      mainRoundTotal = mt
+    }
+    return { tournament, run, currentMatch, totalMatches, completedMatches, groupMatchDone, groupMatchTotal, mainRoundDone, mainRoundTotal }
   })
 
   ipcMain.handle('cup:create', (_e, params: {
@@ -3445,7 +3454,15 @@ export function registerIpcHandlers(): void {
       groupMatchDone = gd
       groupMatchTotal = gt
     }
-    return { match: match ?? null, total, done, groupMatchDone, groupMatchTotal }
+    let mainRoundDone: number | null = null
+    let mainRoundTotal: number | null = null
+    if (match?.phase === 'main') {
+      const { cnt: mt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ?`).get(runId, match.round) as { cnt: number }
+      const { cnt: md } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, match.round) as { cnt: number }
+      mainRoundDone = md
+      mainRoundTotal = mt
+    }
+    return { match: match ?? null, total, done, groupMatchDone, groupMatchTotal, mainRoundDone, mainRoundTotal }
   })
 
   ipcMain.handle('cup:tournament-stats', (_e, tournamentId: number) => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { actorsApi } from '../api'
+import { actorsApi, masterRankingApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData, type PhysicalSettings } from '../components/PhysicalCorrectionModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
@@ -9,10 +9,12 @@ type RankBy =
   | 'height' | 'bust' | 'waist' | 'hip' | 'cup'
   | 'face' | 'score_bust' | 'score_hip' | 'physical' | 'skin'
   | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions'
+  | 'masterRanking'
 
 type ExcludeMode = 'include' | 'exclude'
 
 const RANK_ITEMS: { value: RankBy; label: string }[] = [
+  { value: 'masterRanking',  label: '마스터랭킹' },
   { value: 'work_count',     label: '작품수' },
   { value: 'fav_work_count', label: '찜' },
   { value: 'avg_score',      label: '평점' },
@@ -56,10 +58,11 @@ interface Props {
 
 type ScoredActor = ActorPhysicalData & { physScore: number | null }
 
-function ActorRankCard({ actor, rank, subtitle, imgClassName = 'w-full h-20', onClick, onMouseMove, onMouseLeave }: {
+function ActorRankCard({ actor, rank, subtitle, subtitleNode, imgClassName = 'w-full h-20', onClick, onMouseMove, onMouseLeave }: {
   actor: ScoredActor
   rank: number
-  subtitle: string
+  subtitle?: string
+  subtitleNode?: React.ReactNode
   imgClassName?: string
   onClick: () => void
   onMouseMove?: (e: React.MouseEvent) => void
@@ -73,7 +76,7 @@ function ActorRankCard({ actor, rank, subtitle, imgClassName = 'w-full h-20', on
       </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{actor.name}</p>
-        <p className="text-xs text-yellow-400 truncate">{subtitle}</p>
+        {subtitleNode ?? <p className="text-xs text-yellow-400 truncate">{subtitle}</p>}
       </div>
     </div>
   )
@@ -95,10 +98,21 @@ export default function Ranking({ onNavigateToActor }: Props) {
     () => (localStorage.getItem('ranking:excludeMode') as ExcludeMode) || 'include'
   )
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [masterRanks, setMasterRanks] = useState<Map<number, { total_points: number; rank: number }>>(new Map())
+  const [masterTrends, setMasterTrends] = useState<Map<number, number | null>>(new Map())
 
   const loadData = useCallback(async () => {
     const data = await actorsApi.physicalData() as ActorPhysicalData[]
     setActors(data)
+  }, [])
+
+  const loadMasterRanking = useCallback(async () => {
+    const [res, trends] = await Promise.all([
+      masterRankingApi.list({ type: 'actor', limit: 9999, offset: 0 }) as Promise<{ rows: { id: number; total_points: number; rank: number }[]; total: number }>,
+      masterRankingApi.rankTrends('actor') as Promise<{ item_id: number; prev_rank: number | null }[]>,
+    ])
+    setMasterRanks(new Map(res.rows.map(r => [r.id, { total_points: r.total_points, rank: r.rank }])))
+    setMasterTrends(new Map(trends.map(t => [t.item_id, t.prev_rank])))
   }, [])
 
   useEffect(() => {
@@ -108,9 +122,28 @@ export default function Ranking({ onNavigateToActor }: Props) {
     return () => window.removeEventListener('physicalSettingsChange', handler)
   }, [loadData])
 
+  useEffect(() => {
+    if (rankBy === 'masterRanking') loadMasterRanking()
+  }, [rankBy, loadMasterRanking])
+
   const stats = useMemo(() => computeStats(actors), [actors])
 
   const ranked = useMemo((): ScoredActor[] => {
+    const base = actors
+      .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
+      .filter(a => excludeMode === 'include' || !a.score_excluded)
+
+    if (rankBy === 'masterRanking') {
+      return base.sort((a, b) => {
+        const ar = masterRanks.get(a.id)
+        const br = masterRanks.get(b.id)
+        if (!ar && !br) return a.name.localeCompare(b.name)
+        if (!ar) return 1
+        if (!br) return -1
+        return sortDir === 'desc' ? br.total_points - ar.total_points : ar.total_points - br.total_points
+      })
+    }
+
     const isNeg = profileKeyMap[rankBy]
       ? settings.profile[profileKeyMap[rankBy]!].dir === 'N'
       : scoreKeyMap[rankBy]
@@ -131,10 +164,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
       return a[rankBy as keyof ActorPhysicalData] as number
     }
 
-    return actors
-      .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
+    return base
       .filter(a => rankBy !== 'physScore' || a.physScore != null)
-      .filter(a => excludeMode === 'include' || !a.score_excluded)
       .sort((a, b) => {
         const av = getVal(a)
         const bv = getVal(b)
@@ -147,7 +178,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
         if (secondary !== 0) return secondary
         return sortDir === 'desc' ? b.work_count - a.work_count : a.work_count - b.work_count
       })
-  }, [actors, settings, stats, rankBy, sortDir, excludeMode])
+  }, [actors, settings, stats, rankBy, sortDir, excludeMode, masterRanks])
 
   const getSubtitle = (a: ScoredActor): string => {
     if (rankBy === 'work_count')     return `${a.work_count}편`
@@ -160,6 +191,30 @@ export default function Ranking({ onNavigateToActor }: Props) {
     if (rankBy === 'hip')            return `${a.hip ?? '-'}cm`
     if (rankBy === 'cup')            return `${a.cup ?? '-'}`
     return `${(a[rankBy as keyof ActorPhysicalData] as number) ?? '-'}점`
+  }
+
+  const getMasterSubtitleNode = (a: ScoredActor): React.ReactNode => {
+    const mr = masterRanks.get(a.id)
+    const pts = mr ? `${mr.total_points.toFixed(1)}pt` : '—'
+    const prevRank = masterTrends.get(a.id)
+    const curRank = mr?.rank
+    let trendEl: React.ReactNode = null
+    if (curRank == null) {
+      trendEl = null
+    } else if (prevRank === undefined || prevRank === null) {
+      trendEl = <span className="text-blue-400 text-[10px] font-bold ml-1">NEW</span>
+    } else if (curRank < prevRank) {
+      trendEl = <span className="text-green-400 text-[10px] font-bold ml-1">▲{prevRank - curRank}</span>
+    } else if (curRank > prevRank) {
+      trendEl = <span className="text-red-400 text-[10px] font-bold ml-1">▼{curRank - prevRank}</span>
+    } else {
+      trendEl = <span className="text-gray-500 text-[10px] ml-1">—</span>
+    }
+    return (
+      <p className="text-xs text-yellow-400 truncate flex items-center">
+        {pts}{trendEl}
+      </p>
+    )
   }
 
   const currentLabel = RANK_ITEMS.find(i => i.value === rankBy)?.label ?? ''
@@ -228,8 +283,9 @@ export default function Ranking({ onNavigateToActor }: Props) {
               <ActorRankCard
                 key={a.id}
                 actor={a}
-                rank={i + 1}
-                subtitle={getSubtitle(a)}
+                rank={rankBy === 'masterRanking' ? (masterRanks.get(a.id)?.rank ?? i + 1) : i + 1}
+                subtitle={rankBy !== 'masterRanking' ? getSubtitle(a) : undefined}
+                subtitleNode={rankBy === 'masterRanking' ? getMasterSubtitleNode(a) : undefined}
                 imgClassName="w-full h-40"
                 onClick={() => onNavigateToActor(a.id)}
                 onMouseMove={e => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
@@ -245,8 +301,9 @@ export default function Ranking({ onNavigateToActor }: Props) {
               <ActorRankCard
                 key={a.id}
                 actor={a}
-                rank={i + 6}
-                subtitle={getSubtitle(a)}
+                rank={rankBy === 'masterRanking' ? (masterRanks.get(a.id)?.rank ?? i + 6) : i + 6}
+                subtitle={rankBy !== 'masterRanking' ? getSubtitle(a) : undefined}
+                subtitleNode={rankBy === 'masterRanking' ? getMasterSubtitleNode(a) : undefined}
                 onClick={() => onNavigateToActor(a.id)}
                 onMouseMove={e => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setTooltip(null)}

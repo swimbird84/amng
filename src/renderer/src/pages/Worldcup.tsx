@@ -438,21 +438,22 @@ function TournamentCard({
             const m = runProgress?.match
             let label = '진행중'
             if (m) {
-              const pos = `${m.match_index + 1}/${Math.ceil(m.round / 2)}경기`
               if (t.format === 'tournament') {
-                label = `${roundLabel(m.round)} ${pos}`
+                label = `${roundLabel(m.round)} ${m.match_index + 1}/${Math.ceil(m.round / 2)}경기`
               } else if (t.format === 'league') {
                 const gDone = runProgress?.groupMatchDone ?? 0
                 const gTotal = runProgress?.groupMatchTotal ?? '?'
+                const mDone = runProgress?.mainRoundDone ?? 0
+                const mTotal = runProgress?.mainRoundTotal ?? Math.ceil(m.round / 2)
                 if (m.phase === 'group') label = `${m.group_id}조 조별리그 — ${gDone + 1}/${gTotal}경기`
                 else if (m.phase === 'tiebreak') label = `${m.group_id}조 동점처리 — ${gDone + 1}/${gTotal}경기`
-                else label = `본선 ${roundLabel(m.round)} ${pos}`
+                else label = `본선 ${roundLabel(m.round)} — ${mDone + 1}/${mTotal}경기`
               } else if (t.format === 'worldcup') {
                 const gDone = runProgress?.groupMatchDone ?? 0
                 const gTotal = runProgress?.groupMatchTotal ?? '?'
                 label = m.phase === 'group'
                   ? `예선 ${m.group_id}조 — ${gDone + 1}/${gTotal}경기`
-                  : `본선 ${roundLabel(m.round)} ${pos}`
+                  : `본선 ${roundLabel(m.round)} ${m.match_index + 1}/${Math.ceil(m.round / 2)}경기`
               }
             }
             return (
@@ -832,7 +833,7 @@ function PlayView({
   const [tournament, setTournament] = useState<CupTournament | null>(null)
   const [run, setRun] = useState<CupRun | null>(null)
   const [currentMatch, setCurrentMatch] = useState<CupMatch | null | 'done'>(null)
-  const [progress, setProgress] = useState<{ total: number; done: number; groupDone: number | null; groupTotal: number | null }>({ total: 0, done: 0, groupDone: null, groupTotal: null })
+  const [progress, setProgress] = useState<{ total: number; done: number; groupDone: number | null; groupTotal: number | null; mainRoundDone: number | null; mainRoundTotal: number | null }>({ total: 0, done: 0, groupDone: null, groupTotal: null, mainRoundDone: null, mainRoundTotal: null })
   const [items, setItems] = useState<Map<number, ItemInfo>>(new Map())
   const [liveScores, setLiveScores] = useState<{ item_id: number; pts: number; rank: number }[]>([])
   const [standings, setStandings] = useState<{
@@ -867,7 +868,7 @@ function PlayView({
     if (!result) return
     setTournament(result.tournament)
     setRun(result.run)
-    setProgress({ total: result.totalMatches, done: result.completedMatches, groupDone: (result as any).groupMatchDone ?? null, groupTotal: (result as any).groupMatchTotal ?? null })
+    setProgress({ total: result.totalMatches, done: result.completedMatches, groupDone: (result as any).groupMatchDone ?? null, groupTotal: (result as any).groupMatchTotal ?? null, mainRoundDone: (result as any).mainRoundDone ?? null, mainRoundTotal: (result as any).mainRoundTotal ?? null })
     const cm = result.currentMatch
     const runStatus = result.run?.status
     const isDone = runStatus === 'completed' || cm === null
@@ -940,11 +941,17 @@ function PlayView({
         if (m.phase === 'group' || m.phase === 'tiebreak') {
           if (run) {
             cupApi.runProgress(run.id).then(prog => {
-              setProgress(p => ({ ...p, groupDone: prog.groupMatchDone ?? null, groupTotal: prog.groupMatchTotal ?? null }))
+              setProgress(p => ({ ...p, groupDone: prog.groupMatchDone ?? null, groupTotal: prog.groupMatchTotal ?? null, mainRoundDone: null, mainRoundTotal: null }))
+            })
+          }
+        } else if (m.phase === 'main') {
+          if (run) {
+            cupApi.runProgress(run.id).then(prog => {
+              setProgress(p => ({ ...p, groupDone: null, groupTotal: null, mainRoundDone: prog.mainRoundDone ?? null, mainRoundTotal: prog.mainRoundTotal ?? null }))
             })
           }
         } else {
-          setProgress(p => ({ ...p, groupDone: null, groupTotal: null }))
+          setProgress(p => ({ ...p, groupDone: null, groupTotal: null, mainRoundDone: null, mainRoundTotal: null }))
         }
         if (tab === 'rank') loadLiveScores()
       }
@@ -965,6 +972,7 @@ function PlayView({
     await doPickApi(match.id, winnerId, isDraw)        // 새 매치 로드
     await new Promise(r => setTimeout(r, 50))          // 렌더 대기
     setPicking(null)
+    await new Promise(r => setTimeout(r, 16))          // picking 리셋 렌더 확정 후 트랜지션 시작
     setCardsVisible(true)
   }
 
@@ -1040,7 +1048,7 @@ function PlayView({
                             value={commentDraft}
                             onChange={e => { setCommentDraft(e.target.value); setCommentSaved(false) }}
                             rows={4}
-                            className="bg-gray-800 text-white text-sm rounded-lg border border-gray-600 p-3 resize-none focus:outline-none focus:border-blue-500"
+                            className="w-full bg-gray-800 text-white text-sm rounded-lg border border-gray-600 p-3 resize-none focus:outline-none focus:border-blue-500"
                           />
                           <button
                             onClick={async () => {
@@ -1086,7 +1094,7 @@ function PlayView({
                         ? `${match.group_id}조 조별리그 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                         : match.phase === 'tiebreak'
                           ? `${match.group_id}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
-                          : `본선 ${roundLabel(match.round)} — ${match.match_index + 1}/${Math.ceil(match.round / 2)}경기`
+                          : `본선 ${roundLabel(match.round)} — ${(progress.mainRoundDone ?? 0) + 1}/${progress.mainRoundTotal ?? Math.ceil(match.round / 2)}경기`
                       }
                     </p>
                   )}
@@ -1156,6 +1164,49 @@ function PlayView({
             {/* ── 리그전 현황 ── */}
             {standings?.type === 'league' && (
               <div className="space-y-6">
+                {/* 본선 토너먼트 — 조별리그 완료 후 위로 */}
+                {standings.mainMatches && standings.mainMatches.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">본선 토너먼트</h3>
+                    <div className="space-y-3">
+                      {Object.entries(
+                        (standings.mainMatches as CupMatch[]).reduce<Record<string, CupMatch[]>>((acc, m) => {
+                          const key = String(m.round)
+                          if (!acc[key]) acc[key] = []
+                          acc[key].push(m)
+                          return acc
+                        }, {})
+                      )
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([round, roundMatches]) => (
+                        <div key={round} className="bg-gray-800 rounded-xl overflow-hidden">
+                          <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40">
+                            <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
+                          </div>
+                          <div className="divide-y divide-gray-700/50">
+                            {(roundMatches as CupMatch[]).map(m => {
+                              const i1 = items.get(m.item1_id)
+                              const i2 = m.item2_id ? items.get(m.item2_id) : null
+                              return (
+                                <div key={m.id} className="px-4 py-2 flex items-center gap-2 text-sm">
+                                  <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                    {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                  </span>
+                                  <span className="text-gray-600 text-xs w-6 text-center shrink-0">vs</span>
+                                  <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                    {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                  </span>
+                                  {m.winner_id === null && <span className="text-gray-600 text-xs shrink-0">대기 중</span>}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* 조별 순위표 */}
                 {standings.groupStandings && standings.groupStandings.length > 0 && (
                   <div>
@@ -1251,48 +1302,6 @@ function PlayView({
                   </div>
                 )}
 
-                {/* 본선 토너먼트 */}
-                {standings.mainMatches && standings.mainMatches.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">본선 토너먼트</h3>
-                    <div className="space-y-3">
-                      {Object.entries(
-                        (standings.mainMatches as CupMatch[]).reduce<Record<string, CupMatch[]>>((acc, m) => {
-                          const key = String(m.round)
-                          if (!acc[key]) acc[key] = []
-                          acc[key].push(m)
-                          return acc
-                        }, {})
-                      )
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([round, roundMatches]) => (
-                        <div key={round} className="bg-gray-800 rounded-xl overflow-hidden">
-                          <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40">
-                            <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
-                          </div>
-                          <div className="divide-y divide-gray-700/50">
-                            {(roundMatches as CupMatch[]).map(m => {
-                              const i1 = items.get(m.item1_id)
-                              const i2 = m.item2_id ? items.get(m.item2_id) : null
-                              return (
-                                <div key={m.id} className="px-4 py-2 flex items-center gap-2 text-sm">
-                                  <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                    {i1 ? itemLabel(i1) : `#${m.item1_id}`}
-                                  </span>
-                                  <span className="text-gray-600 text-xs w-6 text-center shrink-0">vs</span>
-                                  <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                    {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
-                                  </span>
-                                  {m.winner_id === null && <span className="text-gray-600 text-xs shrink-0">대기 중</span>}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -1453,12 +1462,12 @@ function PlayView({
                   </p>
                 )}
                 <div className="bg-gray-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm table-fixed">
                     <thead>
                       <tr className="border-b border-gray-700 text-gray-400 text-xs">
-                        <th className="px-3 py-2 text-center w-10">순위</th>
+                        <th className="px-3 py-2 text-center w-12">순위</th>
                         <th className="px-3 py-2 text-left">이름</th>
-                        <th className="px-3 py-2 text-right">점수</th>
+                        <th className="px-3 py-2 text-right w-16">점수</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1477,15 +1486,15 @@ function PlayView({
                                 {isTied ? '=' : row.rank}
                               </span>
                             </td>
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
+                            <td className="px-3 py-2 overflow-hidden">
+                              <div className="flex items-center gap-2 min-w-0">
                                 {imgPath && (
                                   <div className="w-7 h-7 rounded overflow-hidden shrink-0">
                                     <ImagePreview path={imgPath} alt="" className="w-full h-full" objectPosition="center 10%" />
                                   </div>
                                 )}
                                 <span
-                                  className="text-gray-200 truncate max-w-[200px] cursor-pointer hover:text-blue-400"
+                                  className="text-gray-200 truncate cursor-pointer hover:text-blue-400"
                                   onClick={() => item && (tournament?.type === 'actor' ? onNavigateToActor(item.id) : onNavigateToWork(item.id))}
                                 >
                                   {item ? itemLabel(item) : `#${row.item_id}`}
@@ -2115,9 +2124,15 @@ function TournamentRankingsView({
       {/* 썸네일 확대 오버레이 */}
       {imgOverlay && (
         <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-          <div className="w-48 h-64 rounded-lg overflow-hidden shadow-2xl border border-gray-600">
-            <ImagePreview path={imgOverlay.path} alt="" className="w-full h-full object-cover" />
-          </div>
+          {type === 'actor' ? (
+            <div className="w-[400px] h-[400px] rounded-lg overflow-hidden shadow-2xl border border-gray-600">
+              <ImagePreview path={imgOverlay.path} alt="" className="w-full h-full object-cover" objectPosition="center 10%" />
+            </div>
+          ) : (
+            <div className="rounded-lg overflow-hidden shadow-2xl border border-gray-600" style={{ width: 650 }}>
+              <ImagePreview path={imgOverlay.path} alt="" className="w-full object-contain" />
+            </div>
+          )}
         </div>
       )}
 
@@ -2572,9 +2587,15 @@ function MasterRankingView({
       {/* 썸네일 확대 오버레이 */}
       {imgOverlay && (
         <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-          <div className="w-48 h-64 rounded-lg overflow-hidden shadow-2xl border border-gray-600">
-            <ImagePreview path={imgOverlay.path} alt="" className="w-full h-full object-cover" />
-          </div>
+          {type === 'actor' ? (
+            <div className="w-[400px] h-[400px] rounded-lg overflow-hidden shadow-2xl border border-gray-600">
+              <ImagePreview path={imgOverlay.path} alt="" className="w-full h-full object-cover" objectPosition="center 10%" />
+            </div>
+          ) : (
+            <div className="rounded-lg overflow-hidden shadow-2xl border border-gray-600" style={{ width: 650 }}>
+              <ImagePreview path={imgOverlay.path} alt="" className="w-full object-contain" />
+            </div>
+          )}
         </div>
       )}
 
