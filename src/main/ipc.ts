@@ -2559,6 +2559,67 @@ export function registerIpcHandlers(): void {
     return { ok: true }
   })
 
+  ipcMain.handle('cup:head-to-head', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
+    const { type, itemId } = params
+    const rows = db().prepare(`
+      SELECT opp_id,
+        COUNT(*) AS total,
+        SUM(CASE WHEN winner_id = ? THEN 1 ELSE 0 END) AS wins,
+        SUM(CASE WHEN is_draw = 1 THEN 1 ELSE 0 END) AS draws
+      FROM (
+        SELECT item2_id AS opp_id, winner_id, is_draw
+        FROM cup_matches m
+        JOIN cup_runs r ON r.id = m.run_id
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        WHERE m.item1_id = ? AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
+        UNION ALL
+        SELECT item1_id AS opp_id, winner_id, is_draw
+        FROM cup_matches m
+        JOIN cup_runs r ON r.id = m.run_id
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        WHERE m.item2_id = ? AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
+      )
+      GROUP BY opp_id ORDER BY total DESC, wins DESC
+    `).all(itemId, type, itemId, type, itemId) as { opp_id: number; total: number; wins: number; draws: number }[]
+    if (rows.length === 0) return []
+    const ids = rows.map(r => r.opp_id)
+    const placeholders = ids.map(() => '?').join(',')
+    const infoRows: { id: number; [key: string]: unknown }[] = type === 'actor'
+      ? db().prepare(`SELECT id, name, photo_path FROM actors WHERE id IN (${placeholders})`).all(...ids) as any
+      : db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id IN (${placeholders})`).all(...ids) as any
+    const infoMap = new Map(infoRows.map(r => [r.id, r]))
+    return rows.map(r => ({ ...r, losses: r.total - r.wins - r.draws, ...(infoMap.get(r.opp_id) ?? {}) }))
+  })
+
+  ipcMain.handle('master-ranking:division-history', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
+    const { type, itemId } = params
+    const itemHistory = db().prepare(`
+      SELECT mh.run_id, mh.points, r.completed_at
+      FROM master_ranking_history mh
+      JOIN cup_runs r ON r.id = mh.run_id
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+      WHERE mh.item_id = ?
+      ORDER BY r.completed_at ASC
+    `).all(type, itemId) as { run_id: number; points: number; completed_at: string }[]
+    const result: { recorded_at: string; rank: number; total_points: number }[] = []
+    for (const run of itemHistory) {
+      const allPts = db().prepare(`
+        SELECT item_id, SUM(pts) AS total FROM (
+          SELECT mh.item_id, mh.points AS pts,
+            ROW_NUMBER() OVER (PARTITION BY mh.item_id ORDER BY mh.recorded_at DESC) AS rn
+          FROM master_ranking_history mh
+          JOIN cup_runs r2 ON r2.id = mh.run_id
+          JOIN cup_tournaments t ON t.id = r2.tournament_id AND t.is_master = 1
+          WHERE mh.type = ? AND r2.completed_at <= ?
+        ) WHERE rn <= 10 GROUP BY item_id
+      `).all(type, run.completed_at) as { item_id: number; total: number }[]
+      const itemPts = allPts.find(r => r.item_id === itemId)?.total ?? 0
+      const rank = allPts.filter(r => r.total > itemPts).length + 1
+      result.push({ recorded_at: run.completed_at, rank, total_points: itemPts })
+    }
+    return result
+  })
+
   ipcMain.handle('cup:division-counts', (_e, params: { type: 'actor' | 'work' }) => {
     const { type } = params
     const allItems = type === 'actor'

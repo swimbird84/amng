@@ -659,6 +659,11 @@ function MatchCard({
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    setLocalComment(item.comment ?? '')
+    setMemoText(item.comment ?? '')
+  }, [item.id])
+
+  useEffect(() => {
     cupApi.itemTournamentStats(tournamentId, item.id).then(setStats)
   }, [tournamentId, item.id])
 
@@ -2165,6 +2170,13 @@ type FormatStat = {
   match_wins: number
 }
 
+type H2HRow = {
+  opp_id: number; total: number; wins: number; losses: number; draws: number
+  name?: string; title?: string; product_number?: string; photo_path?: string; cover_path?: string
+}
+
+type DivHistEntry = { recorded_at: string; rank: number; total_points: number }
+
 type RateTooltip = {
   itemId: number
   statType: 'win' | 'match'
@@ -2229,6 +2241,12 @@ function MasterRankingView({
   const [trendModal, setTrendModal] = useState<{ itemId: number; lbl: string; img: string | null } | null>(null)
   const [trendHistory, setTrendHistory] = useState<{ rank: number; recorded_at: string }[] | null>(null)
   const rankHistCache = useRef<Map<number, { rank: number; recorded_at: string }[]>>(new Map())
+  const [analysisModal, setAnalysisModal] = useState<{ itemId: number; lbl: string; img: string | null } | null>(null)
+  const [analysisTab, setAnalysisTab] = useState<'h2h' | 'divhist'>('h2h')
+  const [h2hData, setH2hData] = useState<H2HRow[] | null>(null)
+  const [divHistData, setDivHistData] = useState<DivHistEntry[] | null>(null)
+  const [h2hLoading, setH2hLoading] = useState(false)
+  const [divHistLoading, setDivHistLoading] = useState(false)
 
   const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc') => {
     setLoading(true)
@@ -2310,6 +2328,35 @@ function MasterRankingView({
     }
   }
 
+  const openAnalysisModal = async (row: MasterRankRow) => {
+    const lbl = label(row)
+    const img = imgPath(row)
+    setAnalysisModal({ itemId: row.id, lbl, img })
+    setAnalysisTab('h2h')
+    setH2hData(null)
+    setDivHistData(null)
+    setH2hLoading(true)
+    try {
+      const data = await cupApi.headToHead(type, row.id)
+      setH2hData(data)
+    } finally {
+      setH2hLoading(false)
+    }
+  }
+
+  const switchAnalysisTab = async (tab: 'h2h' | 'divhist') => {
+    setAnalysisTab(tab)
+    if (tab === 'divhist' && divHistData === null && analysisModal) {
+      setDivHistLoading(true)
+      try {
+        const data = await masterRankingApi.divisionHistory(type, analysisModal.itemId)
+        setDivHistData(data)
+      } finally {
+        setDivHistLoading(false)
+      }
+    }
+  }
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 상단 */}
@@ -2359,22 +2406,20 @@ function MasterRankingView({
             ))}
           </select>
 
-          {/* 설정 / 리셋 */}
-          <div className="bg-gray-800 rounded-lg px-3 py-1.5 flex items-center gap-3">
-            <button
-              onClick={() => setShowSettings(true)}
-              className="text-gray-400 hover:text-gray-200 text-sm transition"
-            >
-              ⚙ 설정
-            </button>
-            <span className="text-gray-700 text-xs">|</span>
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="text-gray-600 hover:text-gray-400 text-xs transition"
-            >
-              리셋
-            </button>
-          </div>
+          {/* 설정 */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-400 hover:text-gray-200 text-sm transition"
+          >
+            ⚙ 설정
+          </button>
+          {/* 리셋 */}
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
+          >
+            리셋
+          </button>
         </div>
 
         {/* 부별 필터 */}
@@ -2454,6 +2499,7 @@ function MasterRankingView({
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '5rem' }} />
                 <col style={{ width: '5.5rem' }} />
               </colgroup>
               <thead className="sticky top-0 bg-gray-900 z-10">
@@ -2466,6 +2512,9 @@ function MasterRankingView({
                   <SortTh col="total_points" label="마스터" subLabel="점수" />
                   <SortTh col="win_rate" label="우승률" subLabel="(우승/런)" />
                   <SortTh col="match_win_rate" label="승률" subLabel="(승리/매치)" />
+                  <th className="px-3 py-2.5 text-right text-gray-400 text-xs">
+                    <div className="leading-tight">갭<br /><span className="text-gray-600 font-normal">매치-우승</span></div>
+                  </th>
                   <th className="px-3 py-2.5 text-center text-gray-400">추이</th>
                 </tr>
               </thead>
@@ -2516,17 +2565,24 @@ function MasterRankingView({
                       </td>
                       {/* 이름 */}
                       <td className="px-3 py-2 max-w-[160px]">
-                        <div
-                          className="cursor-pointer"
-                          onMouseEnter={e => setNameTooltip({ type: type === 'actor' ? 'actor' : 'work', id: row.id, x: e.clientX, y: e.clientY })}
-                          onMouseMove={e => setNameTooltip({ type: type === 'actor' ? 'actor' : 'work', id: row.id, x: e.clientX, y: e.clientY })}
-                          onMouseLeave={() => setNameTooltip(null)}
-                          onClick={() => type === 'actor' ? onNavigateToActor(row.id) : onNavigateToWork(row.id)}
-                        >
-                          <p className="text-white font-medium leading-tight truncate hover:underline">{lbl}</p>
-                          {row.product_number && row.title && (
-                            <p className="text-gray-500 text-xs truncate">{row.product_number}</p>
-                          )}
+                        <div className="flex items-start gap-1">
+                          <div
+                            className="cursor-pointer flex-1 min-w-0"
+                            onMouseEnter={e => setNameTooltip({ type: type === 'actor' ? 'actor' : 'work', id: row.id, x: e.clientX, y: e.clientY })}
+                            onMouseMove={e => setNameTooltip({ type: type === 'actor' ? 'actor' : 'work', id: row.id, x: e.clientX, y: e.clientY })}
+                            onMouseLeave={() => setNameTooltip(null)}
+                            onClick={() => type === 'actor' ? onNavigateToActor(row.id) : onNavigateToWork(row.id)}
+                          >
+                            <p className="text-white font-medium leading-tight truncate hover:underline">{lbl}</p>
+                            {row.product_number && row.title && (
+                              <p className="text-gray-500 text-xs truncate">{row.product_number}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={e => { e.stopPropagation(); openAnalysisModal(row) }}
+                            className="text-gray-600 hover:text-blue-400 text-xs transition shrink-0 mt-0.5"
+                            title="분석"
+                          >🔍</button>
                         </div>
                       </td>
                       {/* 마스터 점수 */}
@@ -2560,6 +2616,16 @@ function MasterRankingView({
                               <div className="text-blue-400">{matchWinRate.toFixed(1)}%</div>
                               <div className="text-[11px] text-gray-500">({row.match_wins}/{row.total_matches})</div>
                             </>
+                          : <span className="text-gray-600">—</span>
+                        }
+                      </td>
+                      {/* 갭 */}
+                      <td className="px-3 py-2 text-right">
+                        {winRate !== null && matchWinRate !== null
+                          ? (() => {
+                              const gap = matchWinRate - winRate
+                              return <span className={`font-medium text-xs ${gap >= 10 ? 'text-green-400' : gap <= -10 ? 'text-red-400' : 'text-gray-400'}`}>{gap >= 0 ? '+' : ''}{gap.toFixed(1)}%</span>
+                            })()
                           : <span className="text-gray-600">—</span>
                         }
                       </td>
@@ -2694,6 +2760,136 @@ function MasterRankingView({
           </div>
         )
       })()}
+      {/* 분석 모달 */}
+      {analysisModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setAnalysisModal(null)}>
+          <div className="bg-gray-800 rounded-xl border border-gray-700 shadow-2xl flex flex-col" style={{ width: 560, maxHeight: '80vh' }} onClick={e => e.stopPropagation()}>
+            {/* 헤더 */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-700 shrink-0">
+              {analysisModal.img && (
+                <div className="w-9 h-9 rounded overflow-hidden shrink-0">
+                  <ImagePreview path={analysisModal.img} alt={analysisModal.lbl} className="w-full h-full object-cover" objectPosition="center 10%" />
+                </div>
+              )}
+              <p className="text-white font-bold flex-1 truncate">{analysisModal.lbl}</p>
+              <button onClick={() => setAnalysisModal(null)} className="text-gray-400 hover:text-white text-sm transition shrink-0">✕</button>
+            </div>
+            {/* 탭 */}
+            <div className="flex border-b border-gray-700 shrink-0">
+              {(['h2h', 'divhist'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => switchAnalysisTab(tab)}
+                  className={`px-5 py-2.5 text-sm font-medium transition border-b-2 ${analysisTab === tab ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-gray-200'}`}
+                >
+                  {tab === 'h2h' ? '상대 전적' : '리그 이력'}
+                </button>
+              ))}
+            </div>
+            {/* 탭 내용 */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {analysisTab === 'h2h' && (
+                h2hLoading ? (
+                  <p className="text-gray-500 text-sm text-center py-8">로딩 중...</p>
+                ) : !h2hData || h2hData.length === 0 ? (
+                  <p className="text-gray-500 text-sm text-center py-8">상대 전적 데이터가 없습니다.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {h2hData.map(row => {
+                      const oppName = row.name ?? row.title ?? row.product_number ?? `#${row.opp_id}`
+                      const oppImg = row.photo_path ?? row.cover_path ?? null
+                      const winRate = row.total > 0 ? row.wins / row.total * 100 : 0
+                      return (
+                        <div key={row.opp_id} className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-700/40 hover:bg-gray-700/70 transition">
+                          {oppImg
+                            ? <div className="w-9 h-9 rounded overflow-hidden shrink-0">
+                                <ImagePreview path={oppImg} alt={oppName} className="w-full h-full object-cover" objectPosition="center 10%" />
+                              </div>
+                            : <div className="w-9 h-9 rounded bg-gray-600 flex items-center justify-center text-gray-500 text-xs shrink-0">?</div>
+                          }
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium truncate">{oppName}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="flex-1 h-1.5 bg-gray-600 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${winRate}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-400 shrink-0">{winRate.toFixed(0)}%</span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs text-gray-400">{row.total}전</p>
+                            <p className="text-xs">
+                              <span className="text-green-400">{row.wins}승</span>
+                              <span className="text-gray-600 mx-0.5">/</span>
+                              <span className="text-red-400">{row.losses}패</span>
+                              {row.draws > 0 && <><span className="text-gray-600 mx-0.5">/</span><span className="text-gray-400">{row.draws}무</span></>}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              )}
+              {analysisTab === 'divhist' && (() => {
+                if (divHistLoading) return <p className="text-gray-500 text-sm text-center py-8">로딩 중...</p>
+                if (!divHistData || divHistData.length === 0) return <p className="text-gray-500 text-sm text-center py-8">리그 이력 데이터가 없습니다.</p>
+                const W = 480, H = 200, PX = 40, PY = 20
+                const maxDiv = 6
+                const pts = divHistData.map((h, i) => {
+                  const divRank = getDivision(h.rank, divHistData.length)
+                  const x = PX + (divHistData.length > 1 ? i / (divHistData.length - 1) : 0.5) * (W - PX * 2)
+                  const y = PY + ((divRank - 1) / (maxDiv - 1)) * (H - PY * 2)
+                  return { x, y, div: divRank, rank: h.rank, pts: h.total_points, date: h.recorded_at }
+                })
+                const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+                const first = pts[0]?.div ?? 1
+                const last = pts[pts.length - 1]?.div ?? 1
+                const lineColor = last < first ? '#4ade80' : last > first ? '#f87171' : '#60a5fa'
+                return (
+                  <div>
+                    <p className="text-gray-400 text-xs mb-3 text-center">1부(최상위) → 6부(최하위) 기준 리그 이력 ({divHistData.length}회)</p>
+                    <svg width={W} height={H} className="overflow-visible">
+                      {[1,2,3,4,5,6].map(d => {
+                        const y = PY + ((d - 1) / (maxDiv - 1)) * (H - PY * 2)
+                        return (
+                          <g key={d}>
+                            <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="#374151" strokeDasharray="3,3" />
+                            <text x={PX - 6} y={y + 4} fill="#9ca3af" fontSize="10" textAnchor="end">{d}부</text>
+                          </g>
+                        )
+                      })}
+                      <polyline points={polyPts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" />
+                      {pts.map((p, i) => {
+                        const prev = pts[i - 1]?.div
+                        const promoted = prev !== undefined && p.div < prev
+                        const relegated = prev !== undefined && p.div > prev
+                        return (
+                          <g key={i}>
+                            <circle cx={p.x} cy={p.y} r={promoted || relegated ? 5 : 3}
+                              fill={promoted ? '#4ade80' : relegated ? '#f87171' : lineColor}
+                              stroke={promoted || relegated ? '#1f2937' : 'none'} strokeWidth="1.5"
+                            />
+                            {(promoted || relegated) && (
+                              <text x={p.x} y={p.y - 10} fill={promoted ? '#4ade80' : '#f87171'} fontSize="10" textAnchor="middle">
+                                {promoted ? '▲' : '▼'}
+                              </text>
+                            )}
+                          </g>
+                        )
+                      })}
+                    </svg>
+                    <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 justify-center">
+                      <span><span className="text-green-400">▲</span> 승격</span>
+                      <span><span className="text-red-400">▼</span> 강등</span>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
