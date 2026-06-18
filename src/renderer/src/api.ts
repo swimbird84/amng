@@ -197,7 +197,7 @@ export const cupApi = {
   rankHistory: (tournamentId: number, itemId: number) =>
     api.invoke('cup:rank-history', { tournamentId, itemId }) as Promise<{ rank: number; recorded_at: string }[]>,
   headToHead: (type: 'actor' | 'work', itemId: number) =>
-    api.invoke('cup:head-to-head', { type, itemId }) as Promise<{ opp_id: number; total: number; wins: number; losses: number; draws: number; name?: string; title?: string; product_number?: string; photo_path?: string; cover_path?: string }[]>,
+    api.invoke('cup:head-to-head', { type, itemId }) as Promise<{ opp_id: number; total: number; wins: number; losses: number; draws: number; opp_rank?: number | null; name?: string; title?: string; product_number?: string; photo_path?: string; cover_path?: string }[]>,
 }
 
 // 랭킹 설정

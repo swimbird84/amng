@@ -136,6 +136,9 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
     }
     if (search.favoriteOnly) params.favoriteOnly = true
     if (search.scoreExcluded) params.scoreExcluded = true
+    if (search.commentSearch) params.commentSearch = search.commentSearch
+    if (search.commentNull) params.commentNull = true
+    if (search.deletePending) params.deletePending = true
     const list = await actorsApi.list(params) as Actor[]
     setActors(list)
   }, [search, sortBy, sortDir])
@@ -455,8 +458,10 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
               <div className="flex gap-4 items-start">
                 <ImagePreview path={selected.photo_path} alt={selected.name} className="w-28 h-28 rounded flex-shrink-0" version={refreshKey} />
                 <div className="flex-1 pt-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-white font-bold text-lg">{selected.name}</h3>
+                    {!!selected.score_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">제외</span>}
+                    {!!selected.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                     <button
                       onClick={() => handleToggleFavorite(selected.id, selected.is_favorite)}
                       className={`text-2xl leading-none ${selected.is_favorite ? 'text-red-500' : 'text-gray-500 hover:text-red-400'}`}

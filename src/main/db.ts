@@ -213,6 +213,12 @@ export function initDatabase(): void {
   if (!actorCols.includes('score_excluded')) {
     db.prepare('ALTER TABLE actors ADD COLUMN score_excluded INTEGER DEFAULT 0').run()
   }
+  if (!actorCols.includes('delete_pending')) {
+    db.prepare('ALTER TABLE actors ADD COLUMN delete_pending INTEGER DEFAULT 0').run()
+  }
+  if (!workCols.includes('delete_pending')) {
+    db.prepare('ALTER TABLE works ADD COLUMN delete_pending INTEGER DEFAULT 0').run()
+  }
 
   // studios color 컬럼 추가 마이그레이션
   const studioCols = (db.prepare("PRAGMA table_info(studios)").all() as { name: string }[]).map(c => c.name)
@@ -390,7 +396,7 @@ export function initDatabase(): void {
       CREATE TABLE cup_matches (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
-        phase TEXT NOT NULL DEFAULT 'main' CHECK(phase IN ('group', 'main')),
+        phase TEXT NOT NULL DEFAULT 'main' CHECK(phase IN ('group', 'main', 'tiebreak')),
         group_id INTEGER,
         round INTEGER NOT NULL,
         match_index INTEGER NOT NULL,
@@ -503,7 +509,7 @@ export function initDatabase(): void {
       CREATE TABLE cup_matches_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
-        phase TEXT NOT NULL DEFAULT 'main' CHECK(phase IN ('group', 'main')),
+        phase TEXT NOT NULL DEFAULT 'main' CHECK(phase IN ('group', 'main', 'tiebreak')),
         group_id INTEGER,
         round INTEGER NOT NULL,
         match_index INTEGER NOT NULL,
@@ -580,6 +586,32 @@ export function initDatabase(): void {
       CREATE INDEX idx_cup_tournaments_type ON cup_tournaments(type);
     `)
 
+    db.exec(`PRAGMA foreign_keys = ON`)
+  }
+
+  // cup_matches phase CHECK에 'tiebreak' 추가 마이그레이션
+  const cupMatchesSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='cup_matches'").get() as { sql: string } | undefined)?.sql ?? ''
+  if (!cupMatchesSql.includes('tiebreak')) {
+    db.exec(`PRAGMA foreign_keys = OFF`)
+    db.exec(`
+      CREATE TABLE cup_matches_tiebreak_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
+        phase TEXT NOT NULL DEFAULT 'main' CHECK(phase IN ('group', 'main', 'tiebreak')),
+        group_id INTEGER,
+        round INTEGER NOT NULL,
+        match_index INTEGER NOT NULL,
+        item1_id INTEGER NOT NULL,
+        item2_id INTEGER,
+        winner_id INTEGER,
+        is_bye INTEGER NOT NULL DEFAULT 0,
+        is_draw INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT INTO cup_matches_tiebreak_new SELECT * FROM cup_matches;
+      DROP TABLE cup_matches;
+      ALTER TABLE cup_matches_tiebreak_new RENAME TO cup_matches;
+      CREATE INDEX idx_cup_matches_run ON cup_matches(run_id);
+    `)
     db.exec(`PRAGMA foreign_keys = ON`)
   }
 

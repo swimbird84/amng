@@ -1,148 +1,274 @@
-# 대회 시스템 & 마스터 랭킹
+# 월드컵 포맷 설계 문서
 
-## 대회 시스템
+## 개요
 
-### 대회 포맷
+월드컵 포맷은 실제 FIFA 월드컵 방식을 모티브로 한 토너먼트 포맷이다.
+조별 예선 → 블럭 내 토너먼트 → 크로스 블럭 토너먼트(결승 토너먼트) 순으로 진행된다.
 
-| 포맷 | 이름 | 설명 |
-|------|------|------|
-| `worldcup` | 월드컵 | 토너먼트 방식. 각 라운드에서 1:1 매치 진행, 패자 탈락 |
-| `tournament` | 토너먼트 | 예선(그룹 스테이지) + 본선(토너먼트) 혼합 방식 |
-| `league` | 리그전 | 라운드 로빈. 모든 참가자가 서로 1:1 매치 진행, 합산 승점으로 순위 결정 |
-
-### 대회 타입
-
-- `actor` — 배우 대회
-- `work` — 작품 대회
-
-### 대회 생성 옵션
-
-- **이름**: 대회 이름
-- **포맷**: worldcup / tournament / league
-- **마스터 여부**: 마스터 랭킹 반영 여부
-- **부 범위**: 참가 대상 부(Division) 필터 (마스터 대회 전용)
-- **필터**: 태그/레이블 등 참가 조건 필터
-
-### DB 테이블 구조
-
-```
-cup_tournaments      — 대회 정의 (type, name, format, is_master, division_range, filter_json)
-cup_runs             — 대회 실행 기록 (tournament_id, round_total, status)
-cup_run_items        — 실행별 참가 아이템 (run_id, item_id, group_id, pts, rank)
-cup_matches          — 매치 기록 (run_id, round, match_index, phase, group_id, item_a/b_id, winner_id, is_draw)
-cup_stats            — 누적 통계 (tournament_id, item_id, total_cups, cup_wins, total_matches, match_wins)
-master_ranking       — 마스터 랭킹 현재 순위 (type, item_id, total_points, division)
-master_ranking_history — 마스터 랭킹 포인트 이력 (run_id, type, item_id, pts, recorded_at)
-```
-
-### 매치 진행 흐름
-
-1. `cup:start` — 참가 아이템 선정, 매치 생성, run 시작
-2. `cup:pick` — 매치별 승자 선택 (winnerId 또는 isDraw)
-3. 모든 매치 완료 시 자동으로 `cup_stats` 업데이트 + 마스터 대회는 `calcAndStoreMasterPoints()` 호출
-
-### 라운드 구조
-
-- **월드컵/토너먼트**: `phase = 'main'` 또는 `'group'`/`'knockout'`
-- **리그전**: `phase = 'league'`, 단일 그룹 또는 다중 그룹
-- 라운드 총수(`round_total`)는 대회 시작 시 참가 인원 기준으로 결정
+- 대회 유형(type): actor 또는 work 전체가 참가 (필터 미적용)
+- format: `worldcup`
+- 마스터 대회 전용: 부(division) 필터로 특정 부만 대회 참가 가능
 
 ---
 
-## 마스터 랭킹
+## 블럭 구조
 
-### 개념
+### 핵심 원칙
+- **블럭 하나당 무조건 32명**
+- 블럭 수 = round_total / 32
+  - 예: round_total = 64 → 2블럭, 128 → 4블럭, 256 → 8블럭
 
-여러 마스터 대회 결과를 누적 집계해 배우/작품의 전체 순위를 산출하는 시스템.
-각 아이템의 최근 10개 마스터 런 포인트 합산이 `total_points`.
+### 조 구성
+- 블럭 1개 = 조 16개 (각 조 2명)
+  - 그룹 A~P (16개 조)
+  - 각 조 2명이 1경기 진행
+  - 조 1위(승자) 1명 → 블럭 내 토너먼트 진출
 
-### 부(Division) 시스템
+### 조별 시딩 방식 (FIFA 방식 참고)
+- 조 배정: 참가자 랜덤 셔플 후 순서대로 배정
+  - 슬롯 0 → A조 1번, 슬롯 1 → B조 1번, ..., 슬롯 15 → P조 1번
+  - 슬롯 16 → A조 2번, 슬롯 17 → B조 2번, ..., 슬롯 31 → P조 2번
 
-포인트 누적 합산 기준으로 부를 배정:
+---
 
-| 부 | 기준 포인트 (total_points) |
-|----|--------------------------|
-| 1부 | 32 이상 |
-| 2부 | 96 이상 |
-| 3부 | 224 이상 |
-| 4부 | 480 이상 |
-| 5부 | 992 이상 |
-| 6부 | 2016 이상 |
-| 미분류 | 기준 미달 (0) |
+## 블럭 내 토너먼트 구조
 
-경계값: `[32, 96, 224, 480, 992, 2016]`
+### 매치 생성 방식
+- 조별 예선이 끝나면 16명이 블럭 내 토너먼트에 진출
+- **16강 → 8강 → 4강 → 결승** (4라운드)
+- **전체 대진표를 대회 시작 시 미리 생성** (NULL 슬롯으로 채움)
+- 조 결과가 나올 때마다 해당 슬롯을 업데이트
 
-### 포인트 계산 (`calcAndStoreMasterPoints`)
+### 조 → 토너먼트 슬롯 매핑
+홀수 조 1위 vs 짝수 조 1위 방식으로 16강 대진 구성:
 
-마스터 대회 완료 시 자동 호출. 랭킹 설정(`ranking-settings`)에 따라 포인트 산출:
-
-- **기본 승점**: 마스터 대회에서 받는 기본 포인트
-- **부별 가중치**: 같은 부끼리 진행 시 적용
-- **섞인 가중치**: 여러 부가 섞인 대회 시 적용
-- **순위 보너스**: 우승/준우승 등 상위 순위 추가 포인트
-
-### 순위 계산
-
-- `RANK() OVER (ORDER BY total_points DESC)` — 동점자는 동일 순위 (1, 2, 3, 3, 5...)
-- 동점 2차 정렬: `name/title ASC`
-
-### 추이(Rank Trend)
-
-- **배지**: 이전 순위 대비 현재 순위 변동 표시
-  - `▲N` (초록) — 순위 상승
-  - `▼N` (빨강) — 순위 하락
-  - `—` (회색) — 변동 없음
-  - `NEW` (파랑) — 신규 진입
-- **차트 모달**: 클릭 시 최근 15개 런 기준 순위 변화 SVG 라인 차트
-
-### 마스터 랭킹 테이블 컬럼
-
-| 컬럼 | 설명 | 정렬 |
-|------|------|------|
-| `#` | 행 번호 | — |
-| `순위` | RANK() 동률 처리 순위 | — |
-| `리그` | 부 배지 (1부~6부, 미분류) | — |
-| `썸네일` | 배우/작품 이미지 (hover: 확대 표시) | — |
-| `이름` | 배우명/작품명 (hover: 상세 툴팁) | — |
-| `마스터점수` | 최근 10런 누적 포인트 합산 | total_points DESC |
-| `우승률` | 대회 우승 횟수 / 참가 대회 수 (hover: 포맷별 상세) | win_rate DESC, match_win_rate DESC |
-| `승률` | 매치 승리 수 / 전체 매치 수 (hover: 포맷별 상세) | match_win_rate DESC, win_rate DESC |
-| `추이` | 순위 변동 배지 + 클릭 시 히스토리 차트 | — |
-
-### 우승률/승률 툴팁
-
-hover 시 포맷별(월드컵/토너먼트/리그전) 세부 수치 표시:
 ```
-월드컵     NN.N% (N/N)
-토너먼트   NN.N% (N/N)
-리그전     NN.N% (N/N)
+16강 대진 (블럭 내):
+  Match 0:  A조 1위  vs  B조 1위
+  Match 1:  C조 1위  vs  D조 1위
+  Match 2:  E조 1위  vs  F조 1위
+  Match 3:  G조 1위  vs  H조 1위
+  Match 4:  I조 1위  vs  J조 1위
+  Match 5:  K조 1위  vs  L조 1위
+  Match 6:  M조 1위  vs  N조 1위
+  Match 7:  O조 1위  vs  P조 1위
+
+8강:
+  Match 8:  Winner(0) vs Winner(1)
+  Match 9:  Winner(2) vs Winner(3)
+  Match 10: Winner(4) vs Winner(5)
+  Match 11: Winner(6) vs Winner(7)
+
+4강:
+  Match 12: Winner(8)  vs Winner(9)
+  Match 13: Winner(10) vs Winner(11)
+
+결승:
+  Match 14: Winner(12) vs Winner(13)
 ```
 
-### IPC 채널
+### 대진표 인덱스 계산 공식
+- 16강: match_index = 0~7 (조 인덱스 / 2)
+- 8강: match_index = 8~11 (16강 match_index / 2 + 8)
+- 4강: match_index = 12~13 (8강 match_index / 2 + 12)
+- 결승: match_index = 14
 
-| 채널 | 설명 |
-|------|------|
-| `cup:list` | 대회 목록 조회 |
-| `cup:get` | 대회 상세 조회 |
-| `cup:create` | 대회 생성 |
-| `cup:update` | 대회 수정 |
-| `cup:delete` | 대회 삭제 |
-| `cup:start` | 대회 런 시작 |
-| `cup:pick` | 매치 승자 선택 |
-| `cup:standings` | 런 현황 조회 |
-| `cup:item-count` | 대회 참가 가능 아이템 수 |
-| `cup:division-counts` | 부별 아이템 수 |
-| `cup:run-progress` | 런 진행률 |
-| `cup:run-live-scores` | 런 실시간 점수 |
-| `cup:tournament-rankings` | 개별 대회 누적 순위 |
-| `cup:last-run-rankings` | 마지막 런 순위 |
-| `cup:tournament-stats` | 대회 통계 |
-| `cup:item-tournament-stats` | 아이템별 대회 통계 |
-| `cup:rank-history` | 아이템 순위 이력 |
-| `ranking-settings:get` | 랭킹 설정 조회 |
-| `ranking-settings:update` | 랭킹 설정 수정 |
-| `master-ranking:list` | 마스터 랭킹 목록 (division, sortBy, sortDir 필터 지원) |
-| `master-ranking:reset` | 마스터 랭킹 초기화 |
-| `master-ranking:rank-trends` | 전체 아이템 순위 추이 |
-| `master-ranking:rank-history` | 아이템 순위 히스토리 (최근 15런) |
-| `master-ranking:item-format-stats` | 아이템 포맷별 통계 |
+부모 매치 인덱스: floor(child_match_index / 2) + offset(다음 라운드 시작 인덱스)
+
+---
+
+## 크로스 블럭 토너먼트 (결승 토너먼트)
+
+- 각 블럭의 우승자 1명씩 최종 토너먼트 진출
+- 블럭 수에 따른 크로스 토너먼트 구조:
+  - 2블럭 → 결승 1경기
+  - 4블럭 → 준결승 2경기 + 결승 1경기
+  - 8블럭 → 8강 4경기 + 4강 2경기 + 결승 1경기
+- 크로스 블럭 대진도 대회 시작 시 미리 생성 (NULL 슬롯)
+
+### 블럭 → 크로스 슬롯 매핑
+```
+블럭 0 우승 → 크로스 매치 0의 item1
+블럭 1 우승 → 크로스 매치 0의 item2
+블럭 2 우승 → 크로스 매치 1의 item1
+블럭 3 우승 → 크로스 매치 1의 item2
+...
+```
+
+크로스 토너먼트 내부 대진은 블럭 내 토너먼트와 동일한 이진 트리 구조로 구성.
+
+---
+
+## DB 설계 변경
+
+### cup_matches 테이블 변경
+현재 컬럼에 `block_id` 추가:
+```sql
+ALTER TABLE cup_matches ADD COLUMN block_id INTEGER DEFAULT NULL;
+```
+
+- `block_id = NULL` → 크로스 블럭 매치 (phase='cross')
+- `block_id = 0, 1, 2, ...` → 해당 블럭 내 매치
+
+### phase 구분
+
+| phase   | 설명                        | block_id   |
+|---------|-----------------------------|------------|
+| group   | 조별 예선 (각 조 1경기)      | 0, 1, ...  |
+| main    | 블럭 내 토너먼트 (16강~결승) | 0, 1, ...  |
+| cross   | 크로스 블럭 토너먼트         | NULL       |
+
+기존 `main` phase를 블럭 내 토너먼트에 재사용하고, 크로스용 `cross` phase 추가.
+
+### cup_groups 테이블 변경
+`block_id` 컬럼 추가:
+```sql
+ALTER TABLE cup_groups ADD COLUMN block_id INTEGER DEFAULT 0;
+```
+
+---
+
+## IPC 변경
+
+### cup:start (월드컵 포맷)
+```
+1. 참가자 수 계산 → round_total 결정 (32의 배수)
+2. 블럭 수 = round_total / 32
+3. 참가자를 랜덤 셔플
+4. 블럭별 32명씩 배정:
+   for b in 0..blockCount:
+     block_participants = shuffled[b*32 .. b*32+32]
+     → 16개 조 생성 (cup_groups, block_id=b)
+     → 조별 예선 매치 생성 (phase='group', block_id=b)
+     → 블럭 내 15경기 미리 생성 (phase='main', block_id=b, item1/2=NULL)
+       match_index: 0~14
+5. 크로스 블럭 매치 미리 생성 (phase='cross', block_id=NULL, item1/2=NULL)
+   경기 수: blockCount - 1
+```
+
+### cup:pick (결과 반영 및 슬롯 업데이트)
+```
+조별 경기(phase='group') winner 확정 시:
+  group_index = group 내 순서 (A=0, B=1, ...)
+  블럭 내 16강 match_index = floor(group_index / 2)
+  슬롯 위치: group_index가 짝수 → item1, 홀수 → item2
+  → UPDATE cup_matches SET item{1or2}_id = winner_id WHERE block_id=b AND phase='main' AND match_index=target
+
+블럭 내 매치(phase='main') winner 확정 시:
+  다음 라운드 match_index 계산
+  슬롯 업데이트 (위와 동일 방식)
+  블럭 결승(match_index=14) winner 확정 시:
+    → 크로스 슬롯 업데이트 (block_id 기반으로 슬롯 위치 계산)
+
+크로스 매치(phase='cross') winner 확정 시:
+  다음 라운드 슬롯 업데이트
+  최종 결승 winner → cup 완료 처리
+```
+
+### cup:standings (블럭별 대진표 반환)
+```json
+{
+  "phase": "main",
+  "blocks": [
+    {
+      "block_id": 0,
+      "groups": [...],
+      "bracket": [
+        { "round": 16, "matches": [...] },
+        { "round": 8,  "matches": [...] },
+        { "round": 4,  "matches": [...] },
+        { "round": 1,  "matches": [...] }
+      ]
+    }
+  ],
+  "crossBracket": [
+    { "round": ..., "matches": [...] }
+  ]
+}
+```
+
+---
+
+## UI 설계
+
+### 현황 탭
+
+#### 조별 예선 중 (phase='group')
+- 현재 방식과 동일
+- 블럭 번호로 섹션 구분 (Block 1, Block 2, ...)
+- 각 블럭 내 16개 조 카드 그리드
+- 현재 진행중인 조 카드가 해당 블럭 내에서 맨 앞으로
+
+#### 본선 중 (phase='main')
+- 블럭별 토너먼트 브래킷 표시
+- 블럭 탭 (Block 1, Block 2, ...) 또는 세로 스크롤
+- 브래킷 레이아웃 (가로):
+  ```
+  [16강]       [8강]     [4강]   [결승]
+  A1 ┐
+     ├→ W ┐
+  B1 ┘   |
+         ├→ W ┐
+  C1 ┐   |   |
+     ├→ W ┘  ├→ W ┐
+  D1 ┘       |   |
+             |   ├→ 우승
+  E1 ┐       |   |
+     ├→ W ┐  |   |
+  F1 ┘   |  ├→ W ┘
+         ├→ W ┘
+  G1 ┐   |
+     ├→ W ┘
+  H1 ┘
+  ...
+  ```
+
+#### 크로스 토너먼트 중 (phase='cross')
+- 단일 토너먼트 브래킷
+- 각 슬롯에 블럭 우승자 이름/썸네일 표시
+
+### 브래킷 컴포넌트 구조
+```
+WorldcupBracket (현황 탭 내 조건부 렌더링)
+  ├── GroupPhaseView (phase='group')
+  │   └── BlockSection (per block)
+  │       └── GroupCard Grid
+  ├── MainPhaseView (phase='main')
+  │   ├── BlockTabs
+  │   └── BlockBracket (per block)
+  │       └── BracketColumn (per round: 16강/8강/4강/결승)
+  │           └── BracketMatch
+  └── CrossPhaseView (phase='cross')
+      └── CrossBracket
+          └── BracketColumn (per round)
+              └── BracketMatch
+```
+
+---
+
+## 구현 순서
+
+### Phase A: DB 마이그레이션
+1. `db.ts`: `cup_matches`에 `block_id` 컬럼 추가
+2. `db.ts`: `cup_groups`에 `block_id` 컬럼 추가
+
+### Phase B: IPC 재설계
+3. `ipc.ts`: `cup:start` (worldcup 분기) 재작성
+4. `ipc.ts`: `cup:pick` 슬롯 업데이트 로직 추가
+5. `ipc.ts`: `cup:standings` 블럭별 대진표 데이터 반환
+
+### Phase C: UI 신규 작성
+6. 브래킷 공통 컴포넌트 (`BracketMatch`, `BracketColumn`)
+7. `BlockBracket` 컴포넌트
+8. `CrossBracket` 컴포넌트
+9. `Worldcup.tsx` 현황 탭에 조건부 렌더링 통합
+
+---
+
+## 미결 사항
+
+- [x] 참가자 수 < round_total 케이스: round_total이 항상 참가자 수 이하의 최대 32배수로 결정되므로 발생 불가 (해결 불필요)
+- [x] 크로스 블럭 시딩: 블럭 번호 순 그대로 배정 (시딩 없음)
+- [x] 블럭 1개 케이스: 작품 1400명, 배우 400명으로 실질적으로 발생 불가 (해결 불필요)
+- [x] 조별 동점: 1v1 단판이므로 무승부 없음, 기존 타이브레이커 로직으로 처리 가능
+- [ ] 월드컵 포맷에서 현재 진행 단계(group/main/cross) 판단 로직

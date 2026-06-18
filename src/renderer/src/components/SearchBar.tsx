@@ -23,6 +23,7 @@ interface WorkSearchParams {
   actorCountTo: number | ''
   actorCountNull: boolean
   favoriteOnly: boolean
+  deletePending: boolean
 }
 
 interface ActorSearchParams {
@@ -63,6 +64,8 @@ interface ActorSearchParams {
   cupNull: boolean
   scoreExcluded: boolean
   favoriteOnly: boolean
+  commentSearch: string
+  commentNull: boolean
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
@@ -71,6 +74,7 @@ export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
   titleSearch: '', titleNull: false, commentSearch: '', commentNull: false,
   actorCountFrom: '', actorCountTo: '', actorCountNull: false,
   favoriteOnly: false,
+  deletePending: false,
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
@@ -89,6 +93,8 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   heightNull: false, bustNull: false, waistNull: false, hipNull: false, cupNull: false,
   scoreExcluded: false,
   favoriteOnly: false,
+  commentSearch: '', commentNull: false,
+  deletePending: false,
 }
 
 export type { WorkSearchParams, ActorSearchParams, TagMode }
@@ -582,6 +588,7 @@ export default function SearchBar(props: Props) {
     if (wp.commentSearch) conditions.push({ label: `코멘트: ${wp.commentSearch}`, onClear: () => onChange({ ...wp, commentSearch: '' } as never) })
     if (wp.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...wp, commentNull: false } as never) })
     if (wp.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...wp, favoriteOnly: false } as never) })
+    if (wp.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...wp, deletePending: false } as never) })
   }
 
   if (type === 'actors' && aParams) {
@@ -617,6 +624,9 @@ export default function SearchBar(props: Props) {
     if (ap.cupFrom || ap.cupTo) conditions.push({ label: `컵: ${ap.cupFrom || '?'}~${ap.cupTo || '?'}`, onClear: () => onChange({ ...ap, cupFrom: '', cupTo: '' } as never) })
     if (ap.scoreExcluded) conditions.push({ label: '점수제외', onClear: () => onChange({ ...ap, scoreExcluded: false } as never) })
     if (ap.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...ap, favoriteOnly: false } as never) })
+    if (ap.commentSearch) conditions.push({ label: `코멘트: ${ap.commentSearch}`, onClear: () => onChange({ ...ap, commentSearch: '' } as never) })
+    if (ap.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...ap, commentNull: false } as never) })
+    if (ap.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...ap, deletePending: false } as never) })
   }
 
   // ── render ────────────────────────────────────────────────────────
@@ -950,6 +960,14 @@ export default function SearchBar(props: Props) {
                     코멘트없음
                   </button>
                 </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 w-14 shrink-0">삭제예정</span>
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...wParams, deletePending: !wParams.deletePending } as never)}
+                    className={`text-xs px-2 py-1 rounded ${wParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >삭제 예정</button>
+                </div>
               </>
             )}
 
@@ -1063,7 +1081,35 @@ export default function SearchBar(props: Props) {
                     })}
                   </div>
                 </div>
-              </>
+              {/* 코멘트 */}
+              {type === 'actors' && aParams && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 w-14 shrink-0">코멘트</span>
+                    <input
+                      type="text"
+                      value={aParams.commentSearch}
+                      onChange={e => onChange({ ...aParams, commentSearch: e.target.value, commentNull: false } as never)}
+                      placeholder="코멘트 검색..."
+                      className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...aParams, commentNull: !aParams.commentNull, commentSearch: '' } as never)}
+                      className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.commentNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >코멘트없음</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 w-14 shrink-0">삭제예정</span>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...aParams, deletePending: !aParams.deletePending } as never)}
+                      className={`text-xs px-2 py-1 rounded ${aParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >삭제 예정</button>
+                  </div>
+                </>
+              )}
+            </>
             )}
 
             {/* ── status bar (bottom) ───────────────────────────── */}

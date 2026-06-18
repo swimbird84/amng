@@ -86,6 +86,7 @@ export default function Works({ onNavigateToActor, openEditId, onEditHandled }: 
     params.sortBy = sortBy
     params.sortDir = sortDir
     if (search.favoriteOnly) params.favoriteOnly = true
+    if (search.deletePending) params.deletePending = true
     params.limit = limit
     params.offset = offset
     const result = await worksApi.list(params) as { items: Work[]; total: number }
@@ -536,11 +537,14 @@ export default function Works({ onNavigateToActor, openEditId, onEditHandled }: 
                 })()}
               </div>
               <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-5 space-y-3">
-                <div className="flex items-start justify-between">
-                  <h3 className="text-white font-bold text-lg">{selected.product_number || '-'}</h3>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <h3 className="text-white font-bold text-lg">{selected.product_number || '-'}</h3>
+                    {!!selected.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
+                  </div>
                   <button
                     onClick={() => handleToggleFavorite(selected.id, selected.is_favorite)}
-                    className={`text-2xl leading-none ml-2 ${selected.is_favorite ? 'text-red-500' : 'text-gray-500 hover:text-red-400'}`}
+                    className={`text-2xl leading-none ml-2 shrink-0 ${selected.is_favorite ? 'text-red-500' : 'text-gray-500 hover:text-red-400'}`}
                   >
                     {selected.is_favorite ? '♥' : '♡'}
                   </button>

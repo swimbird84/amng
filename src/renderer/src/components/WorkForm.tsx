@@ -27,6 +27,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [releaseDate, setReleaseDate] = useState(work?.release_date || '')
   const [rating, setRating] = useState(work?.rating || 0)
   const [isFavorite, setIsFavorite] = useState(work?.is_favorite ? 1 : 0)
+  const [deletePending, setDeletePending] = useState(work?.delete_pending ?? 0)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(work?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(work?.rep_tags?.map((t) => t.id) || [])
   const [selectedActorIds, setSelectedActorIds] = useState<number[]>(work?.actors?.map((a) => a.id) || [])
@@ -240,6 +241,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         release_date: releaseDate || undefined,
         rating,
         is_favorite: isFavorite,
+        delete_pending: deletePending,
         title: comment.trim() || null,
         comment: workComment.trim() || null,
         studio_id: studioId,
@@ -375,6 +377,15 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                   <span className="text-gray-500 hover:text-red-400">♡</span>
                 )}
               </button>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!deletePending}
+                  onChange={e => setDeletePending(e.target.checked ? 1 : 0)}
+                  className="accent-red-500"
+                />
+                <span className="text-xs text-red-400">삭제예정</span>
+              </label>
             </div>
             <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm">
               저장

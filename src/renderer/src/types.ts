@@ -32,6 +32,7 @@ export interface Work {
   release_date: string | null
   rating: number
   is_favorite: number
+  delete_pending: number
   comment: string | null
   studio_id: number | null
   studio_name: string | null
@@ -67,6 +68,7 @@ export interface Actor {
   debut_date: string | null
   is_favorite: number
   score_excluded: number
+  delete_pending: number
   height: number | null
   bust: number | null
   waist: number | null
