@@ -61,18 +61,23 @@ function getGroupQualifiers(database: DB, runId: number, groupId: number, format
     `SELECT * FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'tiebreak' ORDER BY round ASC, id ASC`
   ).all(runId, groupId) as { id: number; round: number; item1_id: number; item2_id: number | null; winner_id: number | null }[]
   if (tiebreakMatches.length === 0 || tiebreakMatches.some(m => m.winner_id == null)) return null
+  const N = info.tiedPlayers.length
+  // 가운틀렛 1: 처음 N-1개 경기 → Q1 = 마지막 승자
+  const g1 = tiebreakMatches.slice(0, N - 1)
+  if (g1.length < N - 1) return null
+  const q1 = g1[g1.length - 1].winner_id!
   if (info.qualifiersNeeded === 1) {
-    const m1 = tiebreakMatches.find(m => m.round === 1)
-    if (!m1?.winner_id) return null
-    return [...info.clearQualifiers, m1.winner_id].slice(0, 2)
+    return [...info.clearQualifiers, q1].slice(0, 2)
   }
-  const m1 = tiebreakMatches.find(m => m.round === 1)
-  const m2 = tiebreakMatches.find(m => m.round === 2)
-  if (!m1?.winner_id || !m2?.winner_id) return null
-  return [m1.winner_id, m2.winner_id]
+  // 가운틀렛 2: 이후 N-2개 경기 → Q2 = 마지막 승자
+  const g2Players = info.tiedPlayers.filter(p => p !== q1)
+  const g2 = tiebreakMatches.slice(N - 1)
+  if (g2.length < g2Players.length - 1) return null
+  const q2 = g2[g2.length - 1].winner_id!
+  return [...info.clearQualifiers, q1, q2].slice(0, 2)
 }
 
-// 그룹 픽 처리: 필요 시 타이브레이크 매치 생성
+// 그룹 픽 처리: 필요 시 타이브레이크 매치 생성 (N파전, 가운틀렛 방식)
 function processGroupPick(database: DB, runId: number, groupId: number, format: string): void {
   const usePoints = format === 'worldcup'
   const groupMatches = database.prepare(
@@ -85,25 +90,62 @@ function processGroupPick(database: DB, runId: number, groupId: number, format: 
   const tiebreakMatches = database.prepare(
     `SELECT * FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'tiebreak' ORDER BY round ASC, id ASC`
   ).all(runId, groupId) as { id: number; round: number; item1_id: number; item2_id: number | null; winner_id: number | null }[]
-  if (tiebreakMatches.length === 0) {
-    const players = shuffleArr([...info.tiedPlayers])
+
+  const insertMatch = (round: number, item1: number, item2: number) => {
     const { mx } = database.prepare(`SELECT MAX(match_index) as mx FROM cup_matches WHERE run_id = ?`).get(runId) as { mx: number | null }
     database.prepare(
-      `INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id) VALUES (?, 'tiebreak', ?, 1, ?, ?, ?)`
-    ).run(runId, groupId, (mx ?? -1) + 1, players[0], players[1])
+      `INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id) VALUES (?, 'tiebreak', ?, ?, ?, ?, ?)`
+    ).run(runId, groupId, round, (mx ?? -1) + 1, item1, item2)
+  }
+
+  // 진행 중인 경기가 있으면 대기
+  if (tiebreakMatches.some(m => m.winner_id == null)) return
+
+  const N = info.tiedPlayers.length
+
+  // ── 가운틀렛 1 (처음 N-1개 경기): 승자가 계속 싸워 Q1 결정 ──
+  const g1 = tiebreakMatches.slice(0, N - 1)
+
+  if (g1.length === 0) {
+    // 가운틀렛 1 첫 경기 생성
+    const players = shuffleArr([...info.tiedPlayers])
+    insertMatch(1, players[0], players[1])
     return
   }
-  const m1 = tiebreakMatches.find(m => m.round === 1)
-  if (!m1 || m1.winner_id == null) return
-  if (info.qualifiersNeeded <= 1) return
-  if (tiebreakMatches.find(m => m.round === 2)) return
-  const loser = m1.winner_id === m1.item1_id ? m1.item2_id! : m1.item1_id
-  const p3 = info.tiedPlayers.find(p => p !== m1.item1_id && p !== m1.item2_id)
-  if (p3 == null) return
-  const { mx } = database.prepare(`SELECT MAX(match_index) as mx FROM cup_matches WHERE run_id = ?`).get(runId) as { mx: number | null }
-  database.prepare(
-    `INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id) VALUES (?, 'tiebreak', ?, 2, ?, ?, ?)`
-  ).run(runId, groupId, (mx ?? -1) + 1, loser, p3)
+
+  if (g1.length < N - 1) {
+    // 가운틀렛 1 진행 중: 승자가 다음 도전자와 대결
+    const participated1 = new Set<number>()
+    for (const m of g1) { participated1.add(m.item1_id); if (m.item2_id != null) participated1.add(m.item2_id) }
+    const nextPlayer = info.tiedPlayers.find(p => !participated1.has(p))
+    if (nextPlayer == null) return
+    insertMatch(g1.length + 1, g1[g1.length - 1].winner_id!, nextPlayer)
+    return
+  }
+
+  // 가운틀렛 1 완료 → Q1 확정
+  if (info.qualifiersNeeded === 1) return
+
+  // ── 가운틀렛 2 (이후 N-2개 경기): Q1 제외 나머지로 Q2 결정 ──
+  const q1 = g1[g1.length - 1].winner_id!
+  const g2Players = info.tiedPlayers.filter(p => p !== q1)
+  const g2 = tiebreakMatches.slice(N - 1)
+
+  if (g2.length === 0) {
+    // 가운틀렛 2 첫 경기 생성
+    const players = shuffleArr([...g2Players])
+    insertMatch(N, players[0], players[1])
+    return
+  }
+
+  if (g2.length < g2Players.length - 1) {
+    // 가운틀렛 2 진행 중: 승자가 다음 도전자와 대결
+    const participated2 = new Set<number>()
+    for (const m of g2) { participated2.add(m.item1_id); if (m.item2_id != null) participated2.add(m.item2_id) }
+    const nextPlayer = g2Players.find(p => !participated2.has(p))
+    if (nextPlayer == null) return
+    insertMatch(N + g2.length, g2[g2.length - 1].winner_id!, nextPlayer)
+  }
 }
 
 // 리그전 전용: 모든 그룹 완료 시 토너먼트 1라운드 생성
@@ -139,6 +181,7 @@ function startBlock(database: DB, runId: number, blockId: number): void {
     if (q == null || q.length < 2) return
     qualifiers.push(q[0], q[1])
   }
+
   // 고정 크로스 시딩: [g1_1위, g1_2위, g2_1위, g2_2위, ...] → g1_1위 vs g2_2위, g2_1위 vs g1_2위
   const seeded: number[] = []
   for (let i = 0; i < qualifiers.length; i += 4) {
@@ -2368,7 +2411,8 @@ export function registerIpcHandlers(): void {
         const gms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ? ORDER BY match_index`).all(runId, gid) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
         const tbms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'tiebreak' AND group_id = ? ORDER BY round, match_index`).all(runId, gid)
         const standings = computeGroupStandings(gms, false)
-        blockMap.get(blockId)!.groups.push({ group_id: gid, standings, matches: gms, tiebreakMatches: tbms })
+        const qualifiers = getGroupQualifiers(db(), runId, gid, 'worldcup')
+        blockMap.get(blockId)!.groups.push({ group_id: gid, standings, matches: gms, tiebreakMatches: tbms, qualifiers })
       }
       const blocks = [...blockMap.values()].sort((a, b) => a.block_id - b.block_id)
       const allGroupAndTbDone = allGroupIds.length > 0 && allGroupIds.every(gid => {

@@ -1497,27 +1497,34 @@ function PlayView({
                             <thead>
                               <tr className="border-b border-gray-700/50 text-gray-500">
                                 <th className="px-3 py-1 text-left w-6">#</th>
+                                {tournament.is_master ? <th className="px-1 py-1 text-center w-5">부</th> : null}
                                 <th className="px-3 py-1 text-left">이름</th>
-                                <th className="px-2 py-1 text-center">승</th>
-                                <th className="px-2 py-1 text-center">무</th>
-                                <th className="px-2 py-1 text-center">패</th>
-                                <th className="px-2 py-1 text-center font-bold">점</th>
+                                <th className="px-1 py-1 text-center w-5">승</th>
+                                <th className="px-1 py-1 text-center w-5">무</th>
+                                <th className="px-1 py-1 text-center w-5">패</th>
+                                <th className="px-1 py-1 text-center w-5 font-bold">점</th>
                               </tr>
                             </thead>
                             <tbody>
                               {gs.map((row, idx) => {
                                 const item = items.get(row.item_id)
+                                const div = divisionMap[row.item_id] ?? 0
                                 return (
                                   <tr key={row.item_id} className={`border-b border-gray-700/30 ${idx < 2 ? 'bg-green-900/10' : ''}`}>
                                     <td className="px-3 py-1.5 text-gray-500">{idx + 1}</td>
+                                    {tournament.is_master ? (
+                                      <td className={`px-1 py-1.5 text-center text-xs font-bold ${DIV_TEXT_COLOR[div] ?? DIV_TEXT_COLOR[0]}`}>
+                                        {div === 0 ? '미' : div}
+                                      </td>
+                                    ) : null}
                                     <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
                                       {item ? itemLabel(item) : `#${row.item_id}`}
                                       {idx < 2 && <span className="ml-1 text-green-400 text-xs">↑</span>}
                                     </td>
-                                    <td className="px-2 py-1.5 text-center text-green-400">{row.w}</td>
-                                    <td className="px-2 py-1.5 text-center text-gray-400">{row.d}</td>
-                                    <td className="px-2 py-1.5 text-center text-red-400">{row.l}</td>
-                                    <td className="px-2 py-1.5 text-center text-white font-bold">{row.pts}</td>
+                                    <td className="px-1 py-1.5 text-center text-green-400">{row.w}</td>
+                                    <td className="px-1 py-1.5 text-center text-gray-400">{row.d}</td>
+                                    <td className="px-1 py-1.5 text-center text-red-400">{row.l}</td>
+                                    <td className="px-1 py-1.5 text-center text-white font-bold">{row.pts}</td>
                                   </tr>
                                 )
                               })}
@@ -1643,7 +1650,11 @@ function PlayView({
               const divisionMap = standings.divisionMap ?? {}
               const itemOriginMap = new Map<number, { group_id: number; rank: number }>()
               standings.groupPhase?.blocks.forEach(b => b.groups.forEach(g => {
-                g.standings.forEach((row, idx) => { itemOriginMap.set(row.item_id, { group_id: g.group_id, rank: idx + 1 }) })
+                const gqs = (g as any).qualifiers as number[] | null | undefined
+                g.standings.forEach((row, idx) => {
+                  const qIdx = gqs ? gqs.indexOf(row.item_id) : -1
+                  itemOriginMap.set(row.item_id, { group_id: g.group_id, rank: qIdx !== -1 ? qIdx + 1 : idx + 1 })
+                })
               }))
               const DIV_TEXT: Record<number, string> = {
                 1: 'text-yellow-300', 2: 'text-orange-300', 3: 'text-blue-300',
@@ -1686,7 +1697,7 @@ function PlayView({
                             if (b.group_id === activeGroupId) return 1
                           }
                           return a.group_id - b.group_id
-                        }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms }) => {
+                        }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms, qualifiers: gqs }) => {
                           const groupDone = gms && gms.length > 0 && gms.every(m => m.winner_id !== null || m.is_draw) && (!tbms || tbms.length === 0 || tbms.every(m => m.winner_id !== null || m.is_draw))
                           const groupActive = !groupDone && activeGroupId === group_id
                           return (
@@ -1700,27 +1711,34 @@ function PlayView({
                                 <thead>
                                   <tr className="border-b border-gray-700/50 text-gray-500">
                                     <th className="px-3 py-1 text-left w-6">#</th>
+                                    {tournament.is_master ? <th className="px-1 py-1 text-center w-5">부</th> : null}
                                     <th className="px-3 py-1 text-left">이름</th>
-                                    <th className="px-2 py-1 text-center">승</th>
-                                    <th className="px-2 py-1 text-center">무</th>
-                                    <th className="px-2 py-1 text-center">패</th>
-                                    <th className="px-2 py-1 text-center font-bold">점</th>
+                                    <th className="px-1 py-1 text-center w-5">승</th>
+                                    <th className="px-1 py-1 text-center w-5">무</th>
+                                    <th className="px-1 py-1 text-center w-5">패</th>
+                                    <th className="px-1 py-1 text-center w-5 font-bold">점</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {gs.map((row, idx) => {
                                     const item = items.get(row.item_id)
+                                    const div = divisionMap[row.item_id] ?? 0
                                     return (
-                                      <tr key={row.item_id} className={`border-b border-gray-700/30 ${idx < 2 ? 'bg-purple-900/10' : ''}`}>
-                                        <td className="px-3 py-1.5 text-gray-500">{idx + 1}</td>
+                                      <tr key={row.item_id} className={`border-b border-gray-700/30 ${(gqs ? gqs.includes(row.item_id) : idx < 2) ? 'bg-purple-900/10' : ''}`}>
+                                        <td className="px-3 py-1.5 text-gray-500">{gs.findIndex(s => s.pts === row.pts && s.w === row.w) + 1}</td>
+                                        {tournament.is_master ? (
+                                          <td className={`px-1 py-1.5 text-center text-xs font-bold ${DIV_TEXT_COLOR[div] ?? DIV_TEXT_COLOR[0]}`}>
+                                            {div === 0 ? '미' : div}
+                                          </td>
+                                        ) : null}
                                         <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
                                           {item ? itemLabel(item) : `#${row.item_id}`}
-                                          {idx < 2 && <span className="ml-1 text-purple-400 text-xs">↑</span>}
+                                          {(gqs ? gqs.includes(row.item_id) : idx < 2) && <span className="ml-1 text-purple-400 text-xs">↑</span>}
                                         </td>
-                                        <td className="px-2 py-1.5 text-center text-green-400">{row.w}</td>
-                                        <td className="px-2 py-1.5 text-center text-gray-400">{row.d}</td>
-                                        <td className="px-2 py-1.5 text-center text-red-400">{row.l}</td>
-                                        <td className="px-2 py-1.5 text-center text-white font-bold">{row.pts}</td>
+                                        <td className="px-1 py-1.5 text-center text-green-400">{row.w}</td>
+                                        <td className="px-1 py-1.5 text-center text-gray-400">{row.d}</td>
+                                        <td className="px-1 py-1.5 text-center text-red-400">{row.l}</td>
+                                        <td className="px-1 py-1.5 text-center text-white font-bold">{row.pts}</td>
                                       </tr>
                                     )
                                   })}
@@ -1822,13 +1840,15 @@ function PlayView({
                                 const g1 = blockGroups[i + 1]
                                 if (!g0 || !g1) continue
                                 const d0 = isGDone(g0), d1 = isGDone(g1)
+                                const g0q = (g0 as any).qualifiers as number[] | null | undefined
+                                const g1q = (g1 as any).qualifiers as number[] | null | undefined
                                 bracketMatches.push([
-                                  { group_id: g0.group_id, rank: 1, item_id: d0 ? (g0.standings[0]?.item_id ?? null) : null },
-                                  { group_id: g1.group_id, rank: 2, item_id: d1 ? (g1.standings[1]?.item_id ?? null) : null },
+                                  { group_id: g0.group_id, rank: 1, item_id: d0 ? (g0q?.[0] ?? g0.standings[0]?.item_id ?? null) : null },
+                                  { group_id: g1.group_id, rank: 2, item_id: d1 ? (g1q?.[1] ?? g1.standings[1]?.item_id ?? null) : null },
                                 ])
                                 bracketMatches.push([
-                                  { group_id: g1.group_id, rank: 1, item_id: d1 ? (g1.standings[0]?.item_id ?? null) : null },
-                                  { group_id: g0.group_id, rank: 2, item_id: d0 ? (g0.standings[1]?.item_id ?? null) : null },
+                                  { group_id: g1.group_id, rank: 1, item_id: d1 ? (g1q?.[0] ?? g1.standings[0]?.item_id ?? null) : null },
+                                  { group_id: g0.group_id, rank: 2, item_id: d0 ? (g0q?.[1] ?? g0.standings[1]?.item_id ?? null) : null },
                                 ])
                               }
 
@@ -2747,6 +2767,10 @@ const DIV_COLOR: Record<number, string> = {
   5: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
   6: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
   0: 'bg-gray-700/50 text-gray-500 border-gray-600/30',
+}
+const DIV_TEXT_COLOR: Record<number, string> = {
+  1: 'text-yellow-300', 2: 'text-orange-300', 3: 'text-blue-300',
+  4: 'text-green-300', 5: 'text-purple-300', 6: 'text-gray-400', 0: 'text-gray-600',
 }
 
 function getDivision(rank: number, masterRunCount: number): number {
