@@ -1497,7 +1497,7 @@ function PlayView({
                             <thead>
                               <tr className="border-b border-gray-700/50 text-gray-500">
                                 <th className="px-3 py-1 text-left w-6">#</th>
-                                {tournament.is_master ? <th className="px-1 py-1 text-center w-5">부</th> : null}
+                                {tournament.is_master ? <th className="px-1 py-1 text-center w-8">리그</th> : null}
                                 <th className="px-3 py-1 text-left">이름</th>
                                 <th className="px-1 py-1 text-center w-5">승</th>
                                 <th className="px-1 py-1 text-center w-5">무</th>
@@ -1514,7 +1514,7 @@ function PlayView({
                                     <td className="px-3 py-1.5 text-gray-500">{idx + 1}</td>
                                     {tournament.is_master ? (
                                       <td className={`px-1 py-1.5 text-center text-xs font-bold ${DIV_TEXT_COLOR[div] ?? DIV_TEXT_COLOR[0]}`}>
-                                        {div === 0 ? '미' : div}
+                                        {div === 0 ? '미' : `${div}부`}
                                       </td>
                                     ) : null}
                                     <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
@@ -1711,7 +1711,7 @@ function PlayView({
                                 <thead>
                                   <tr className="border-b border-gray-700/50 text-gray-500">
                                     <th className="px-3 py-1 text-left w-6">#</th>
-                                    {tournament.is_master ? <th className="px-1 py-1 text-center w-5">부</th> : null}
+                                    {tournament.is_master ? <th className="px-1 py-1 text-center w-8">리그</th> : null}
                                     <th className="px-3 py-1 text-left">이름</th>
                                     <th className="px-1 py-1 text-center w-5">승</th>
                                     <th className="px-1 py-1 text-center w-5">무</th>
@@ -1728,7 +1728,7 @@ function PlayView({
                                         <td className="px-3 py-1.5 text-gray-500">{gs.findIndex(s => s.pts === row.pts && s.w === row.w) + 1}</td>
                                         {tournament.is_master ? (
                                           <td className={`px-1 py-1.5 text-center text-xs font-bold ${DIV_TEXT_COLOR[div] ?? DIV_TEXT_COLOR[0]}`}>
-                                            {div === 0 ? '미' : div}
+                                            {div === 0 ? '미' : `${div}부`}
                                           </td>
                                         ) : null}
                                         <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
@@ -1898,12 +1898,15 @@ function PlayView({
                         ) : (
                           <div className="overflow-x-auto p-2">
                             <div className="flex gap-0 min-w-max">
-                              {roundsSorted.map(rd => {
+                              {roundsSorted.map((rd, rdIdx) => {
                                 const matchCount = rd.matches.length
                                 const slotsPerMatch = TOTAL_SLOTS / matchCount
                                 const isFirstRound = rd.round === roundsSorted[0].round
+                                const isLastRound = rdIdx === roundsSorted.length - 1
+                                const CONN_W = 24
                                 return (
-                                  <div key={rd.round} className="flex flex-col" style={{ width: isFirstRound ? 176 : 148 }}>
+                                  <React.Fragment key={rd.round}>
+                                  <div className="flex flex-col" style={{ width: 200 }}>
                                     <div className="text-center text-xs text-gray-500 py-1 border-b border-gray-700/40 mb-1">
                                       {blockRoundLabel(rd.round, roundTotal, itemType)}
                                     </div>
@@ -1912,12 +1915,12 @@ function PlayView({
                                         const topPx = matchIdx * slotsPerMatch * SLOT_H + (slotsPerMatch / 2 - 1) * SLOT_H
                                         const i1 = items.get(m.item1_id)
                                         const i2 = m.item2_id ? items.get(m.item2_id) : null
-                                        const o1 = isFirstRound ? originLabel(m.item1_id) : null
-                                        const o2 = isFirstRound && m.item2_id ? originLabel(m.item2_id) : null
+                                        const o1 = originLabel(m.item1_id)
+                                        const o2 = m.item2_id ? originLabel(m.item2_id) : null
                                         return (
                                           <div key={m.id} className="absolute left-1 right-1" style={{ top: topPx }}>
                                             <div className={`text-xs px-2 py-0.5 rounded-t border-l-2 ${m.winner_id === m.item1_id ? 'border-purple-400 bg-purple-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
-                                              {isFirstRound && o1 ? (
+                                              {o1 ? (
                                                 <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item1_id ? 'opacity-40 line-through' : ''}`}>
                                                   <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>
                                                   <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
@@ -1927,7 +1930,7 @@ function PlayView({
                                               )}
                                             </div>
                                             <div className={`text-xs px-2 py-0.5 rounded-b border-l-2 border-t border-gray-700/30 ${m.winner_id === m.item2_id ? 'border-purple-400 bg-purple-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
-                                              {isFirstRound && o2 ? (
+                                              {o2 ? (
                                                 <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item2_id ? 'opacity-40 line-through' : ''}`}>
                                                   <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>
                                                   <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : `#${m.item2_id}`}</span>
@@ -1941,6 +1944,40 @@ function PlayView({
                                       })}
                                     </div>
                                   </div>
+                                  {!isLastRound && (
+                                    <div className="flex flex-col shrink-0" style={{ width: CONN_W }}>
+                                      <div className="text-xs py-1 border-b border-transparent mb-1" style={{ visibility: 'hidden' }}>x</div>
+                                      <svg width={CONN_W} height={TOTAL_SLOTS * SLOT_H} style={{ display: 'block' }}>
+                                        {Array.from({ length: matchCount / 2 }, (_, i) => {
+                                          const topY = (2 * i * slotsPerMatch + slotsPerMatch / 2) * SLOT_H
+                                          const botY = ((2 * i + 1) * slotsPerMatch + slotsPerMatch / 2) * SLOT_H
+                                          const midY = (topY + botY) / 2
+                                          const m0 = rd.matches[2 * i]
+                                          const m1 = rd.matches[2 * i + 1]
+                                          const m0done = m0?.winner_id != null
+                                          const m1done = m1?.winner_id != null
+                                          const bothDone = m0done && m1done
+                                          const nextRound = roundsSorted[rdIdx + 1]
+                                          const nextM = nextRound?.matches[i]
+                                          const nextDecided = nextM?.winner_id != null
+                                          const topActive = m0done && (!nextDecided || nextM?.winner_id === nextM?.item1_id)
+                                          const botActive = m1done && (!nextDecided || nextM?.winner_id === nextM?.item2_id)
+                                          const C_ACTIVE = '#e5e7eb'
+                                          const C_IDLE = '#374151'
+                                          return (
+                                            <g key={i}>
+                                              <line x1={0} y1={topY} x2={CONN_W / 2} y2={topY} stroke={topActive ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                              <line x1={CONN_W / 2} y1={topY} x2={CONN_W / 2} y2={midY} stroke={topActive ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                              <line x1={CONN_W / 2} y1={midY} x2={CONN_W / 2} y2={botY} stroke={botActive ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                              <line x1={0} y1={botY} x2={CONN_W / 2} y2={botY} stroke={botActive ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                              <line x1={CONN_W / 2} y1={midY} x2={CONN_W} y2={midY} stroke={bothDone ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                            </g>
+                                          )
+                                        })}
+                                      </svg>
+                                    </div>
+                                  )}
+                                  </React.Fragment>
                                 )
                               })}
                               {isCompleted && (() => {
@@ -1948,18 +1985,24 @@ function PlayView({
                                 const finalists = (lastRound?.matches ?? []).map(m => m.winner_id).filter((id): id is number => id !== null)
                                 const unit = itemType === 'actor' ? '인' : '작품'
                                 return (
-                                  <div className="flex flex-col" style={{ width: 100 }}>
+                                  <div className="flex flex-col" style={{ width: 200 }}>
                                     <div className="text-center text-xs text-gray-500 py-1 border-b border-gray-700/40 mb-1">
                                       {`${roundTotal / 8}강(2${unit})`}
                                     </div>
                                     <div className="relative" style={{ height: TOTAL_SLOTS * SLOT_H }}>
                                       {finalists.map((fid, fi) => {
                                         const item = items.get(fid)
+                                        const o = originLabel(fid)
                                         const topPx = (fi === 0 ? TOTAL_SLOTS / 4 - 1 : TOTAL_SLOTS * 3 / 4 - 1) * SLOT_H
                                         return (
                                           <div key={fid} className="absolute left-1 right-1" style={{ top: topPx }}>
-                                            <div className="text-xs px-2 py-0.5 truncate rounded border-l-2 border-green-500 bg-green-900/20 text-green-300 font-semibold">
-                                              {item ? itemLabel(item) : `#${fid}`}
+                                            <div className="text-xs px-2 py-0.5 rounded border-l-2 border-green-500 bg-green-900/20 text-green-300 font-semibold">
+                                              {o ? (
+                                                <span className="flex items-center gap-1">
+                                                  <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o.color}`}>{o.text}</span>
+                                                  <span className="w-[120px] shrink-0 truncate">{item ? itemLabel(item) : `#${fid}`}</span>
+                                                </span>
+                                              ) : (item ? itemLabel(item) : `#${fid}`)}
                                             </div>
                                           </div>
                                         )
@@ -1992,13 +2035,17 @@ function PlayView({
                               {rd.matches.map(m => {
                                 const i1 = items.get(m.item1_id)
                                 const i2 = m.item2_id ? items.get(m.item2_id) : null
+                                const o1 = originLabel(m.item1_id)
+                                const o2 = m.item2_id ? originLabel(m.item2_id) : null
                                 return (
                                   <div key={m.id} className="px-3 py-2 flex items-center gap-2 text-sm">
                                     <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                      {o1 && <span className={`mr-1 text-[10px] font-bold ${o1.color}`}>{o1.text}</span>}
                                       {i1 ? itemLabel(i1) : `#${m.item1_id}`}
                                     </span>
                                     <span className="text-gray-600 text-xs w-5 text-center shrink-0">vs</span>
                                     <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                      {o2 && <span className={`mr-1 text-[10px] font-bold ${o2.color}`}>{o2.text}</span>}
                                       {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
                                     </span>
                                     {m.winner_id === null && <span className="text-gray-600 text-xs shrink-0">대기</span>}
