@@ -3394,6 +3394,30 @@ export function registerIpcHandlers(): void {
     return { tournament: db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId), run }
   })
 
+  ipcMain.handle('cup:clear-run', (_e, tournamentId: number) => {
+    const tournament = db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId) as {
+      id: number; type: 'actor' | 'work'
+    } | undefined
+    if (!tournament) throw new Error('대회를 찾을 수 없습니다')
+    const existingRun = db().prepare(`SELECT id FROM cup_runs WHERE tournament_id = ? AND status = 'in_progress' LIMIT 1`).get(tournamentId) as { id: number } | undefined
+    if (!existingRun) return { cleared: false }
+    const playedMatches = db().prepare(
+      `SELECT item1_id, item2_id, winner_id, is_draw FROM cup_matches WHERE run_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`
+    ).all(existingRun.id) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+    for (const m of playedMatches) {
+      if (m.is_draw) {
+        if (m.item1_id) db().prepare(`UPDATE cup_stats SET total_matches = MAX(0, total_matches - 1) WHERE type = ? AND item_id = ?`).run(tournament.type, m.item1_id)
+        if (m.item2_id) db().prepare(`UPDATE cup_stats SET total_matches = MAX(0, total_matches - 1) WHERE type = ? AND item_id = ?`).run(tournament.type, m.item2_id)
+      } else {
+        const loserId = m.item1_id === m.winner_id ? m.item2_id : m.item1_id
+        if (m.winner_id) db().prepare(`UPDATE cup_stats SET total_matches = MAX(0, total_matches - 1), match_wins = MAX(0, match_wins - 1) WHERE type = ? AND item_id = ?`).run(tournament.type, m.winner_id)
+        if (loserId) db().prepare(`UPDATE cup_stats SET total_matches = MAX(0, total_matches - 1) WHERE type = ? AND item_id = ?`).run(tournament.type, loserId)
+      }
+    }
+    db().prepare(`DELETE FROM cup_runs WHERE id = ?`).run(existingRun.id)
+    return { cleared: true }
+  })
+
   ipcMain.handle('cup:pick', (_e, params: { matchId: number; winnerId: number | null; isDraw?: boolean }) => {
     const { matchId, winnerId, isDraw = false } = params
     const match = db().prepare(`SELECT * FROM cup_matches WHERE id = ?`).get(matchId) as {

@@ -180,6 +180,8 @@ export const cupApi = {
     api.invoke('cup:division-counts', { type }) as Promise<{ division: number; count: number }[]>,
   start: (tournamentId: number, roundTotal: number, force?: boolean) =>
     api.invoke('cup:start', { tournamentId, roundTotal, force }),
+  clearRun: (tournamentId: number) =>
+    api.invoke('cup:clear-run', tournamentId),
   pick: (matchId: number, winnerId: number | null, isDraw?: boolean) =>
     api.invoke('cup:pick', { matchId, winnerId, isDraw }),
   tournamentRankings: (tournamentId: number, params?: { limit?: number; offset?: number; sortBy?: string; sortDir?: string; search?: string }) =>

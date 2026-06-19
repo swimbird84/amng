@@ -377,9 +377,12 @@ function TournamentCard({
   const [showEditName, setShowEditName] = useState(false)
   const [editName, setEditName] = useState(t.name)
   const [showConfirmDel, setShowConfirmDel] = useState(false)
+  const [delConfirmInput, setDelConfirmInput] = useState('')
   const [showInProgress, setShowInProgress] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('')
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [clearConfirmInput, setClearConfirmInput] = useState('')
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [cardFilter, setCardFilter] = useState<WcFilter | MasterFilter | null>(t.filter_json ? JSON.parse(t.filter_json) : null)
   const [itemCount, setItemCount] = useState(0)
@@ -450,6 +453,11 @@ function TournamentCard({
     }
   }
 
+  const handleClearRun = async () => {
+    await cupApi.clearRun(t.id)
+    onUpdate()
+  }
+
   const handleStartClick = () => {
     if (t.latest_run_status === 'in_progress') {
       setShowInProgress(true)
@@ -510,7 +518,7 @@ function TournamentCard({
               </span>
             )
           })()}
-          {/* M / F / X 버튼 */}
+          {/* M / F / C / X 버튼 */}
           <div className="absolute bottom-1 right-1 flex gap-1">
             <button
               onClick={e => { e.stopPropagation(); setEditName(t.name); setShowEditName(true) }}
@@ -526,8 +534,14 @@ function TournamentCard({
                 }`}
               >F</button>
             )}
+            {t.latest_run_status === 'in_progress' && (
+              <button
+                onClick={e => { e.stopPropagation(); setClearConfirmInput(''); setShowClearConfirm(true) }}
+                className="w-6 h-6 rounded bg-gray-900/70 hover:bg-blue-700 text-blue-400 hover:text-white text-xs font-bold flex items-center justify-center"
+              >C</button>
+            )}
             <button
-              onClick={e => { e.stopPropagation(); setShowConfirmDel(true) }}
+              onClick={e => { e.stopPropagation(); setDelConfirmInput(''); setShowConfirmDel(true) }}
               className="w-6 h-6 rounded bg-gray-900/70 hover:bg-red-700 text-red-400 hover:text-white text-xs font-bold flex items-center justify-center"
             >X</button>
           </div>
@@ -675,12 +689,52 @@ function TournamentCard({
       {/* 삭제 confirm 모달 */}
       {showConfirmDel && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowConfirmDel(false)}>
-          <div className="bg-gray-800 rounded-xl p-6 w-[360px] shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-gray-800 rounded-xl p-6 w-[380px] shadow-2xl" onClick={e => e.stopPropagation()}>
             <h2 className="text-base font-bold text-white mb-2">대회 삭제</h2>
-            <p className="text-sm text-gray-400 mb-6">「{t.name}」을 삭제하시겠습니까?<br />이 작업은 되돌릴 수 없습니다.</p>
+            <p className="text-sm text-gray-400 mb-3">「{t.name}」을 삭제하시겠습니까?<br />이 작업은 되돌릴 수 없습니다.</p>
+            <p className="text-xs text-red-400 mb-2">확인하려면 아래에 <span className="font-bold">지금 삭제</span>를 입력하세요.</p>
+            <input
+              autoFocus
+              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500 mb-4"
+              placeholder="지금 삭제"
+              value={delConfirmInput}
+              onChange={e => setDelConfirmInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && delConfirmInput === '지금 삭제') { setShowConfirmDel(false); onDelete() } }}
+            />
             <div className="flex gap-2">
-              <button onClick={onDelete} className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white rounded text-sm font-semibold">삭제</button>
-              <button onClick={() => setShowConfirmDel(false)} className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">취소</button>
+              <button
+                onClick={() => { setShowConfirmDel(false); onDelete() }}
+                disabled={delConfirmInput !== '지금 삭제'}
+                className="flex-1 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-sm font-semibold"
+              >삭제</button>
+              <button onClick={() => { setShowConfirmDel(false); setDelConfirmInput('') }} className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* C 버튼: 진행중 런 클리어 모달 */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowClearConfirm(false)}>
+          <div className="bg-gray-800 rounded-xl p-6 w-[380px] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-white mb-2">진행중 대회 데이터 삭제</h2>
+            <p className="text-sm text-gray-400 mb-3">「{t.name}」의 진행중인 대회 데이터를 삭제합니다.<br />이 작업은 되돌릴 수 없습니다.</p>
+            <p className="text-xs text-red-400 mb-2">확인하려면 아래에 <span className="font-bold">지금 삭제</span>를 입력하세요.</p>
+            <input
+              autoFocus
+              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500 mb-4"
+              placeholder="지금 삭제"
+              value={clearConfirmInput}
+              onChange={e => setClearConfirmInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && clearConfirmInput === '지금 삭제') { setShowClearConfirm(false); handleClearRun() } }}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowClearConfirm(false); handleClearRun() }}
+                disabled={clearConfirmInput !== '지금 삭제'}
+                className="flex-1 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-sm font-semibold"
+              >확인</button>
+              <button onClick={() => { setShowClearConfirm(false); setClearConfirmInput('') }} className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">취소</button>
             </div>
           </div>
         </div>
