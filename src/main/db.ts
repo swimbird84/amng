@@ -626,4 +626,10 @@ export function initDatabase(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_cup_rank_snapshots ON cup_rank_snapshots(tournament_id, item_id);
   `)
+
+  // cup_matches.block_id 컬럼 추가 (worldcup 블럭 구조 UI용)
+  const cupMatchesCols = (db.prepare("PRAGMA table_info(cup_matches)").all() as { name: string }[]).map(c => c.name)
+  if (!cupMatchesCols.includes('block_id')) {
+    db.prepare('ALTER TABLE cup_matches ADD COLUMN block_id INTEGER DEFAULT NULL').run()
+  }
 }

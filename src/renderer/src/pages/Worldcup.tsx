@@ -45,6 +45,7 @@ type CupMatch = {
   tournament_id: number
   phase: 'group' | 'tiebreak' | 'main'
   group_id: number | null
+  block_id: number | null
   round: number
   match_index: number
   item1_id: number
@@ -155,6 +156,17 @@ function Pagination({ page, totalPages, onPageChange }: { page: number; totalPag
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function roundLabel(round: number): string {
+  if (round === 2) return '결승'
+  if (round === 4) return '준결승'
+  return `${round}강`
+}
+
+function blockRoundLabel(round: number, roundTotal: number, itemType: string): string {
+  const unit = itemType === 'actor' ? '인' : '작품'
+  return `${roundTotal / (32 / round)}강(${round}${unit})`
+}
+
+function finalRoundLabel(round: number): string {
   if (round === 2) return '결승'
   if (round === 4) return '준결승'
   return `${round}강`
@@ -373,7 +385,7 @@ function TournamentCard({
   const [itemCount, setItemCount] = useState(0)
   const [roundValue, setRoundValue] = useState(0)
   const [starting, setStarting] = useState(false)
-  const [runProgress, setRunProgress] = useState<{ match: { round: number; match_index: number; phase: string; group_id: number | null } | null; total: number; done: number; groupMatchDone: number | null; groupMatchTotal: number | null } | null>(null)
+  const [runProgress, setRunProgress] = useState<{ match: { round: number; match_index: number; phase: string; group_id: number | null; block_id: number | null } | null; total: number; done: number; groupMatchDone: number | null; groupMatchTotal: number | null } | null>(null)
 
   useEffect(() => {
     cupApi.itemCount(t.id).then(count => {
@@ -480,9 +492,16 @@ function TournamentCard({
               } else if (t.format === 'worldcup') {
                 const gDone = runProgress?.groupMatchDone ?? 0
                 const gTotal = runProgress?.groupMatchTotal ?? '?'
-                label = m.phase === 'group'
-                  ? `예선 ${m.group_id}조 — ${gDone + 1}/${gTotal}경기`
-                  : `본선 ${roundLabel(m.round)} ${m.match_index + 1}/${Math.ceil(m.round / 2)}경기`
+                const blkLabel = m.group_id != null ? String.fromCharCode(65 + Math.floor((m.group_id - 1) / 16)) : ''
+                if (m.phase === 'group') label = `${blkLabel}블럭 ${m.group_id}조 예선 — ${gDone + 1}/${gTotal}경기`
+                else if (m.phase === 'tiebreak') label = `${blkLabel}블럭 ${m.group_id}조 동점처리 — ${gDone + 1}/${gTotal}경기`
+                else if (m.phase === 'main' && m.block_id != null) {
+                  const rt = t.round_total ?? 0
+                  const unit = t.type === 'actor' ? '인' : '작품'
+                  const blk2 = String.fromCharCode(65 + m.block_id)
+                  const roundStr = rt > 0 ? `${rt / (32 / m.round)}강(${m.round}${unit})` : `${m.round}강`
+                  label = `${blk2}블럭 본선 ${roundStr} — ${m.match_index + 1}/${m.round / 2}경기`
+                } else label = `결승 라운드 ${m.match_index + 1}/${m.round / 2}경기`
               }
             }
             return (
@@ -699,7 +718,7 @@ function TournamentCard({
 
 // ── MatchCard ──────────────────────────────────────────────────────────────
 function MatchCard({
-  item, type, tournamentId, onClick, onNavigate, disabled,
+  item, type, tournamentId, onClick, onNavigate, disabled, division, isMaster,
 }: {
   item: ItemInfo
   type: 'actor' | 'work'
@@ -707,9 +726,11 @@ function MatchCard({
   onClick: () => void
   onNavigate: () => void
   disabled: boolean
+  division?: number
+  isMaster?: boolean
 }) {
   const imgPath = itemImagePath(item)
-  const [stats, setStats] = useState<{ total_runs: number; run_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number; rank: number } | null>(null)
+  const [stats, setStats] = useState<{ total_cups?: number; run_wins?: number; total_runs?: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number; rank: number; total_points?: number } | null>(null)
   const [fileExists, setFileExists] = useState(false)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [showMemo, setShowMemo] = useState(false)
@@ -761,8 +782,12 @@ function MatchCard({
   }, [item.id])
 
   useEffect(() => {
-    cupApi.itemTournamentStats(tournamentId, item.id).then(setStats)
-  }, [tournamentId, item.id])
+    if (isMaster) {
+      masterRankingApi.itemStats(type, item.id).then(s => setStats({ ...s, total_cups: s.total_cups, run_wins: s.cup_wins }))
+    } else {
+      cupApi.itemTournamentStats(tournamentId, item.id).then(s => setStats({ ...s, total_cups: s.total_runs, run_wins: s.run_wins }))
+    }
+  }, [tournamentId, item.id, isMaster, type])
 
   useEffect(() => {
     const first = item.files?.[0]
@@ -836,14 +861,31 @@ function MatchCard({
         onMouseLeave={() => setTooltip(null)}
       >
         {/* 통계 행 */}
-        {stats && stats.total_runs > 0 ? (
-          <p className="text-[0.85rem] text-gray-400 mb-1.5 text-center whitespace-nowrap">
-            {stats.rank}위&nbsp;&nbsp;
-            우승률: {stats.win_rate}%({stats.run_wins}/{stats.total_runs})&nbsp;&nbsp;
-            승률: {stats.match_win_rate}%({stats.match_wins}/{stats.total_matches})
+        {stats && (stats.total_cups ?? stats.total_runs ?? 0) > 0 ? (
+          <p className="text-[0.85rem] text-gray-400 mb-1.5 text-center whitespace-nowrap flex items-center justify-center gap-1.5 flex-wrap">
+            {division !== undefined && (
+              <span className={`text-xs px-1.5 py-0.5 rounded border font-bold shrink-0 ${DIV_COLOR[division] ?? DIV_COLOR[0]}`}>
+                {division === 0 ? '미지정' : `${division}부`}
+              </span>
+            )}
+            {isMaster && stats.total_points !== undefined && (
+              <span className="text-yellow-400 font-semibold">{stats.total_points}pt</span>
+            )}
+            <span>
+              {stats.rank}위&nbsp;&nbsp;
+              우승률: {stats.win_rate}%({stats.run_wins ?? 0}/{stats.total_cups ?? stats.total_runs ?? 0})&nbsp;&nbsp;
+              승률: {stats.match_win_rate}%({stats.match_wins}/{stats.total_matches})
+            </span>
           </p>
         ) : (
-          <p className="text-[0.85rem] text-gray-600 mb-1.5 text-center">-</p>
+          <p className="text-[0.85rem] text-gray-600 mb-1.5 text-center flex items-center justify-center gap-1.5">
+            {division !== undefined && (
+              <span className={`text-xs px-1.5 py-0.5 rounded border font-bold shrink-0 ${DIV_COLOR[division] ?? DIV_COLOR[0]}`}>
+                {division === 0 ? '미지정' : `${division}부`}
+              </span>
+            )}
+            <span>-</span>
+          </p>
         )}
         {/* 이름 / 작품 정보 */}
         {type === 'actor' ? (
@@ -1008,15 +1050,25 @@ function PlayView({
   const [progress, setProgress] = useState<{ total: number; done: number; groupDone: number | null; groupTotal: number | null; mainRoundDone: number | null; mainRoundTotal: number | null }>({ total: 0, done: 0, groupDone: null, groupTotal: null, mainRoundDone: null, mainRoundTotal: null })
   const [items, setItems] = useState<Map<number, ItemInfo>>(new Map())
   const [liveScores, setLiveScores] = useState<{ item_id: number; pts: number; rank: number }[]>([])
+  const [divisionMap, setDivisionMap] = useState<Record<number, number>>({})
   const [standings, setStandings] = useState<{
     type: string
     standings?: StandingsRow[]
     matches?: CupMatch[]
     groupStandings?: { group_id: number; standings: StandingsRow[]; matches?: CupMatch[]; tiebreakMatches?: CupMatch[] }[]
     mainMatches?: CupMatch[]
+    // worldcup 전용
+    groupPhase?: {
+      completed: boolean
+      blocks: { block_id: number; label: string; groups: { group_id: number; standings: StandingsRow[]; matches: CupMatch[]; tiebreakMatches: CupMatch[] }[] }[]
+    }
+    blockTournaments?: { block_id: number; label: string; status: 'pending' | 'in_progress' | 'completed'; rounds: { round: number; matches: CupMatch[] }[] }[]
+    finalRound?: { status: 'pending' | 'in_progress' | 'completed'; rounds: { round: number; matches: CupMatch[] }[] } | null
+    divisionMap?: Record<number, number>
   } | null>(null)
   const [picking, setPicking] = useState<{ winnerId: number | null; loserId: number | null; fadeOut?: boolean } | null>(null)
   const [cardsVisible, setCardsVisible] = useState(true)
+  const [hoveredCard, setHoveredCard] = useState<'item1' | 'item2' | 'draw' | null>(null)
   const [commentDraft, setCommentDraft] = useState('')
   const [commentSaved, setCommentSaved] = useState(false)
   const itemFetchQueue = useRef(new Set<number>())
@@ -1035,11 +1087,12 @@ function PlayView({
   const load = useCallback(async () => {
     const result = await cupApi.get(tournamentId) as {
       tournament: CupTournament; run: CupRun | null; currentMatch: CupMatch | null
-      totalMatches: number; completedMatches: number
+      totalMatches: number; completedMatches: number; divisionMap?: Record<number, number>
     } | null
     if (!result) return
     setTournament(result.tournament)
     setRun(result.run)
+    if (result.divisionMap) setDivisionMap(result.divisionMap)
     setProgress({ total: result.totalMatches, done: result.completedMatches, groupDone: (result as any).groupMatchDone ?? null, groupTotal: (result as any).groupMatchTotal ?? null, mainRoundDone: (result as any).mainRoundDone ?? null, mainRoundTotal: (result as any).mainRoundTotal ?? null })
     const cm = result.currentMatch
     const runStatus = result.run?.status
@@ -1067,8 +1120,9 @@ function PlayView({
   const loadStandings = useCallback(async () => {
     const runId = run?.id
     if (!runId) return
-    const s = await cupApi.standings(runId) as typeof standings
+    const s = await cupApi.standings(runId) as typeof standings & { divisionMap?: Record<number, number> }
     setStandings(s)
+    if (s?.divisionMap) setDivisionMap(prev => ({ ...prev, ...s.divisionMap }))
     if (s && tournament) {
       const ids = new Set<number>()
       s.standings?.forEach(r => ids.add(r.item_id))
@@ -1079,6 +1133,14 @@ function PlayView({
         g.tiebreakMatches?.forEach(m => { ids.add(m.item1_id); if (m.item2_id) ids.add(m.item2_id) })
       })
       s.mainMatches?.forEach(m => { ids.add(m.item1_id); if (m.item2_id) ids.add(m.item2_id) })
+      // worldcup 신규 구조
+      s.groupPhase?.blocks.forEach(b => b.groups.forEach(g => {
+        g.standings.forEach(r => ids.add(r.item_id))
+        g.matches?.forEach(m => { ids.add(m.item1_id); if (m.item2_id) ids.add(m.item2_id) })
+        g.tiebreakMatches?.forEach(m => { ids.add(m.item1_id); if (m.item2_id) ids.add(m.item2_id) })
+      }))
+      s.blockTournaments?.forEach(bt => bt.rounds.forEach(r => r.matches.forEach(m => { ids.add(m.item1_id); if (m.item2_id) ids.add(m.item2_id) })))
+      s.finalRound?.rounds.forEach(r => r.matches.forEach(m => { ids.add(m.item1_id); if (m.item2_id) ids.add(m.item2_id) }))
       for (const id of ids) fetchItemInfo(id, tournament.type)
     }
   }, [run?.id, tournament, fetchItemInfo])
@@ -1151,6 +1213,17 @@ function PlayView({
   const item1 = currentMatch && currentMatch !== 'done' ? items.get((currentMatch as CupMatch).item1_id) : null
   const item2 = currentMatch && currentMatch !== 'done' ? (items.get((currentMatch as CupMatch).item2_id!) ?? null) : null
   const match = currentMatch !== 'done' && currentMatch ? currentMatch as CupMatch : null
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || tab !== 'match' || picking || !match) return
+      if (hoveredCard === 'item1') handlePick(match.item1_id, match.item2_id ?? null)
+      else if (hoveredCard === 'item2' && match.item2_id != null) handlePick(match.item2_id, match.item1_id)
+      else if (hoveredCard === 'draw' && match.phase === 'group') handlePick(null, null, true)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [tab, picking, match, hoveredCard])
   const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
 
   const winnerItem = run?.winner_id ? items.get(run.winner_id) : null
@@ -1266,26 +1339,43 @@ function PlayView({
                       }
                     </p>
                   )}
-                  {tournament.format === 'worldcup' && (
-                    <p className={`font-bold text-lg ${match.phase === 'group' ? 'text-purple-400' : 'text-yellow-400'}`}>
-                      {match.phase === 'group'
-                        ? `${match.group_id}조 예선 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
-                        : `본선 ${roundLabel(match.round)} — ${match.match_index + 1}/${Math.ceil(match.round / 2)}경기`
-                      }
-                    </p>
-                  )}
+                  {tournament.format === 'worldcup' && (() => {
+                    const blkLabel = match.group_id != null ? String.fromCharCode(65 + Math.floor((match.group_id - 1) / 16)) : ''
+                    const rt = tournament.round_total ?? 0
+                    const unit = tournament.type === 'actor' ? '인' : '작품'
+                    return (
+                      <p className={`font-bold text-lg ${match.phase === 'group' || match.phase === 'tiebreak' ? 'text-purple-400' : 'text-yellow-400'}`}>
+                        {match.phase === 'group'
+                          ? `${blkLabel}블럭 ${match.group_id}조 예선 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                          : match.phase === 'tiebreak'
+                            ? `${blkLabel}블럭 ${match.group_id}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                            : match.block_id != null
+                              ? (() => {
+                                  const blk2 = String.fromCharCode(65 + match.block_id)
+                                  const roundStr = rt > 0 ? `${rt / (32 / match.round)}강(${match.round}${unit})` : `${match.round}강`
+                                  return `${blk2}블럭 본선 ${roundStr} — ${match.match_index + 1}/${match.round / 2}경기`
+                                })()
+                              : `결승 라운드 — ${match.match_index + 1}/${match.round / 2}경기`
+                        }
+                      </p>
+                    )
+                  })()}
                 </div>
 
                 {/* 매치 카드 */}
                 <div className={`flex gap-6 justify-center items-center transition-opacity duration-300 ${cardsVisible ? 'opacity-100' : 'opacity-0'}`}>
                   {/* 카드 1 */}
-                  <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-300' : 'transition-none'} ${
-                    picking?.loserId === match.item1_id ? 'w-0 opacity-0'
-                    : picking?.fadeOut && picking?.winnerId === match.item1_id ? 'w-[40%] opacity-0'
-                    : 'w-[40%] opacity-100'
-                  }`}>
+                  <div
+                    className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-300' : 'transition-none'} ${
+                      picking?.loserId === match.item1_id ? 'w-0 opacity-0'
+                      : picking?.fadeOut && picking?.winnerId === match.item1_id ? 'w-[40%] opacity-0'
+                      : 'w-[40%] opacity-100'
+                    }`}
+                    onMouseEnter={() => setHoveredCard('item1')}
+                    onMouseLeave={() => setHoveredCard(null)}
+                  >
                     {item1
-                      ? <MatchCard item={item1} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item1_id, match.item2_id ?? null)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item1.id) : onNavigateToWork(item1.id)} disabled={!!picking} />
+                      ? <MatchCard item={item1} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item1_id, match.item2_id ?? null)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item1.id) : onNavigateToWork(item1.id)} disabled={!!picking} division={tournament.is_master ? (divisionMap[match.item1_id] ?? 0) : undefined} isMaster={!!tournament.is_master} />
                       : <div className="h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
                     }
                   </div>
@@ -1299,6 +1389,8 @@ function PlayView({
                           onClick={() => handlePick(null, null, true)}
                           disabled={!!picking}
                           className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-300 rounded-lg text-xs whitespace-nowrap"
+                          onMouseEnter={() => setHoveredCard('draw')}
+                          onMouseLeave={() => setHoveredCard(null)}
                         >
                           무승부
                         </button>
@@ -1308,13 +1400,17 @@ function PlayView({
 
                   {/* 카드 2 (부전승이면 표시 안 함) */}
                   {match.item2_id !== null && (
-                    <div className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-300' : 'transition-none'} ${
-                      picking?.loserId === match.item2_id ? 'w-0 opacity-0'
-                      : picking?.fadeOut && picking?.winnerId === match.item2_id ? 'w-[40%] opacity-0'
-                      : 'w-[40%] opacity-100'
-                    }`}>
+                    <div
+                      className={`overflow-hidden shrink-0 ${cardsVisible ? 'transition-all duration-300' : 'transition-none'} ${
+                        picking?.loserId === match.item2_id ? 'w-0 opacity-0'
+                        : picking?.fadeOut && picking?.winnerId === match.item2_id ? 'w-[40%] opacity-0'
+                        : 'w-[40%] opacity-100'
+                      }`}
+                      onMouseEnter={() => setHoveredCard('item2')}
+                      onMouseLeave={() => setHoveredCard(null)}
+                    >
                       {item2
-                        ? <MatchCard item={item2} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item2_id!, match.item1_id)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item2.id) : onNavigateToWork(item2.id)} disabled={!!picking} />
+                        ? <MatchCard item={item2} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item2_id!, match.item1_id)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item2.id) : onNavigateToWork(item2.id)} disabled={!!picking} division={tournament.is_master ? (divisionMap[match.item2_id!] ?? 0) : undefined} isMaster={!!tournament.is_master} />
                         : <div className="h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
                       }
                     </div>
@@ -1533,111 +1629,374 @@ function PlayView({
             )}
 
             {/* ── 월드컵 현황 ── */}
-            {standings?.type === 'worldcup' && (
-              <div className="space-y-6">
-                {/* 조별 순위표 */}
-                {standings.groupStandings && standings.groupStandings.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">조별 예선</h3>
-                    <div className="grid grid-cols-4 gap-3">
-                      {[...standings.groupStandings].sort((a, b) => {
-                        const activeGroupId = (currentMatch !== 'done' && currentMatch != null && (currentMatch.phase === 'group' || currentMatch.phase === 'tiebreak')) ? currentMatch.group_id : null
-                        if (activeGroupId !== null) {
-                          if (a.group_id === activeGroupId) return -1
-                          if (b.group_id === activeGroupId) return 1
-                        }
-                        return a.group_id - b.group_id
-                      }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms }) => {
-                        const groupDone = gms && gms.length > 0 && gms.every(m => m.winner_id !== null || m.is_draw) && (!tbms || tbms.length === 0 || tbms.every(m => m.winner_id !== null || m.is_draw))
-                        const groupActive = !groupDone && (currentMatch !== 'done') && currentMatch != null && currentMatch.group_id === group_id && (currentMatch.phase === 'group' || currentMatch.phase === 'tiebreak')
-                        return (
-                        <div key={group_id} className="bg-gray-800 rounded-xl overflow-hidden">
-                          <div className="px-3 py-1.5 border-b border-gray-700 bg-gray-700/40 flex items-center gap-2">
-                            <span className="text-xs font-semibold text-white">{group_id}조</span>
-                            {groupDone && <span className="text-xs text-red-400">종료됨</span>}
-                            {groupActive && <span className="text-xs text-green-400">진행중</span>}
-                          </div>
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="border-b border-gray-700/50 text-gray-500">
-                                <th className="px-3 py-1 text-left w-6">#</th>
-                                <th className="px-3 py-1 text-left">이름</th>
-                                <th className="px-2 py-1 text-center">승</th>
-                                <th className="px-2 py-1 text-center">무</th>
-                                <th className="px-2 py-1 text-center">패</th>
-                                <th className="px-2 py-1 text-center font-bold">점</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {gs.map((row, idx) => {
-                                const item = items.get(row.item_id)
-                                return (
-                                  <tr key={row.item_id} className={`border-b border-gray-700/30 ${idx < 2 ? 'bg-purple-900/10' : ''}`}>
-                                    <td className="px-3 py-1.5 text-gray-500">{idx + 1}</td>
-                                    <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
-                                      {item ? itemLabel(item) : `#${row.item_id}`}
-                                      {idx < 2 && <span className="ml-1 text-purple-400 text-xs">↑</span>}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-center text-green-400">{row.w}</td>
-                                    <td className="px-2 py-1.5 text-center text-gray-400">{row.d}</td>
-                                    <td className="px-2 py-1.5 text-center text-red-400">{row.l}</td>
-                                    <td className="px-2 py-1.5 text-center text-white font-bold">{row.pts}</td>
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+            {standings?.type === 'worldcup' && (() => {
+              const activeGroupId = (currentMatch !== 'done' && currentMatch != null && (currentMatch.phase === 'group' || currentMatch.phase === 'tiebreak')) ? currentMatch.group_id : null
+              const activeBlockId = (currentMatch !== 'done' && currentMatch != null && currentMatch.phase === 'main' && currentMatch.block_id != null) ? currentMatch.block_id : null
 
-                {/* 본선 대진표 */}
-                {standings.mainMatches && standings.mainMatches.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">본선 토너먼트</h3>
-                    <div className="space-y-3">
-                      {Object.entries(
-                        (standings.mainMatches as CupMatch[]).reduce<Record<string, CupMatch[]>>((acc, m) => {
-                          const key = String(m.round)
-                          if (!acc[key]) acc[key] = []
-                          acc[key].push(m)
-                          return acc
-                        }, {})
-                      )
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([round, roundMatches]) => (
-                        <div key={round} className="bg-gray-800 rounded-xl overflow-hidden">
-                          <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40">
-                            <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
-                          </div>
-                          <div className="divide-y divide-gray-700/50">
-                            {(roundMatches as CupMatch[]).map(m => {
-                              const i1 = items.get(m.item1_id)
-                              const i2 = m.item2_id ? items.get(m.item2_id) : null
+              // 블럭 토너먼트 / 결승 라운드 + 조별 예선 (항상 하단)
+              const roundTotal = run?.round_total ?? 0
+              const itemType = tournament?.type ?? 'actor'
+              const SLOT_H = 28
+              const TOTAL_SLOTS = 32
+
+              // item_id → { group_id, rank, division } 맵
+              const divisionMap = standings.divisionMap ?? {}
+              const itemOriginMap = new Map<number, { group_id: number; rank: number }>()
+              standings.groupPhase?.blocks.forEach(b => b.groups.forEach(g => {
+                g.standings.forEach((row, idx) => { itemOriginMap.set(row.item_id, { group_id: g.group_id, rank: idx + 1 }) })
+              }))
+              const DIV_TEXT: Record<number, string> = {
+                1: 'text-yellow-300', 2: 'text-orange-300', 3: 'text-blue-300',
+                4: 'text-green-300', 5: 'text-purple-300', 6: 'text-gray-400', 0: 'text-gray-500'
+              }
+              const originLabel = (itemId: number) => {
+                const origin = itemOriginMap.get(itemId)
+                const div = divisionMap[itemId] ?? 0
+                const divText = div === 0 ? '미지정' : `${div}부`
+                if (!origin) return null
+                return { text: `${divText}/${origin.group_id}조/${origin.rank}위`, color: DIV_TEXT[div] ?? 'text-gray-500' }
+              }
+
+              const sortedBlocks = [...(standings.blockTournaments ?? [])].sort((a, b) => {
+                if (a.status === 'in_progress' && b.status !== 'in_progress') return -1
+                if (b.status === 'in_progress' && a.status !== 'in_progress') return 1
+                return a.block_id - b.block_id
+              })
+
+              const groupPhaseEl = standings.groupPhase ? (
+                <div className={standings.groupPhase.completed ? 'border-t border-gray-700/50 pt-4 space-y-6' : 'space-y-6'}>
+                  {standings.groupPhase.completed && (
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">조별 예선 결과</h3>
+                  )}
+                  {[...standings.groupPhase.blocks].sort((a, b) => {
+                    if (activeGroupId !== null) {
+                      const aHas = a.groups.some(g => g.group_id === activeGroupId)
+                      const bHas = b.groups.some(g => g.group_id === activeGroupId)
+                      if (aHas && !bHas) return -1
+                      if (bHas && !aHas) return 1
+                    }
+                    return a.block_id - b.block_id
+                  }).map(block => (
+                    <div key={block.block_id}>
+                      <h3 className="text-xs font-semibold text-purple-400 mb-2 uppercase tracking-wide">블럭 {block.label}</h3>
+                      <div className="grid grid-cols-4 gap-3">
+                        {[...block.groups].sort((a, b) => {
+                          if (activeGroupId !== null) {
+                            if (a.group_id === activeGroupId) return -1
+                            if (b.group_id === activeGroupId) return 1
+                          }
+                          return a.group_id - b.group_id
+                        }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms }) => {
+                          const groupDone = gms && gms.length > 0 && gms.every(m => m.winner_id !== null || m.is_draw) && (!tbms || tbms.length === 0 || tbms.every(m => m.winner_id !== null || m.is_draw))
+                          const groupActive = !groupDone && activeGroupId === group_id
+                          return (
+                            <div key={group_id} className="bg-gray-800 rounded-xl overflow-hidden">
+                              <div className="px-3 py-1.5 border-b border-gray-700 bg-gray-700/40 flex items-center gap-2">
+                                <span className="text-xs font-semibold text-white">{group_id}조</span>
+                                {groupDone && <span className="text-xs text-red-400">종료됨</span>}
+                                {groupActive && <span className="text-xs text-green-400 animate-pulse">진행중</span>}
+                              </div>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-gray-700/50 text-gray-500">
+                                    <th className="px-3 py-1 text-left w-6">#</th>
+                                    <th className="px-3 py-1 text-left">이름</th>
+                                    <th className="px-2 py-1 text-center">승</th>
+                                    <th className="px-2 py-1 text-center">무</th>
+                                    <th className="px-2 py-1 text-center">패</th>
+                                    <th className="px-2 py-1 text-center font-bold">점</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {gs.map((row, idx) => {
+                                    const item = items.get(row.item_id)
+                                    return (
+                                      <tr key={row.item_id} className={`border-b border-gray-700/30 ${idx < 2 ? 'bg-purple-900/10' : ''}`}>
+                                        <td className="px-3 py-1.5 text-gray-500">{idx + 1}</td>
+                                        <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
+                                          {item ? itemLabel(item) : `#${row.item_id}`}
+                                          {idx < 2 && <span className="ml-1 text-purple-400 text-xs">↑</span>}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-center text-green-400">{row.w}</td>
+                                        <td className="px-2 py-1.5 text-center text-gray-400">{row.d}</td>
+                                        <td className="px-2 py-1.5 text-center text-red-400">{row.l}</td>
+                                        <td className="px-2 py-1.5 text-center text-white font-bold">{row.pts}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                              {gms && gms.length > 0 && (
+                                <div className="border-t border-gray-700/50 divide-y divide-gray-700/30 max-h-40 overflow-y-auto">
+                                  {gms.map(m => {
+                                    const i1 = items.get(m.item1_id)
+                                    const i2 = m.item2_id ? items.get(m.item2_id) : null
+                                    const done = m.winner_id !== null
+                                    return (
+                                      <div key={m.id} className={`px-2 py-1 flex items-center gap-1 text-xs ${done ? '' : 'opacity-40'}`}>
+                                        <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                                          {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                        </span>
+                                        <span className="text-gray-600 w-4 text-center shrink-0">
+                                          {m.winner_id ? (m.winner_id === m.item1_id ? '>' : '<') : 'vs'}
+                                        </span>
+                                        <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                                          {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                        </span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                              {tbms && tbms.length > 0 && (
+                                <div className="border-t border-orange-800/40">
+                                  <div className="px-2 py-0.5 bg-orange-900/20">
+                                    <span className="text-xs text-orange-400 font-semibold">동점처리</span>
+                                  </div>
+                                  <div className="divide-y divide-gray-700/30">
+                                    {tbms.map(m => {
+                                      const i1 = items.get(m.item1_id)
+                                      const i2 = m.item2_id ? items.get(m.item2_id) : null
+                                      const done = m.winner_id !== null
+                                      return (
+                                        <div key={m.id} className={`px-2 py-1 flex items-center gap-1 text-xs ${done ? '' : 'opacity-40'}`}>
+                                          <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                                            {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                          </span>
+                                          <span className="text-gray-600 w-4 text-center shrink-0">
+                                            {m.winner_id ? (m.winner_id === m.item1_id ? '>' : '<') : 'vs'}
+                                          </span>
+                                          <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                                            {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                          </span>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null
+
+              return (
+                <div className="space-y-4">
+                  {/* 조별 예선 진행 중: 상단 표시 */}
+                  {!standings.groupPhase?.completed && groupPhaseEl}
+                  {sortedBlocks.map(block => {
+                    const isActive = activeBlockId === block.block_id
+                    const isCompleted = block.status === 'completed'
+                    const isPending = block.status === 'pending'
+                    const roundsSorted = [...block.rounds].sort((a, b) => b.round - a.round)
+
+                    return (
+                      <div key={block.block_id} className={`bg-gray-800 rounded-xl overflow-hidden border ${isActive ? 'border-purple-500/60' : 'border-gray-700/30'}`}>
+                        <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40 flex items-center gap-2">
+                          <span className="text-sm font-bold text-white">블럭 {block.label}</span>
+                          {isActive && <span className="text-xs text-purple-400 animate-pulse">진행중</span>}
+                          {isCompleted && <span className="text-xs text-green-400">완료</span>}
+                          {isPending && <span className="text-xs text-gray-500">대기 중</span>}
+                        </div>
+                        {isPending ? (
+                          <div className="overflow-x-auto p-2">
+                            {(() => {
+                              const phaseBlock = standings.groupPhase?.blocks.find(b => b.block_id === block.block_id)
+                              const blockGroups = phaseBlock?.groups ?? []
+                              if (blockGroups.length === 0) return <div className="py-4 text-center text-gray-600 text-sm">이전 블럭 완료 후 시작됩니다</div>
+
+                              const isGDone = (g: typeof blockGroups[0]) =>
+                                g.matches.length > 0 &&
+                                g.matches.every((m: CupMatch) => m.winner_id !== null || m.is_draw) &&
+                                (!g.tiebreakMatches || g.tiebreakMatches.length === 0 || g.tiebreakMatches.every((m: CupMatch) => m.winner_id !== null || m.is_draw))
+
+                              // 크로스 시딩: 인접 조 쌍 (g0,g1) → match: g0_1위 vs g1_2위, g1_1위 vs g0_2위
+                              type BSlot = { group_id: number; rank: number; item_id: number | null }
+                              const bracketMatches: [BSlot, BSlot][] = []
+                              for (let i = 0; i < blockGroups.length; i += 2) {
+                                const g0 = blockGroups[i]
+                                const g1 = blockGroups[i + 1]
+                                if (!g0 || !g1) continue
+                                const d0 = isGDone(g0), d1 = isGDone(g1)
+                                bracketMatches.push([
+                                  { group_id: g0.group_id, rank: 1, item_id: d0 ? (g0.standings[0]?.item_id ?? null) : null },
+                                  { group_id: g1.group_id, rank: 2, item_id: d1 ? (g1.standings[1]?.item_id ?? null) : null },
+                                ])
+                                bracketMatches.push([
+                                  { group_id: g1.group_id, rank: 1, item_id: d1 ? (g1.standings[0]?.item_id ?? null) : null },
+                                  { group_id: g0.group_id, rank: 2, item_id: d0 ? (g0.standings[1]?.item_id ?? null) : null },
+                                ])
+                              }
+
+                              const confirmedCount = bracketMatches.reduce((n, [s1, s2]) => n + (s1.item_id !== null ? 1 : 0) + (s2.item_id !== null ? 1 : 0), 0)
+
                               return (
-                                <div key={m.id} className="px-4 py-2 flex items-center gap-2 text-sm">
-                                  <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                    {i1 ? itemLabel(i1) : `#${m.item1_id}`}
-                                  </span>
-                                  <span className="text-gray-600 text-xs w-6 text-center shrink-0">vs</span>
-                                  <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                    {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
-                                  </span>
-                                  {m.winner_id === null && <span className="text-gray-600 text-xs shrink-0">대기 중</span>}
+                                <div className="flex gap-0 min-w-max">
+                                  <div className="flex flex-col" style={{ width: 208 }}>
+                                    <div className="text-center text-xs text-gray-500 py-1 border-b border-gray-700/40 mb-1">
+                                      {blockRoundLabel(32, roundTotal, itemType)}
+                                      <span className="ml-1 text-gray-600">({confirmedCount}/32)</span>
+                                    </div>
+                                    <div className="relative" style={{ height: TOTAL_SLOTS * SLOT_H }}>
+                                      {bracketMatches.map(([s1, s2], mi) => {
+                                        const topPx = mi * 2 * SLOT_H
+                                        const it1 = s1.item_id ? items.get(s1.item_id) : null
+                                        const it2 = s2.item_id ? items.get(s2.item_id) : null
+                                        const o1 = s1.item_id ? originLabel(s1.item_id) : null
+                                        const o2 = s2.item_id ? originLabel(s2.item_id) : null
+                                        return (
+                                          <div key={mi} className="absolute left-1 right-1" style={{ top: topPx }}>
+                                            <div className={`text-xs px-2 py-0.5 rounded-t border-l-2 ${s1.item_id !== null ? 'border-purple-400 bg-purple-900/20' : 'border-gray-700/40 text-gray-600'}`}>
+                                              {s1.item_id !== null ? (
+                                                <span className="flex items-center gap-1">
+                                                  {o1 && <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>}
+                                                  <span className="w-[120px] shrink-0 truncate text-purple-200">{it1 ? itemLabel(it1) : `#${s1.item_id}`}</span>
+                                                </span>
+                                              ) : `${s1.group_id}조 ${s1.rank}위`}
+                                            </div>
+                                            <div className={`text-xs px-2 py-0.5 rounded-b border-l-2 border-t border-gray-700/30 ${s2.item_id !== null ? 'border-purple-400 bg-purple-900/20' : 'border-gray-700/40 text-gray-600'}`}>
+                                              {s2.item_id !== null ? (
+                                                <span className="flex items-center gap-1">
+                                                  {o2 && <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>}
+                                                  <span className="w-[120px] shrink-0 truncate text-purple-200">{it2 ? itemLabel(it2) : `#${s2.item_id}`}</span>
+                                                </span>
+                                              ) : `${s2.group_id}조 ${s2.rank}위`}
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
                                 </div>
                               )
-                            })}
+                            })()}
                           </div>
-                        </div>
-                      ))}
+                        ) : (
+                          <div className="overflow-x-auto p-2">
+                            <div className="flex gap-0 min-w-max">
+                              {roundsSorted.map(rd => {
+                                const matchCount = rd.matches.length
+                                const slotsPerMatch = TOTAL_SLOTS / matchCount
+                                const isFirstRound = rd.round === roundsSorted[0].round
+                                return (
+                                  <div key={rd.round} className="flex flex-col" style={{ width: isFirstRound ? 176 : 148 }}>
+                                    <div className="text-center text-xs text-gray-500 py-1 border-b border-gray-700/40 mb-1">
+                                      {blockRoundLabel(rd.round, roundTotal, itemType)}
+                                    </div>
+                                    <div className="relative" style={{ height: TOTAL_SLOTS * SLOT_H }}>
+                                      {rd.matches.map((m, matchIdx) => {
+                                        const topPx = matchIdx * slotsPerMatch * SLOT_H + (slotsPerMatch / 2 - 1) * SLOT_H
+                                        const i1 = items.get(m.item1_id)
+                                        const i2 = m.item2_id ? items.get(m.item2_id) : null
+                                        const o1 = isFirstRound ? originLabel(m.item1_id) : null
+                                        const o2 = isFirstRound && m.item2_id ? originLabel(m.item2_id) : null
+                                        return (
+                                          <div key={m.id} className="absolute left-1 right-1" style={{ top: topPx }}>
+                                            <div className={`text-xs px-2 py-0.5 rounded-t border-l-2 ${m.winner_id === m.item1_id ? 'border-purple-400 bg-purple-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
+                                              {isFirstRound && o1 ? (
+                                                <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item1_id ? 'opacity-40 line-through' : ''}`}>
+                                                  <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>
+                                                  <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
+                                                </span>
+                                              ) : (
+                                                <span className={`truncate block ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
+                                              )}
+                                            </div>
+                                            <div className={`text-xs px-2 py-0.5 rounded-b border-l-2 border-t border-gray-700/30 ${m.winner_id === m.item2_id ? 'border-purple-400 bg-purple-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
+                                              {isFirstRound && o2 ? (
+                                                <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item2_id ? 'opacity-40 line-through' : ''}`}>
+                                                  <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>
+                                                  <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : `#${m.item2_id}`}</span>
+                                                </span>
+                                              ) : (
+                                                <span className={`truncate block ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              {isCompleted && (() => {
+                                const lastRound = roundsSorted[roundsSorted.length - 1]
+                                const finalists = (lastRound?.matches ?? []).map(m => m.winner_id).filter((id): id is number => id !== null)
+                                const unit = itemType === 'actor' ? '인' : '작품'
+                                return (
+                                  <div className="flex flex-col" style={{ width: 100 }}>
+                                    <div className="text-center text-xs text-gray-500 py-1 border-b border-gray-700/40 mb-1">
+                                      {`${roundTotal / 8}강(2${unit})`}
+                                    </div>
+                                    <div className="relative" style={{ height: TOTAL_SLOTS * SLOT_H }}>
+                                      {finalists.map((fid, fi) => {
+                                        const item = items.get(fid)
+                                        const topPx = (fi === 0 ? TOTAL_SLOTS / 4 - 1 : TOTAL_SLOTS * 3 / 4 - 1) * SLOT_H
+                                        return (
+                                          <div key={fid} className="absolute left-1 right-1" style={{ top: topPx }}>
+                                            <div className="text-xs px-2 py-0.5 truncate rounded border-l-2 border-green-500 bg-green-900/20 text-green-300 font-semibold">
+                                              {item ? itemLabel(item) : `#${fid}`}
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  {standings.finalRound && (
+                    <div className="bg-gray-800 rounded-xl overflow-hidden border border-yellow-500/30">
+                      <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40 flex items-center gap-2">
+                        <span className="text-sm font-bold text-yellow-400">결승 라운드</span>
+                        {standings.finalRound.status === 'in_progress' && <span className="text-xs text-yellow-400 animate-pulse">진행중</span>}
+                        {standings.finalRound.status === 'completed' && <span className="text-xs text-green-400">완료</span>}
+                      </div>
+                      <div className="space-y-3 p-3">
+                        {[...standings.finalRound.rounds].sort((a, b) => b.round - a.round).map(rd => (
+                          <div key={rd.round} className="bg-gray-700/40 rounded-lg overflow-hidden">
+                            <div className="px-3 py-1.5 border-b border-gray-700/50">
+                              <span className="text-xs font-semibold text-yellow-400">{finalRoundLabel(rd.round)}</span>
+                            </div>
+                            <div className="divide-y divide-gray-700/50">
+                              {rd.matches.map(m => {
+                                const i1 = items.get(m.item1_id)
+                                const i2 = m.item2_id ? items.get(m.item2_id) : null
+                                return (
+                                  <div key={m.id} className="px-3 py-2 flex items-center gap-2 text-sm">
+                                    <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                      {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                    </span>
+                                    <span className="text-gray-600 text-xs w-5 text-center shrink-0">vs</span>
+                                    <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                      {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                    </span>
+                                    {m.winner_id === null && <span className="text-gray-600 text-xs shrink-0">대기</span>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+
+                  {/* 조별 예선 완료 후 하단 표시 */}
+                  {standings.groupPhase?.completed && groupPhaseEl}
+                </div>
+              )
+            })()}
           </div>
         )}
 

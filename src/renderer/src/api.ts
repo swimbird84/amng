@@ -222,4 +222,6 @@ export const masterRankingApi = {
     api.invoke('master-ranking:rank-history', { type, itemId }) as Promise<{ rank: number; recorded_at: string }[]>,
   divisionHistory: (type: 'actor' | 'work', itemId: number) =>
     api.invoke('master-ranking:division-history', { type, itemId }) as Promise<{ recorded_at: string; rank: number; total_points: number }[]>,
+  itemStats: (type: 'actor' | 'work', itemId: number) =>
+    api.invoke('master-ranking:item-stats', { type, itemId }) as Promise<{ rank: number; total_points: number; total_cups: number; cup_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number }>,
 }

@@ -126,6 +126,54 @@ function checkLeagueGroupsAdvance(database: DB, runId: number): void {
     insertMain.run(runId, roundSize, i / 2, allQualifiers[i], allQualifiers[i + 1] ?? null)
 }
 
+// 월드컵 전용: 블럭 토너먼트 시작 (block_id 기준 16개 조 진출자 32명 → 고정 크로스 시딩)
+function startBlock(database: DB, runId: number, blockId: number): void {
+  const startGroupId = blockId * 16 + 1
+  const endGroupId = blockId * 16 + 16
+  const groupIds = (database.prepare(
+    `SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id >= ? AND group_id <= ? ORDER BY group_id`
+  ).all(runId, startGroupId, endGroupId) as { group_id: number }[]).map(r => r.group_id)
+  const qualifiers: number[] = []
+  for (const gid of groupIds) {
+    const q = getGroupQualifiers(database, runId, gid, 'worldcup')
+    if (q == null || q.length < 2) return
+    qualifiers.push(q[0], q[1])
+  }
+  // 고정 크로스 시딩: [g1_1위, g1_2위, g2_1위, g2_2위, ...] → g1_1위 vs g2_2위, g2_1위 vs g1_2위
+  const seeded: number[] = []
+  for (let i = 0; i < qualifiers.length; i += 4) {
+    seeded.push(qualifiers[i], qualifiers[i + 3])     // g1_1위 vs g2_2위
+    seeded.push(qualifiers[i + 2], qualifiers[i + 1]) // g2_1위 vs g1_2위
+  }
+  const insertMain = database.prepare(
+    `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, block_id) VALUES (?, 'main', ?, ?, ?, ?, ?)`
+  )
+  for (let i = 0; i < seeded.length; i += 2)
+    insertMain.run(runId, seeded.length, i / 2, seeded[i], seeded[i + 1] ?? null, blockId)
+}
+
+// 월드컵 전용: 결승 라운드 시작 (각 블럭 마지막 라운드 생존자 2인씩 → 인접 블럭 쌍 크로스 시딩)
+function startFinalRound(database: DB, runId: number, blockCount: number): void {
+  const finalists: number[] = []
+  for (let b = 0; b < blockCount; b++) {
+    const survivors = database.prepare(
+      `SELECT winner_id FROM cup_matches WHERE run_id = ? AND phase = 'main' AND block_id = ? AND round = 4 ORDER BY match_index ASC`
+    ).all(runId, b) as { winner_id: number }[]
+    finalists.push(...survivors.map(r => r.winner_id))
+  }
+  // 고정 크로스 시딩: [A1,A2,B1,B2,...] → A1 vs B2, B1 vs A2, C1 vs D2, D1 vs C2
+  const seeded: number[] = []
+  for (let i = 0; i < finalists.length; i += 4) {
+    seeded.push(finalists[i], finalists[i + 3])     // A1 vs B2
+    seeded.push(finalists[i + 2], finalists[i + 1]) // B1 vs A2
+  }
+  const insertFinal = database.prepare(
+    `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, block_id) VALUES (?, 'main', ?, ?, ?, ?, NULL)`
+  )
+  for (let i = 0; i < seeded.length; i += 2)
+    insertFinal.run(runId, seeded.length, i / 2, seeded[i], seeded[i + 1] ?? null)
+}
+
 // ========== 마스터 랭킹 승점 계산 헬퍼 ==========
 function calcAndStoreRunPoints(
   database: ReturnType<typeof getDatabase>,
@@ -2241,12 +2289,18 @@ export function registerIpcHandlers(): void {
     let mainRoundDone: number | null = null
     let mainRoundTotal: number | null = null
     if (cm?.phase === 'main') {
-      const { cnt: mt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ?`).get(runId, cm.round) as { cnt: number }
-      const { cnt: md } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, cm.round) as { cnt: number }
+      const cmBlockId = (cm as { block_id?: number | null }).block_id ?? null
+      const { cnt: mt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND block_id IS ?`).get(runId, cm.round, cmBlockId) as { cnt: number }
+      const { cnt: md } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND block_id IS ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, cm.round, cmBlockId) as { cnt: number }
       mainRoundDone = md
       mainRoundTotal = mt
     }
-    return { tournament, run, currentMatch, totalMatches, completedMatches, groupMatchDone, groupMatchTotal, mainRoundDone, mainRoundTotal }
+    let divisionMap: Record<number, number> = {}
+    if (tournament && (tournament as { is_master: number }).is_master && runId) {
+      const entries = db().prepare(`SELECT item_id, division FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number; division: number | null }[]
+      for (const e of entries) divisionMap[e.item_id] = e.division ?? 0
+    }
+    return { tournament, run, currentMatch, totalMatches, completedMatches, groupMatchDone, groupMatchTotal, mainRoundDone, mainRoundTotal, divisionMap }
   })
 
   ipcMain.handle('cup:create', (_e, params: {
@@ -2286,38 +2340,77 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('cup:standings', (_e, runId: number) => {
     const row = db().prepare(`
-      SELECT r.*, t.format, t.type FROM cup_runs r
+      SELECT r.*, t.format, t.type, t.is_master FROM cup_runs r
       JOIN cup_tournaments t ON t.id = r.tournament_id
       WHERE r.id = ?
-    `).get(runId) as { format: string; type: string } | undefined
+    `).get(runId) as { format: string; type: string; is_master: number } | undefined
     if (!row) return null
+    const getDivisionMap = (): Record<number, number> => {
+      if (!row.is_master) return {}
+      const entries = db().prepare(`SELECT item_id, division FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number; division: number | null }[]
+      const m: Record<number, number> = {}
+      for (const e of entries) m[e.item_id] = e.division ?? 0
+      return m
+    }
     if (row.format === 'tournament') {
       const matches = db().prepare(
         `SELECT * FROM cup_matches WHERE run_id = ? ORDER BY round DESC, match_index ASC`
       ).all(runId)
-      return { type: 'tournament', matches }
+      return { type: 'tournament', matches, divisionMap: getDivisionMap() }
     } else if (row.format === 'worldcup') {
-      const groups = db().prepare(`SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group' ORDER BY group_id`).all(runId) as { group_id: number }[]
-      const groupStandings = groups.map(({ group_id }) => {
-        const itemIds = new Set<number>()
-        const groupMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ?`).all(runId, group_id) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
-        const tbms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'tiebreak' AND group_id = ? ORDER BY round, match_index`).all(runId, group_id) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
-        for (const m of groupMatches) { itemIds.add(m.item1_id); if (m.item2_id) itemIds.add(m.item2_id) }
-        const standings = Array.from(itemIds).map(item_id => {
-          let pts = 0, w = 0, d = 0, l = 0
-          for (const m of groupMatches) {
-            const isItem1 = m.item1_id === item_id, isItem2 = m.item2_id === item_id
-            if (!isItem1 && !isItem2) continue
-            if (m.is_draw) { pts += 1; d++ }
-            else if (m.winner_id === item_id) { pts += 3; w++ }
-            else if (m.winner_id !== null) { l++ }
-          }
-          return { item_id, pts, w, d, l }
-        }).sort((a, b) => b.pts - a.pts || b.w - a.w)
-        return { group_id, standings, matches: groupMatches, tiebreakMatches: tbms }
+      // 조별 예선 데이터 수집
+      const allGroupIds = (db().prepare(`SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group' ORDER BY group_id`).all(runId) as { group_id: number }[]).map(r => r.group_id)
+      type GroupEntry = { group_id: number; standings: ReturnType<typeof computeGroupStandings>; matches: unknown[]; tiebreakMatches: unknown[] }
+      const blockMap = new Map<number, { block_id: number; label: string; groups: GroupEntry[] }>()
+      for (const gid of allGroupIds) {
+        const blockId = Math.floor((gid - 1) / 16)
+        if (!blockMap.has(blockId)) blockMap.set(blockId, { block_id: blockId, label: String.fromCharCode(65 + blockId), groups: [] })
+        const gms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ? ORDER BY match_index`).all(runId, gid) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+        const tbms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'tiebreak' AND group_id = ? ORDER BY round, match_index`).all(runId, gid)
+        const standings = computeGroupStandings(gms, false)
+        blockMap.get(blockId)!.groups.push({ group_id: gid, standings, matches: gms, tiebreakMatches: tbms })
+      }
+      const blocks = [...blockMap.values()].sort((a, b) => a.block_id - b.block_id)
+      const allGroupAndTbDone = allGroupIds.length > 0 && allGroupIds.every(gid => {
+        const pending = (db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase IN ('group','tiebreak') AND winner_id IS NULL AND is_draw = 0`).get(runId, gid) as { cnt: number }).cnt
+        return pending === 0
       })
-      const mainMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'main' ORDER BY round DESC, match_index`).all(runId)
-      return { type: 'worldcup', groupStandings, mainMatches }
+      const groupPhase = { completed: allGroupAndTbDone, blocks }
+
+      // divisionMap: item_id → division
+      const entryRows = db().prepare(`SELECT item_id, division FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number; division: number | null }[]
+      const divisionMap: Record<number, number> = {}
+      for (const e of entryRows) divisionMap[e.item_id] = e.division ?? 0
+
+      // 블럭 토너먼트
+      const totalBlockCount = blocks.length
+      const allMainMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'main' ORDER BY block_id, round, match_index`).all(runId) as { id: number; block_id: number | null; round: number; match_index: number; item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+      const blockMainMatches = allMainMatches.filter(m => m.block_id !== null)
+      const finalMatches = allMainMatches.filter(m => m.block_id === null)
+      const blockTournaments = Array.from({ length: totalBlockCount }, (_, bid) => {
+        const bm = blockMainMatches.filter(m => m.block_id === bid)
+        let status: 'pending' | 'in_progress' | 'completed' = 'pending'
+        if (bm.length > 0) status = bm.every(m => m.winner_id !== null || m.is_draw) ? 'completed' : 'in_progress'
+        const roundNums = [...new Set(bm.map(m => m.round))].sort((a, b) => a - b)
+        const rounds = roundNums.map(rn => ({ round: rn, matches: bm.filter(m => m.round === rn) }))
+        return { block_id: bid, label: String.fromCharCode(65 + bid), status, rounds }
+      })
+
+      // 결승 라운드
+      let finalRound: { status: 'pending' | 'in_progress' | 'completed'; rounds: { round: number; matches: unknown[] }[] } | null = null
+      if (allGroupAndTbDone) {
+        const allBlocksDone = blockTournaments.every(b => b.status === 'completed')
+        if (finalMatches.length > 0) {
+          const status: 'pending' | 'in_progress' | 'completed' = finalMatches.every(m => m.winner_id !== null || m.is_draw) ? 'completed' : 'in_progress'
+          const roundNums = [...new Set(finalMatches.map(m => m.round))].sort((a, b) => a - b)
+          const rounds = roundNums.map(rn => ({ round: rn, matches: finalMatches.filter(m => m.round === rn) }))
+          finalRound = { status, rounds }
+        } else if (allBlocksDone) {
+          finalRound = { status: 'pending', rounds: [] }
+        }
+      }
+
+      return { type: 'worldcup', groupPhase, blockTournaments, finalRound, divisionMap }
     } else {
       const groupIds = db().prepare(`SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group' ORDER BY group_id`).all(runId) as { group_id: number }[]
       const groupStandings = groupIds.map(({ group_id }) => {
@@ -2327,7 +2420,7 @@ export function registerIpcHandlers(): void {
         return { group_id, standings, matches: gms, tiebreakMatches: tbms }
       })
       const mainMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'main' ORDER BY round DESC, match_index`).all(runId)
-      return { type: 'league', groupStandings, mainMatches }
+      return { type: 'league', groupStandings, mainMatches, divisionMap: getDivisionMap() }
     }
   })
 
@@ -2451,6 +2544,57 @@ export function registerIpcHandlers(): void {
       const rows = db().prepare(cte + ` ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...searchBindings, limit, offset)
       const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM (${cte})`).get(...searchBindings) as { cnt: number }).cnt
       return { rows, total }
+    }
+  })
+
+  ipcMain.handle('master-ranking:item-stats', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
+    const { type, itemId } = params
+    const ptsRow = db().prepare(`
+      SELECT SUM(points) AS total_points FROM (
+        SELECT points, ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY recorded_at DESC) AS rn
+        FROM master_ranking_history
+        WHERE type = ? AND item_id = ?
+      ) WHERE rn = 1
+    `).get(type, itemId) as { total_points: number | null }
+    const totalPoints = ptsRow?.total_points ?? 0
+    const rankRow = db().prepare(`
+      SELECT COUNT(*) + 1 AS rank FROM (
+        SELECT item_id, SUM(points) AS pts FROM (
+          SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id, run_id ORDER BY recorded_at DESC) AS rn
+          FROM master_ranking_history WHERE type = ?
+        ) WHERE rn = 1 GROUP BY item_id
+      ) WHERE pts > ?
+    `).get(type, totalPoints) as { rank: number }
+    const statsRow = db().prepare(`SELECT total_cups, cup_wins, total_matches, match_wins FROM cup_stats WHERE type = ? AND item_id = ?`).get(type, itemId) as { total_cups: number; cup_wins: number; total_matches: number; match_wins: number } | undefined
+    const masterCupsRow = db().prepare(`
+      SELECT COUNT(DISTINCT r.id) AS master_run_count,
+        SUM(CASE WHEN r.winner_id = ? THEN 1 ELSE 0 END) AS master_cup_wins
+      FROM cup_entries e
+      JOIN cup_runs r ON r.id = e.run_id
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+      WHERE e.item_id = ?
+    `).get(itemId, itemId) as { master_run_count: number; master_cup_wins: number } | undefined
+    const masterMatchesRow = db().prepare(`
+      SELECT COUNT(*) AS total_matches,
+        SUM(CASE WHEN m.winner_id = ? THEN 1 ELSE 0 END) AS match_wins
+      FROM cup_matches m
+      JOIN cup_runs r ON r.id = m.run_id
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+      WHERE (m.item1_id = ? OR m.item2_id = ?) AND m.winner_id IS NOT NULL
+    `).get(itemId, itemId, itemId) as { total_matches: number; match_wins: number } | undefined
+    const totalCups = masterCupsRow?.master_run_count ?? 0
+    const cupWins = masterCupsRow?.master_cup_wins ?? 0
+    const totalMatches = masterMatchesRow?.total_matches ?? 0
+    const matchWins = masterMatchesRow?.match_wins ?? 0
+    return {
+      rank: rankRow?.rank ?? 1,
+      total_points: totalPoints,
+      total_cups: totalCups,
+      cup_wins: cupWins,
+      total_matches: totalMatches,
+      match_wins: matchWins,
+      win_rate: totalCups > 0 ? Math.round(cupWins / totalCups * 100) : 0,
+      match_win_rate: totalMatches > 0 ? Math.round(matchWins / totalMatches * 100) : 0,
     }
   })
 
@@ -3188,7 +3332,8 @@ export function registerIpcHandlers(): void {
     const { matchId, winnerId, isDraw = false } = params
     const match = db().prepare(`SELECT * FROM cup_matches WHERE id = ?`).get(matchId) as {
       id: number; run_id: number; phase: string; round: number; match_index: number;
-      item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number; is_draw: number
+      item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number; is_draw: number;
+      block_id: number | null; group_id: number | null
     } | undefined
     if (!match) throw new Error('매치를 찾을 수 없습니다')
     if (match.winner_id !== null || match.is_draw) throw new Error('이미 결과가 있는 매치입니다')
@@ -3224,14 +3369,13 @@ export function registerIpcHandlers(): void {
           db().prepare(`INSERT INTO cup_stats (type, item_id, total_matches) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_matches = total_matches + 1`).run(tournament.type, loserId)
         }
 
-        // 토너먼트 / 리그전 본선 / 월드컵 본선: 라운드 완료 체크 → 다음 라운드 생성
-        if (tournament.format === 'tournament' || (tournament.format === 'league' && match.phase === 'main') || (tournament.format === 'worldcup' && match.phase === 'main')) {
+        // 토너먼트 / 리그전 본선: 라운드 완료 체크 → 다음 라운드 생성
+        if (tournament.format === 'tournament' || (tournament.format === 'league' && match.phase === 'main')) {
           const roundMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = ? AND round = ?`).all(runId, match.phase, match.round) as { winner_id: number | null; is_bye: number }[]
           const roundDone = roundMatches.every(m => m.winner_id !== null)
           if (roundDone) {
             const winners = roundMatches.map(m => m.winner_id!).filter(Boolean)
             if (winners.length === 1) {
-              // run 완료
               db().prepare(`UPDATE cup_runs SET status = 'completed', winner_id = ?, completed_at = datetime('now') WHERE id = ?`).run(winners[0], runId)
               const entries = db().prepare(`SELECT item_id FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number }[]
               for (const e of entries) {
@@ -3241,7 +3385,6 @@ export function registerIpcHandlers(): void {
               calcAndStoreRunPoints(db(), runId, tournament.type, tournament.is_master === 1, tournament.settings_snapshot)
               saveRankSnapshot(db(), runId)
             } else {
-              // 다음 라운드
               const isFullMode = tournament.round_total === 0
               const nextRoundSize = isFullMode && winners.length === 3 ? 4 : winners.length
               for (let k = winners.length - 1; k > 0; k--) {
@@ -3249,8 +3392,64 @@ export function registerIpcHandlers(): void {
                 ;[winners[k], winners[r]] = [winners[r], winners[k]]
               }
               const insertNext = db().prepare(`INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id) VALUES (?, 'main', ?, ?, ?, ?)`)
-              for (let i = 0; i < winners.length; i += 2) {
+              for (let i = 0; i < winners.length; i += 2)
                 insertNext.run(runId, nextRoundSize, i / 2, winners[i], winners[i + 1] ?? null)
+            }
+          }
+        }
+
+        // 월드컵 본선: 블럭 토너먼트 or 결승 라운드
+        if (tournament.format === 'worldcup' && match.phase === 'main') {
+          const blockCount = Math.floor(tournament.round_total / 32)
+          if (match.block_id !== null) {
+            // 블럭 토너먼트 라운드 완료 체크
+            const blockRoundMatches = db().prepare(
+              `SELECT winner_id FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND block_id = ? ORDER BY match_index ASC`
+            ).all(runId, match.round, match.block_id) as { winner_id: number | null }[]
+            const blockRoundDone = blockRoundMatches.every(m => m.winner_id !== null)
+            if (blockRoundDone) {
+              const winners = blockRoundMatches.map(m => m.winner_id!).filter(Boolean)
+              if (winners.length === 2) {
+                // 블럭 완료: 다음 블럭 or 결승 라운드
+                const nextBlockId = match.block_id + 1
+                if (nextBlockId < blockCount) {
+                  startBlock(db(), runId, nextBlockId)
+                } else {
+                  startFinalRound(db(), runId, blockCount)
+                }
+              } else {
+                // 다음 블럭 라운드 (match_index 순 고정 브래킷)
+                const insertNext = db().prepare(
+                  `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, block_id) VALUES (?, 'main', ?, ?, ?, ?, ?)`
+                )
+                for (let i = 0; i < winners.length; i += 2)
+                  insertNext.run(runId, winners.length, i / 2, winners[i], winners[i + 1] ?? null, match.block_id)
+              }
+            }
+          } else {
+            // 결승 라운드 (block_id IS NULL)
+            const finalRoundMatches = db().prepare(
+              `SELECT winner_id FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND block_id IS NULL ORDER BY match_index ASC`
+            ).all(runId, match.round) as { winner_id: number | null }[]
+            const finalRoundDone = finalRoundMatches.every(m => m.winner_id !== null)
+            if (finalRoundDone) {
+              const winners = finalRoundMatches.map(m => m.winner_id!).filter(Boolean)
+              if (winners.length === 1) {
+                db().prepare(`UPDATE cup_runs SET status = 'completed', winner_id = ?, completed_at = datetime('now') WHERE id = ?`).run(winners[0], runId)
+                const entries = db().prepare(`SELECT item_id FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number }[]
+                for (const e of entries) {
+                  db().prepare(`INSERT INTO cup_stats (type, item_id, total_cups) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_cups = total_cups + 1`).run(tournament.type, e.item_id)
+                }
+                db().prepare(`INSERT INTO cup_stats (type, item_id, cup_wins) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET cup_wins = cup_wins + 1`).run(tournament.type, winners[0])
+                calcAndStoreRunPoints(db(), runId, tournament.type, tournament.is_master === 1, tournament.settings_snapshot)
+                saveRankSnapshot(db(), runId)
+              } else {
+                // 결승 다음 라운드 (match_index 순 고정 브래킷)
+                const insertNext = db().prepare(
+                  `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, block_id) VALUES (?, 'main', ?, ?, ?, ?, NULL)`
+                )
+                for (let i = 0; i < winners.length; i += 2)
+                  insertNext.run(runId, winners.length, i / 2, winners[i], winners[i + 1] ?? null)
               }
             }
           }
@@ -3266,42 +3465,13 @@ export function registerIpcHandlers(): void {
         if (pending === 0) checkLeagueGroupsAdvance(db(), runId)
       }
 
-      // 월드컵 조별/동점처리: 타이브레이크 생성 + 전체 그룹 완료 체크 → 본선 매치 생성
+      // 월드컵 조별/동점처리: 타이브레이크 생성 + 전체 그룹 완료 체크 → 블럭 A 본선 시작
       if (tournament.format === 'worldcup' && (match.phase === 'group' || match.phase === 'tiebreak')) {
         if (match.group_id != null) processGroupPick(db(), runId, match.group_id, 'worldcup')
         const wcPending = (db().prepare(
           `SELECT COUNT(*) as cnt FROM cup_matches WHERE run_id = ? AND phase IN ('group', 'tiebreak') AND winner_id IS NULL AND is_draw = 0`
         ).get(runId) as { cnt: number }).cnt
-        if (wcPending === 0) {
-          const wcGroupIds = (db().prepare(
-            `SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group' ORDER BY group_id`
-          ).all(runId) as { group_id: number }[]).map(r => r.group_id)
-          const wcFirsts: { groupId: number; item_id: number }[] = []
-          const wcSeconds: { groupId: number; item_id: number }[] = []
-          for (const gid of wcGroupIds) {
-            const qualifiers = getGroupQualifiers(db(), runId, gid, 'worldcup')
-            if (!qualifiers || qualifiers.length < 2) return
-            wcFirsts.push({ groupId: gid, item_id: qualifiers[0] })
-            wcSeconds.push({ groupId: gid, item_id: qualifiers[1] })
-          }
-          shuffleArr(wcFirsts)
-          const secondPool = shuffleArr([...wcSeconds])
-          const assigned: { first: typeof wcFirsts[0]; second: typeof secondPool[0] }[] = []
-          for (let i = 0; i < wcFirsts.length; i++) {
-            const f = wcFirsts[i]
-            const validIdx = secondPool.findIndex((s, si) => si >= i && s.groupId !== f.groupId)
-            if (validIdx >= 0) { const tmp = secondPool[validIdx]; secondPool[validIdx] = secondPool[i]; secondPool[i] = tmp }
-            else {
-              const swapIdx = assigned.findIndex(a => secondPool[i].groupId !== a.first.groupId && a.second.groupId !== f.groupId)
-              if (swapIdx >= 0) { const tmp = assigned[swapIdx].second; assigned[swapIdx] = { ...assigned[swapIdx], second: secondPool[i] }; secondPool[i] = tmp }
-            }
-            assigned.push({ first: f, second: secondPool[i] })
-          }
-          const wcInsertMain = db().prepare(
-            `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id) VALUES (?, 'main', ?, ?, ?, ?)`
-          )
-          assigned.forEach(({ first, second }, i) => wcInsertMain.run(runId, tournament.round_total, i, first.item_id, second.item_id))
-        }
+        if (wcPending === 0) startBlock(db(), runId, 0)
       }
     })()
 
@@ -3643,10 +3813,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('cup:run-progress', (_e, runId: number) => {
     const match = db().prepare(`
-      SELECT round, match_index, phase, group_id FROM cup_matches
+      SELECT round, match_index, phase, group_id, block_id FROM cup_matches
       WHERE run_id = ? AND winner_id IS NULL AND is_draw = 0
-      ORDER BY id LIMIT 1
-    `).get(runId) as { round: number; match_index: number; phase: string; group_id: number | null } | undefined
+      ORDER BY phase DESC, round DESC, match_index ASC LIMIT 1
+    `).get(runId) as { round: number; match_index: number; phase: string; group_id: number | null; block_id: number | null } | undefined
     const { cnt: total } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ?`).get(runId) as { cnt: number }
     const { cnt: done } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId) as { cnt: number }
     let groupMatchDone: number | null = null
@@ -3660,8 +3830,8 @@ export function registerIpcHandlers(): void {
     let mainRoundDone: number | null = null
     let mainRoundTotal: number | null = null
     if (match?.phase === 'main') {
-      const { cnt: mt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ?`).get(runId, match.round) as { cnt: number }
-      const { cnt: md } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, match.round) as { cnt: number }
+      const { cnt: mt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND block_id IS ?`).get(runId, match.round, match.block_id) as { cnt: number }
+      const { cnt: md } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND block_id IS ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, match.round, match.block_id) as { cnt: number }
       mainRoundDone = md
       mainRoundTotal = mt
     }
