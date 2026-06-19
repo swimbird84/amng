@@ -869,7 +869,7 @@ function MatchCard({
               </span>
             )}
             {isMaster && stats.total_points !== undefined && (
-              <span className="text-yellow-400 font-semibold">{stats.total_points}pt</span>
+              <span className="text-yellow-400 font-semibold">{Number(stats.total_points).toFixed(1)}pt</span>
             )}
             <span>
               {stats.rank}위&nbsp;&nbsp;
@@ -1802,8 +1802,138 @@ function PlayView({
                 </div>
               ) : null
 
+              const finalRoundActive = currentMatch !== 'done' && currentMatch != null && currentMatch.phase === 'main' && (currentMatch as any).block_id == null
+              const finalRoundEl = (() => {
+                if (!standings.finalRound) return null
+                const fr = standings.finalRound
+                const isCompleted = fr.status === 'completed'
+                const frRoundsSorted = [...fr.rounds].sort((a, b) => b.round - a.round)
+                const FINAL_SLOTS = frRoundsSorted.length > 0 ? frRoundsSorted[0].matches.length * 2 : 8
+                const CONN_W = 24
+                return (
+                  <div className={`bg-gray-800 rounded-xl overflow-hidden border ${finalRoundActive ? 'border-yellow-500/60' : 'border-yellow-500/30'}`}>
+                    <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40 flex items-center gap-2">
+                      <span className="text-sm font-bold text-yellow-400">결승 라운드</span>
+                      {finalRoundActive && <span className="text-xs text-yellow-400 animate-pulse">진행중</span>}
+                      {isCompleted && <span className="text-xs text-green-400">완료</span>}
+                    </div>
+                    <div className="overflow-x-auto p-2">
+                      <div className="flex gap-0 min-w-max">
+                        {frRoundsSorted.map((rd, rdIdx) => {
+                          const matchCount = rd.matches.length
+                          const slotsPerMatch = FINAL_SLOTS / matchCount
+                          const isLastRound = rdIdx === frRoundsSorted.length - 1
+                          return (
+                            <React.Fragment key={rd.round}>
+                              <div className="flex flex-col" style={{ width: 200 }}>
+                                <div className="text-center text-xs text-yellow-500/70 py-1 border-b border-gray-700/40 mb-1">
+                                  {finalRoundLabel(rd.round)}
+                                </div>
+                                <div className="relative" style={{ height: FINAL_SLOTS * SLOT_H }}>
+                                  {rd.matches.map((m, matchIdx) => {
+                                    const topPx = matchIdx * slotsPerMatch * SLOT_H + (slotsPerMatch / 2 - 1) * SLOT_H
+                                    const i1 = items.get(m.item1_id)
+                                    const i2 = m.item2_id ? items.get(m.item2_id) : null
+                                    const o1 = originLabel(m.item1_id)
+                                    const o2 = m.item2_id ? originLabel(m.item2_id) : null
+                                    return (
+                                      <div key={m.id} className="absolute left-1 right-1" style={{ top: topPx }}>
+                                        <div className={`text-xs px-2 py-0.5 rounded-t border-l-2 ${m.winner_id === m.item1_id ? 'border-yellow-400 bg-yellow-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
+                                          {o1 ? (
+                                            <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item1_id ? 'opacity-40 line-through' : ''}`}>
+                                              <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>
+                                              <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
+                                            </span>
+                                          ) : (
+                                            <span className={`truncate block ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
+                                          )}
+                                        </div>
+                                        <div className={`text-xs px-2 py-0.5 rounded-b border-l-2 border-t border-gray-700/30 ${m.winner_id === m.item2_id ? 'border-yellow-400 bg-yellow-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
+                                          {o2 ? (
+                                            <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item2_id ? 'opacity-40 line-through' : ''}`}>
+                                              <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>
+                                              <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : `#${m.item2_id}`}</span>
+                                            </span>
+                                          ) : (
+                                            <span className={`truncate block ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                              {!isLastRound && (
+                                <div className="flex flex-col shrink-0" style={{ width: CONN_W }}>
+                                  <div className="text-xs py-1 border-b border-transparent mb-1" style={{ visibility: 'hidden' }}>x</div>
+                                  <svg width={CONN_W} height={FINAL_SLOTS * SLOT_H} style={{ display: 'block' }}>
+                                    {Array.from({ length: matchCount / 2 }, (_, i) => {
+                                      const topY = (2 * i * slotsPerMatch + slotsPerMatch / 2) * SLOT_H
+                                      const botY = ((2 * i + 1) * slotsPerMatch + slotsPerMatch / 2) * SLOT_H
+                                      const midY = (topY + botY) / 2
+                                      const m0 = rd.matches[2 * i]
+                                      const m1 = rd.matches[2 * i + 1]
+                                      const m0done = m0?.winner_id != null
+                                      const m1done = m1?.winner_id != null
+                                      const bothDone = m0done && m1done
+                                      const nextRound = frRoundsSorted[rdIdx + 1]
+                                      const nextM = nextRound?.matches[i]
+                                      const nextDecided = nextM?.winner_id != null
+                                      const topActive = m0done && (!nextDecided || nextM?.winner_id === nextM?.item1_id)
+                                      const botActive = m1done && (!nextDecided || nextM?.winner_id === nextM?.item2_id)
+                                      const C_ACTIVE = '#e5e7eb'
+                                      const C_IDLE = '#374151'
+                                      return (
+                                        <g key={i}>
+                                          <line x1={0} y1={topY} x2={CONN_W / 2} y2={topY} stroke={topActive ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                          <line x1={CONN_W / 2} y1={topY} x2={CONN_W / 2} y2={midY} stroke={topActive ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                          <line x1={CONN_W / 2} y1={midY} x2={CONN_W / 2} y2={botY} stroke={botActive ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                          <line x1={0} y1={botY} x2={CONN_W / 2} y2={botY} stroke={botActive ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                          <line x1={CONN_W / 2} y1={midY} x2={CONN_W} y2={midY} stroke={bothDone ? C_ACTIVE : C_IDLE} strokeWidth={1} />
+                                        </g>
+                                      )
+                                    })}
+                                  </svg>
+                                </div>
+                              )}
+                            </React.Fragment>
+                          )
+                        })}
+                        {isCompleted && (() => {
+                          const lastRound = frRoundsSorted[frRoundsSorted.length - 1]
+                          const champion = lastRound?.matches[0]?.winner_id
+                          if (!champion) return null
+                          const item = items.get(champion)
+                          const o = originLabel(champion)
+                          const topPx = (FINAL_SLOTS / 2 - 1) * SLOT_H
+                          return (
+                            <div className="flex flex-col" style={{ width: 200 }}>
+                              <div className="text-center text-xs text-yellow-400 py-1 border-b border-gray-700/40 mb-1">🏆 우승</div>
+                              <div className="relative" style={{ height: FINAL_SLOTS * SLOT_H }}>
+                                <div className="absolute left-1 right-1" style={{ top: topPx }}>
+                                  <div className="text-xs px-2 py-0.5 rounded border-l-2 border-yellow-400 bg-yellow-900/30 font-semibold">
+                                    {o ? (
+                                      <span className="flex items-center gap-1">
+                                        <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o.color}`}>{o.text}</span>
+                                        <span className="w-[120px] shrink-0 truncate text-yellow-200">{item ? itemLabel(item) : `#${champion}`}</span>
+                                      </span>
+                                    ) : <span className="text-yellow-200">{item ? itemLabel(item) : `#${champion}`}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()
+
               return (
                 <div className="space-y-4">
+                  {/* 결승 라운드: 항상 최상단 */}
+                  {finalRoundEl}
                   {/* 조별 예선 진행 중: 상단 표시 */}
                   {!standings.groupPhase?.completed && groupPhaseEl}
                   {sortedBlocks.map(block => {
@@ -1832,9 +1962,11 @@ function PlayView({
                                 g.matches.every((m: CupMatch) => m.winner_id !== null || m.is_draw) &&
                                 (!g.tiebreakMatches || g.tiebreakMatches.length === 0 || g.tiebreakMatches.every((m: CupMatch) => m.winner_id !== null || m.is_draw))
 
-                              // 크로스 시딩: 인접 조 쌍 (g0,g1) → match: g0_1위 vs g1_2위, g1_1위 vs g0_2위
+                              // 크로스 시딩: startBlock과 동일하게 topHalf/bottomHalf 분리
+                              // → 같은 조 진출자가 블럭 파이널 전까지 만나지 않도록 보장
                               type BSlot = { group_id: number; rank: number; item_id: number | null }
-                              const bracketMatches: [BSlot, BSlot][] = []
+                              const topBracket: [BSlot, BSlot][] = []
+                              const bottomBracket: [BSlot, BSlot][] = []
                               for (let i = 0; i < blockGroups.length; i += 2) {
                                 const g0 = blockGroups[i]
                                 const g1 = blockGroups[i + 1]
@@ -1842,15 +1974,16 @@ function PlayView({
                                 const d0 = isGDone(g0), d1 = isGDone(g1)
                                 const g0q = (g0 as any).qualifiers as number[] | null | undefined
                                 const g1q = (g1 as any).qualifiers as number[] | null | undefined
-                                bracketMatches.push([
+                                topBracket.push([
                                   { group_id: g0.group_id, rank: 1, item_id: d0 ? (g0q?.[0] ?? g0.standings[0]?.item_id ?? null) : null },
                                   { group_id: g1.group_id, rank: 2, item_id: d1 ? (g1q?.[1] ?? g1.standings[1]?.item_id ?? null) : null },
                                 ])
-                                bracketMatches.push([
+                                bottomBracket.push([
                                   { group_id: g1.group_id, rank: 1, item_id: d1 ? (g1q?.[0] ?? g1.standings[0]?.item_id ?? null) : null },
                                   { group_id: g0.group_id, rank: 2, item_id: d0 ? (g0q?.[1] ?? g0.standings[1]?.item_id ?? null) : null },
                                 ])
                               }
+                              const bracketMatches = [...topBracket, ...bottomBracket]
 
                               const confirmedCount = bracketMatches.reduce((n, [s1, s2]) => n + (s1.item_id !== null ? 1 : 0) + (s2.item_id !== null ? 1 : 0), 0)
 
@@ -2018,47 +2151,6 @@ function PlayView({
                     )
                   })}
 
-                  {standings.finalRound && (
-                    <div className="bg-gray-800 rounded-xl overflow-hidden border border-yellow-500/30">
-                      <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40 flex items-center gap-2">
-                        <span className="text-sm font-bold text-yellow-400">결승 라운드</span>
-                        {standings.finalRound.status === 'in_progress' && <span className="text-xs text-yellow-400 animate-pulse">진행중</span>}
-                        {standings.finalRound.status === 'completed' && <span className="text-xs text-green-400">완료</span>}
-                      </div>
-                      <div className="space-y-3 p-3">
-                        {[...standings.finalRound.rounds].sort((a, b) => b.round - a.round).map(rd => (
-                          <div key={rd.round} className="bg-gray-700/40 rounded-lg overflow-hidden">
-                            <div className="px-3 py-1.5 border-b border-gray-700/50">
-                              <span className="text-xs font-semibold text-yellow-400">{finalRoundLabel(rd.round)}</span>
-                            </div>
-                            <div className="divide-y divide-gray-700/50">
-                              {rd.matches.map(m => {
-                                const i1 = items.get(m.item1_id)
-                                const i2 = m.item2_id ? items.get(m.item2_id) : null
-                                const o1 = originLabel(m.item1_id)
-                                const o2 = m.item2_id ? originLabel(m.item2_id) : null
-                                return (
-                                  <div key={m.id} className="px-3 py-2 flex items-center gap-2 text-sm">
-                                    <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                      {o1 && <span className={`mr-1 text-[10px] font-bold ${o1.color}`}>{o1.text}</span>}
-                                      {i1 ? itemLabel(i1) : `#${m.item1_id}`}
-                                    </span>
-                                    <span className="text-gray-600 text-xs w-5 text-center shrink-0">vs</span>
-                                    <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                      {o2 && <span className={`mr-1 text-[10px] font-bold ${o2.color}`}>{o2.text}</span>}
-                                      {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
-                                    </span>
-                                    {m.winner_id === null && <span className="text-gray-600 text-xs shrink-0">대기</span>}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* 조별 예선 완료 후 하단 표시 */}
                   {standings.groupPhase?.completed && groupPhaseEl}
                 </div>
@@ -2146,6 +2238,7 @@ type RankingSettings = {
   basePoints: { win: number; draw: number; loss: number }
   divisionWeights: number[]
   opponentWeights: number[]
+  worldcupMainMultiplier: number
   rankBonus: Record<string, Record<string, number>>
 }
 
@@ -2300,6 +2393,22 @@ function RankingSettingsModal({ onClose }: { onClose: () => void }) {
                   </div>
                 ))}
               </div>
+            </section>
+
+            {/* 월드컵 전용 */}
+            <section>
+              <h3 className="text-gray-300 font-semibold text-sm mb-1">월드컵 전용 <span className="text-gray-500 font-normal text-xs">(블럭/결승 매치 승점 배율)</span></h3>
+              <div className="flex items-center gap-3 mt-2">
+                <label className="text-xs text-gray-400">블럭/결승 배율</label>
+                <NumInput
+                  value={cur.worldcupMainMultiplier ?? 2.0}
+                  onChange={v => update(s => ({ ...s, worldcupMainMultiplier: v }))}
+                  step={0.5}
+                  min={1}
+                />
+                <span className="text-xs text-gray-500">× (기본 승 {cur.basePoints.win}점 → {(cur.basePoints.win * (cur.worldcupMainMultiplier ?? 2.0)).toFixed(1)}점)</span>
+              </div>
+              <p className="text-xs text-gray-600 mt-1">순위 보너스는 본인 부 가중치(divisionWeights)가 곱해집니다.</p>
             </section>
 
             {/* 순위 보너스 */}

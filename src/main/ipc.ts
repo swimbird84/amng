@@ -182,12 +182,15 @@ function startBlock(database: DB, runId: number, blockId: number): void {
     qualifiers.push(q[0], q[1])
   }
 
-  // 고정 크로스 시딩: [g1_1위, g1_2위, g2_1위, g2_2위, ...] → g1_1위 vs g2_2위, g2_1위 vs g1_2위
-  const seeded: number[] = []
+  // 크로스 시딩: 상위 절반(1위/인접조2위)과 하위 절반(2위/인접조1위)으로 분리
+  // → 같은 조 진출자가 블럭 파이널 전까지 만나지 않도록 보장
+  const topHalf: number[] = []
+  const bottomHalf: number[] = []
   for (let i = 0; i < qualifiers.length; i += 4) {
-    seeded.push(qualifiers[i], qualifiers[i + 3])     // g1_1위 vs g2_2위
-    seeded.push(qualifiers[i + 2], qualifiers[i + 1]) // g2_1위 vs g1_2위
+    topHalf.push(qualifiers[i], qualifiers[i + 3])     // g(2j+1)-1위 vs g(2j+2)-2위
+    bottomHalf.push(qualifiers[i + 2], qualifiers[i + 1]) // g(2j+2)-1위 vs g(2j+1)-2위
   }
+  const seeded = [...topHalf, ...bottomHalf]
   const insertMain = database.prepare(
     `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, block_id) VALUES (?, 'main', ?, ?, ?, ?, ?)`
   )
@@ -204,12 +207,15 @@ function startFinalRound(database: DB, runId: number, blockCount: number): void 
     ).all(runId, b) as { winner_id: number }[]
     finalists.push(...survivors.map(r => r.winner_id))
   }
-  // 고정 크로스 시딩: [A1,A2,B1,B2,...] → A1 vs B2, B1 vs A2, C1 vs D2, D1 vs C2
-  const seeded: number[] = []
+  // 크로스 시딩: 상위 절반(A1 vs B2, C1 vs D2, ...)과 하위 절반(B1 vs A2, D1 vs C2, ...) 분리
+  // → 같은 블럭 생존자가 결승 라운드 파이널 전까지 만나지 않도록 보장
+  const topHalf: number[] = []
+  const bottomHalf: number[] = []
   for (let i = 0; i < finalists.length; i += 4) {
-    seeded.push(finalists[i], finalists[i + 3])     // A1 vs B2
-    seeded.push(finalists[i + 2], finalists[i + 1]) // B1 vs A2
+    topHalf.push(finalists[i], finalists[i + 3])     // A1 vs B2
+    bottomHalf.push(finalists[i + 2], finalists[i + 1]) // B1 vs A2
   }
+  const seeded = [...topHalf, ...bottomHalf]
   const insertFinal = database.prepare(
     `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, block_id) VALUES (?, 'main', ?, ?, ?, ?, NULL)`
   )
@@ -255,22 +261,33 @@ function calcAndStoreRunPoints(
   ).get(runId) as { format: string; winner_id: number | null }
 
   const matches = database.prepare(`
-    SELECT item1_id, item2_id, winner_id, is_draw, round FROM cup_matches
+    SELECT item1_id, item2_id, winner_id, is_draw, round, phase FROM cup_matches
     WHERE run_id = ? AND is_bye = 0
   `).all(runId) as {
-    item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; round: number
+    item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; round: number; phase: string
   }[]
 
   const getDivWeight = (div: number, weights: number[]) =>
     div >= 1 && div <= weights.length ? weights[div - 1] : 1.0
 
   // ---- 매치 승점 계산 ----
-  // 섞인 대회: 매치마다 상대방 부 가중치 적용 (raw pts)
+  // 월드컵 main 페이즈: basePoints × worldcupMainMultiplier (D안)
+  // 섞인 대회 (월드컵 group 포함): 매치마다 상대방 부 가중치 적용
   // 부별 대회 / 일반 대회: raw 승점만 누적 (가중치는 최종 단계에서 적용)
+  const isWorldcup = run.format === 'worldcup'
+  const wcMultiplier = ((settings as Record<string, unknown>).worldcupMainMultiplier as number) ?? 2.0
   const matchPts = new Map<number, number>()
   for (const m of matches) {
     if (m.item2_id === null) continue
-    if (isMixed) {
+    if (isWorldcup && m.phase === 'main') {
+      // D안: 블럭/결승 매치는 배율 적용 (상대 가중치 없음)
+      if (m.is_draw) {
+        matchPts.set(m.item1_id, (matchPts.get(m.item1_id) ?? 0) + settings.basePoints.draw * wcMultiplier)
+        matchPts.set(m.item2_id, (matchPts.get(m.item2_id) ?? 0) + settings.basePoints.draw * wcMultiplier)
+      } else if (m.winner_id !== null) {
+        matchPts.set(m.winner_id, (matchPts.get(m.winner_id) ?? 0) + settings.basePoints.win * wcMultiplier)
+      }
+    } else if (isMixed) {
       const div1 = divMap.get(m.item1_id) ?? 0
       const div2 = divMap.get(m.item2_id) ?? 0
       if (m.is_draw) {
@@ -333,7 +350,8 @@ function calcAndStoreRunPoints(
     : 1.0
 
   // ---- 최종 승점 계산 및 저장 ----
-  // 부별 대회: (raw_matchPts + bonus) × divWeight  ← RANK.md 수식
+  // 월드컵: matchPts(group 상대가중 + main 배율) + bonus × 본인 divWeight  (A+D안)
+  // 부별 대회: (raw_matchPts + bonus) × divWeight
   // 섞인 대회: matchPts(per-match weight 적용) + bonus × avgDivWeight
   // 일반 대회: matchPts + bonus (가중치 없음)
   const insert = database.prepare(`
@@ -345,7 +363,11 @@ function calcAndStoreRunPoints(
     const rank = rankMap.get(e.item_id) ?? entryCount
     const bonus = getBonus(rank)
     let finalPts: number
-    if (isMaster && !isMixed) {
+    if (isWorldcup) {
+      // A안: 보너스에 본인 divWeight 적용
+      const w = getDivWeight(divMap.get(e.item_id) ?? 0, settings.divisionWeights)
+      finalPts = mp + bonus * w
+    } else if (isMaster && !isMixed) {
       const w = getDivWeight(divMap.get(e.item_id) ?? 0, settings.divisionWeights)
       finalPts = (mp + bonus) * w
     } else if (isMixed) {
