@@ -1349,14 +1349,27 @@ export function registerCupHandlers(): void {
       }
     }
 
-    // cup_stats 조회 (참가 수 보정용)
+    // 참가 횟수 조회 (마스터: 마스터 대회 전체, 일반: 해당 대회 기준)
     let statsMap = new Map<number, number>()
     if (items.length > 0) {
       const ph = items.map(() => '?').join(',')
-      const statsRows = db().prepare(`
-        SELECT item_id, total_cups FROM cup_stats WHERE type = ? AND item_id IN (${ph})
-      `).all(tournament.type, ...items.map(i => i.id)) as { item_id: number; total_cups: number }[]
-      statsMap = new Map(statsRows.map(r => [r.item_id, r.total_cups]))
+      const statsRows = tournament.is_master
+        ? db().prepare(`
+            SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
+            FROM cup_entries e
+            JOIN cup_runs r ON r.id = e.run_id
+            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+            WHERE e.item_id IN (${ph})
+            GROUP BY e.item_id
+          `).all(tournament.type, ...items.map(i => i.id)) as { item_id: number; run_count: number }[]
+        : db().prepare(`
+            SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
+            FROM cup_entries e
+            JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
+            WHERE e.item_id IN (${ph})
+            GROUP BY e.item_id
+          `).all(tournamentId, ...items.map(i => i.id)) as { item_id: number; run_count: number }[]
+      statsMap = new Map(statsRows.map(r => [r.item_id, r.run_count]))
       // 정렬 전 셔플 (stable sort 편향 방지)
       for (let k = items.length - 1; k > 0; k--) {
         const r = Math.floor(Math.random() * (k + 1))
@@ -2080,6 +2093,9 @@ export function registerCupHandlers(): void {
   })
 
   ipcMain.handle('cup:tournament-stats', (_e, tournamentId: number) => {
+    const tInfo = db().prepare(`SELECT type, is_master, filter_json FROM cup_tournaments WHERE id = ?`).get(tournamentId) as { type: string; is_master: number; filter_json: string | null } | undefined
+    if (!tInfo) return null
+
     const runStats = db().prepare(`
       SELECT COUNT(*) AS total_runs,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_runs,
@@ -2088,22 +2104,40 @@ export function registerCupHandlers(): void {
     `).get(tournamentId) as { total_runs: number; completed_runs: number; last_run_at: string | null } | undefined
     if (!runStats) return null
 
-    const participated = (db().prepare(`
-      SELECT COUNT(DISTINCT e.item_id) AS cnt
-      FROM cup_entries e
-      JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
-    `).get(tournamentId) as { cnt: number }).cnt
+    // 마스터 대회: 마스터 대회 전체 기준, 일반 대회: 해당 대회 기준
+    const participated = tInfo.is_master
+      ? (db().prepare(`
+          SELECT COUNT(DISTINCT e.item_id) AS cnt
+          FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        `).get(tInfo.type) as { cnt: number }).cnt
+      : (db().prepare(`
+          SELECT COUNT(DISTINCT e.item_id) AS cnt
+          FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
+        `).get(tournamentId) as { cnt: number }).cnt
 
-    const runDist = db().prepare(`
-      SELECT run_count, COUNT(*) AS count FROM (
-        SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
-        FROM cup_entries e
-        JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
-        GROUP BY e.item_id
-      ) GROUP BY run_count ORDER BY run_count ASC
-    `).all(tournamentId) as { run_count: number; count: number }[]
+    const runDist = tInfo.is_master
+      ? db().prepare(`
+          SELECT run_count, COUNT(*) AS count FROM (
+            SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
+            FROM cup_entries e
+            JOIN cup_runs r ON r.id = e.run_id
+            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+            GROUP BY e.item_id
+          ) GROUP BY run_count ORDER BY run_count ASC
+        `).all(tInfo.type) as { run_count: number; count: number }[]
+      : db().prepare(`
+          SELECT run_count, COUNT(*) AS count FROM (
+            SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
+            FROM cup_entries e
+            JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
+            GROUP BY e.item_id
+          ) GROUP BY run_count ORDER BY run_count ASC
+        `).all(tournamentId) as { run_count: number; count: number }[]
 
-    const t = db().prepare(`SELECT type, filter_json FROM cup_tournaments WHERE id = ?`).get(tournamentId) as { type: string; filter_json: string | null } | undefined
+    const t = tInfo
     if (t) {
       const filter = t.filter_json ? JSON.parse(t.filter_json) as Record<string, unknown> : null
       const extraConditions: string[] = []
