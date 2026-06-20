@@ -4,6 +4,7 @@ import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { MasterRankRow, FormatStat, H2HRow, DivHistEntry, RateTooltip } from './cupTypes'
 import { RANK_MEDAL, MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
+import RankingSettingsModal from './RankingSettingsModal'
 
 export default function MasterRankingView({
   onBack,
