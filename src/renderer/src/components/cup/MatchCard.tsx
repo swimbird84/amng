@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { actorsApi, worksApi, shellApi } from '../../api'
+import { actorsApi, worksApi, shellApi, masterRankingApi } from '../../api'
 import ImagePreview from '../ImagePreview'
+import CardTooltip, { type TooltipState } from '../CardTooltip'
 import Rating from '../Rating'
 import type { ActorScores } from '../../types'
 import { useScoreDemote, ScoreDemoteModal, SCORE_GRADE_LIMITS, type ActorScoreSnapshot, type PendingDemotion } from '../ScoreDemoteModal'
 import type { ItemInfo, CupMatch } from './cupTypes'
-import { SCORE_FIELDS, SCORE_OPTIONS, itemLabel, itemImagePath } from './cupConstants'
+import { SCORE_FIELDS, SCORE_OPTIONS, itemLabel, itemImagePath, DIV_COLOR } from './cupConstants'
 
 export default function MatchCard({
   item, type, tournamentId, onClick, onNavigate, disabled, division, isMaster,

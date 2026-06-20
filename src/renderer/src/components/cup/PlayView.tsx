@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { cupApi } from '../../api'
+import { cupApi, actorsApi, worksApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { CupTournament, CupRun, CupMatch, ItemInfo, StandingsRow } from './cupTypes'
