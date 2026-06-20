@@ -291,4 +291,8 @@ SearchBar.tsx: 1,158줄 → ~713줄 (Step 1~3 적용 시)
   - 6개 파일에서 ESC 보일러플레이트 교체 (WorkViewModal, ActorViewModal, TagLinkModal, TagManager, ActorForm, ScoreDemoteModal)
   - 나머지 파일은 복합 패턴(다중 ESC, 조건부 등)이므로 기존 방식 유지
   - useLocalStorage 훅은 보류 (변경 범위 대비 효과 낮음)
-- [ ] Phase 5: SearchBar.tsx 분할
+- [x] Phase 5: SearchBar.tsx 분할 (Step 2~3 완료)
+  - `search/searchTypes.ts` (95줄) → 타입/상수/기본값 분리
+  - `search/SearchInputs.tsx` (180줄) → DatePickerInput, StarSelect, NumInput, CupInput, subtractDate 분리
+  - SearchBar.tsx: 1,158줄 → 885줄 (273줄 감소)
+  - Step 1(useFilterDropdown 훅)은 드롭다운 UI 렌더링이 밀접하여 보류
