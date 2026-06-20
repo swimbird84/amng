@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import type { ActorScores } from '../../types'
 import type { ItemInfo } from './cupTypes'
 
@@ -125,24 +125,47 @@ export function Pagination({ page, totalPages, onPageChange }: { page: number; t
   )
 }
 
-// ── Small Chart Components ──
+// ── Chart Components ──
 export function RunDistChart({ data }: { data: { run_count: number; count: number }[] }) {
-  if (!data || data.length === 0) return null
-  const max = Math.max(...data.map(d => d.count))
-  const barW = Math.max(16, Math.floor(180 / data.length))
-  const svgW = data.length * (barW + 4) + 8
+  const [hovered, setHovered] = useState<number | null>(null)
+  if (data.length === 0) return <p className="text-gray-500 text-sm text-center py-4">데이터 없음</p>
+  const W = 580, H = 180, PL = 44, PR = 12, PT = 18, PB = 32
+  const cW = W - PL - PR, cH = H - PT - PB
+  const maxCount = Math.max(...data.map(d => d.count))
+  const barW = cW / data.length
+  const showEvery = data.length > 30 ? Math.ceil(data.length / 30) : 1
+  const yTicks = [0, 0.25, 0.5, 0.75, 1]
   return (
-    <svg width={svgW} height={60} className="mt-1">
-      {data.map((d, i) => {
-        const h = max > 0 ? (d.count / max) * 40 : 0
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }}>
+      {yTicks.map(r => {
+        const y = PT + cH * (1 - r)
+        const val = Math.round(maxCount * r)
         return (
-          <g key={i}>
-            <rect x={i * (barW + 4) + 4} y={50 - h} width={barW} height={h} rx={2} fill={d.run_count === 0 ? '#374151' : '#3b82f6'} fillOpacity={0.7} />
-            <text x={i * (barW + 4) + 4 + barW / 2} y={56} textAnchor="middle" fill="#9ca3af" fontSize={8}>{d.run_count}</text>
-            {d.count > 0 && <text x={i * (barW + 4) + 4 + barW / 2} y={48 - h} textAnchor="middle" fill="#d1d5db" fontSize={8}>{d.count}</text>}
+          <g key={r}>
+            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#374151" strokeWidth="1" />
+            <text x={PL - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{val}</text>
           </g>
         )
       })}
+      {data.map((d, i) => {
+        const x = PL + i * barW
+        const bH = maxCount > 0 ? (d.count / maxCount) * cH : 0
+        const y = PT + cH - bH
+        const isH = hovered === i
+        return (
+          <g key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ cursor: 'default' }}>
+            <rect x={x + 1} y={y} width={Math.max(barW - 2, 1)} height={bH} fill={isH ? '#60a5fa' : '#3b82f6'} rx="2" />
+            {i % showEvery === 0 && bH > 0 && (
+              <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="white">{d.count}</text>
+            )}
+            {i % showEvery === 0 && (
+              <text x={x + barW / 2} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.run_count}</text>
+            )}
+          </g>
+        )
+      })}
+      <line x1={PL} y1={PT} x2={PL} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
+      <line x1={PL} y1={PT + cH} x2={W - PR} y2={PT + cH} stroke="#4b5563" strokeWidth="1.5" />
     </svg>
   )
 }
