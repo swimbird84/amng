@@ -641,12 +641,13 @@ export default function PlayView({
                 1: 'text-yellow-300', 2: 'text-orange-300', 3: 'text-blue-300',
                 4: 'text-green-300', 5: 'text-purple-300', 6: 'text-gray-400', 0: 'text-gray-500'
               }
-              const originLabel = (itemId: number) => {
+              const originLabel = (itemId: number, showBlock = false) => {
                 const origin = itemOriginMap.get(itemId)
                 const div = divisionMap[itemId] ?? 0
                 const divText = div === 0 ? '미지정' : `${div}부`
                 if (!origin) return null
-                return { text: `${divText}/${origin.group_id}조/${origin.rank}위/${origin.block_label}블록`, color: DIV_TEXT[div] ?? 'text-gray-500' }
+                const blockText = showBlock && origin.block_label ? `/${origin.block_label}블록` : ''
+                return { text: `${divText}/${origin.group_id}조/${origin.rank}위${blockText}`, color: DIV_TEXT[div] ?? 'text-gray-500' }
               }
 
               const sortedBlocks = [...(standings.blockTournaments ?? [])].sort((a, b) => {
@@ -815,8 +816,8 @@ export default function PlayView({
                                     const topPx = matchIdx * slotsPerMatch * SLOT_H + (slotsPerMatch / 2 - 1) * SLOT_H
                                     const i1 = items.get(m.item1_id)
                                     const i2 = m.item2_id ? items.get(m.item2_id) : null
-                                    const o1 = originLabel(m.item1_id)
-                                    const o2 = m.item2_id ? originLabel(m.item2_id) : null
+                                    const o1 = originLabel(m.item1_id, true)
+                                    const o2 = m.item2_id ? originLabel(m.item2_id, true) : null
                                     return (
                                       <div key={m.id} className="absolute left-1 right-1" style={{ top: topPx }}>
                                         <div className={`text-xs px-2 py-0.5 rounded-t border-l-2 ${m.winner_id === m.item1_id ? 'border-yellow-400 bg-yellow-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
@@ -885,7 +886,7 @@ export default function PlayView({
                           const champion = lastRound?.matches[0]?.winner_id
                           if (!champion) return null
                           const item = items.get(champion)
-                          const o = originLabel(champion)
+                          const o = originLabel(champion, true)
                           const topPx = (FINAL_SLOTS / 2 - 1) * SLOT_H
                           return (
                             <div className="flex flex-col" style={{ width: 240 }}>
