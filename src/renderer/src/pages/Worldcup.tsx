@@ -501,14 +501,14 @@ function TournamentCard({
                 const gDone = runProgress?.groupMatchDone ?? 0
                 const gTotal = runProgress?.groupMatchTotal ?? '?'
                 const blkLabel = m.group_id != null ? String.fromCharCode(65 + Math.floor((m.group_id - 1) / 16)) : ''
-                if (m.phase === 'group') label = `${blkLabel}블럭 ${m.group_id}조 예선 — ${gDone + 1}/${gTotal}경기`
-                else if (m.phase === 'tiebreak') label = `${blkLabel}블럭 ${m.group_id}조 동점처리 — ${gDone + 1}/${gTotal}경기`
+                if (m.phase === 'group') label = `${blkLabel}블록 ${m.group_id}조 예선 — ${gDone + 1}/${gTotal}경기`
+                else if (m.phase === 'tiebreak') label = `${blkLabel}블록 ${m.group_id}조 동점처리 — ${gDone + 1}/${gTotal}경기`
                 else if (m.phase === 'main' && m.block_id != null) {
                   const rt = t.round_total ?? 0
                   const unit = t.type === 'actor' ? '인' : '작품'
                   const blk2 = String.fromCharCode(65 + m.block_id)
                   const roundStr = rt > 0 ? `${rt / (32 / m.round)}강(${m.round}${unit})` : `${m.round}강`
-                  label = `${blk2}블럭 본선 ${roundStr} — ${m.match_index + 1}/${m.round / 2}경기`
+                  label = `${blk2}블록 본선 ${roundStr} — ${m.match_index + 1}/${m.round / 2}경기`
                 } else label = `결승 라운드 ${m.match_index + 1}/${m.round / 2}경기`
               }
             }
@@ -1400,14 +1400,14 @@ function PlayView({
                     return (
                       <p className={`font-bold text-lg ${match.phase === 'group' || match.phase === 'tiebreak' ? 'text-purple-400' : 'text-yellow-400'}`}>
                         {match.phase === 'group'
-                          ? `${blkLabel}블럭 ${match.group_id}조 예선 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                          ? `${blkLabel}블록 ${match.group_id}조 예선 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                           : match.phase === 'tiebreak'
-                            ? `${blkLabel}블럭 ${match.group_id}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                            ? `${blkLabel}블록 ${match.group_id}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                             : match.block_id != null
                               ? (() => {
                                   const blk2 = String.fromCharCode(65 + match.block_id)
                                   const roundStr = rt > 0 ? `${rt / (32 / match.round)}강(${match.round}${unit})` : `${match.round}강`
-                                  return `${blk2}블럭 본선 ${roundStr} — ${match.match_index + 1}/${match.round / 2}경기`
+                                  return `${blk2}블록 본선 ${roundStr} — ${match.match_index + 1}/${match.round / 2}경기`
                                 })()
                               : `결승 라운드 — ${match.match_index + 1}/${match.round / 2}경기`
                         }
@@ -1694,7 +1694,7 @@ function PlayView({
               const activeGroupId = (currentMatch !== 'done' && currentMatch != null && (currentMatch.phase === 'group' || currentMatch.phase === 'tiebreak')) ? currentMatch.group_id : null
               const activeBlockId = (currentMatch !== 'done' && currentMatch != null && currentMatch.phase === 'main' && currentMatch.block_id != null) ? currentMatch.block_id : null
 
-              // 블럭 토너먼트 / 결승 라운드 + 조별 예선 (항상 하단)
+              // 블록 토너먼트 / 결승 라운드 + 조별 예선 (항상 하단)
               const roundTotal = run?.round_total ?? 0
               const itemType = tournament?.type ?? 'actor'
               const SLOT_H = 28
@@ -1743,7 +1743,7 @@ function PlayView({
                     return a.block_id - b.block_id
                   }).map(block => (
                     <div key={block.block_id}>
-                      <h3 className="text-xs font-semibold text-purple-400 mb-2 uppercase tracking-wide">블럭 {block.label}</h3>
+                      <h3 className="text-xs font-semibold text-purple-400 mb-2 uppercase tracking-wide">블록 {block.label}</h3>
                       <div className="grid grid-cols-4 gap-3">
                         {[...block.groups].sort((a, b) => {
                           if (activeGroupId !== null) {
@@ -1999,7 +1999,7 @@ function PlayView({
                     return (
                       <div key={block.block_id} className={`bg-gray-800 rounded-xl overflow-hidden border ${isActive ? 'border-purple-500/60' : 'border-gray-700/30'}`}>
                         <div className="px-4 py-2 border-b border-gray-700 bg-gray-700/40 flex items-center gap-2">
-                          <span className="text-sm font-bold text-white">블럭 {block.label}</span>
+                          <span className="text-sm font-bold text-white">블록 {block.label}</span>
                           {isActive && <span className="text-xs text-purple-400 animate-pulse">진행중</span>}
                           {isCompleted && <span className="text-xs text-green-400">완료</span>}
                           {isPending && <span className="text-xs text-gray-500">대기 중</span>}
@@ -2009,7 +2009,7 @@ function PlayView({
                             {(() => {
                               const phaseBlock = standings.groupPhase?.blocks.find(b => b.block_id === block.block_id)
                               const blockGroups = phaseBlock?.groups ?? []
-                              if (blockGroups.length === 0) return <div className="py-4 text-center text-gray-600 text-sm">이전 블럭 완료 후 시작됩니다</div>
+                              if (blockGroups.length === 0) return <div className="py-4 text-center text-gray-600 text-sm">이전 블록 완료 후 시작됩니다</div>
 
                               const isGDone = (g: typeof blockGroups[0]) =>
                                 g.matches.length > 0 &&
@@ -2017,7 +2017,7 @@ function PlayView({
                                 (!g.tiebreakMatches || g.tiebreakMatches.length === 0 || g.tiebreakMatches.every((m: CupMatch) => m.winner_id !== null || m.is_draw))
 
                               // 크로스 시딩: startBlock과 동일하게 topHalf/bottomHalf 분리
-                              // → 같은 조 진출자가 블럭 파이널 전까지 만나지 않도록 보장
+                              // → 같은 조 진출자가 블록 파이널 전까지 만나지 않도록 보장
                               type BSlot = { group_id: number; rank: number; item_id: number | null }
                               const topBracket: [BSlot, BSlot][] = []
                               const bottomBracket: [BSlot, BSlot][] = []
@@ -2451,9 +2451,9 @@ function RankingSettingsModal({ onClose }: { onClose: () => void }) {
 
             {/* 월드컵 전용 */}
             <section>
-              <h3 className="text-gray-300 font-semibold text-sm mb-1">월드컵 전용 <span className="text-gray-500 font-normal text-xs">(블럭/결승 매치 승점 배율)</span></h3>
+              <h3 className="text-gray-300 font-semibold text-sm mb-1">월드컵 전용 <span className="text-gray-500 font-normal text-xs">(블록/결승 매치 승점 배율)</span></h3>
               <div className="flex items-center gap-3 mt-2">
-                <label className="text-xs text-gray-400">블럭/결승 배율</label>
+                <label className="text-xs text-gray-400">블록/결승 배율</label>
                 <NumInput
                   value={cur.worldcupMainMultiplier ?? 2.0}
                   onChange={v => update(s => ({ ...s, worldcupMainMultiplier: v }))}

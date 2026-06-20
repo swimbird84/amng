@@ -168,7 +168,7 @@ function checkLeagueGroupsAdvance(database: DB, runId: number): void {
     insertMain.run(runId, roundSize, i / 2, allQualifiers[i], allQualifiers[i + 1] ?? null)
 }
 
-// 월드컵 전용: 블럭 토너먼트 시작 (block_id 기준 16개 조 진출자 32명 → 고정 크로스 시딩)
+// 월드컵 전용: 블록 토너먼트 시작 (block_id 기준 16개 조 진출자 32명 → 고정 크로스 시딩)
 function startBlock(database: DB, runId: number, blockId: number): void {
   const startGroupId = blockId * 16 + 1
   const endGroupId = blockId * 16 + 16
@@ -183,7 +183,7 @@ function startBlock(database: DB, runId: number, blockId: number): void {
   }
 
   // 크로스 시딩: 상위 절반(1위/인접조2위)과 하위 절반(2위/인접조1위)으로 분리
-  // → 같은 조 진출자가 블럭 파이널 전까지 만나지 않도록 보장
+  // → 같은 조 진출자가 블록 파이널 전까지 만나지 않도록 보장
   const topHalf: number[] = []
   const bottomHalf: number[] = []
   for (let i = 0; i < qualifiers.length; i += 4) {
@@ -198,7 +198,7 @@ function startBlock(database: DB, runId: number, blockId: number): void {
     insertMain.run(runId, seeded.length, i / 2, seeded[i], seeded[i + 1] ?? null, blockId)
 }
 
-// 월드컵 전용: 결승 라운드 시작 (각 블럭 마지막 라운드 생존자 2인씩 → 인접 블럭 쌍 크로스 시딩)
+// 월드컵 전용: 결승 라운드 시작 (각 블록 마지막 라운드 생존자 2인씩 → 인접 블록 쌍 크로스 시딩)
 function startFinalRound(database: DB, runId: number, blockCount: number): void {
   const finalists: number[] = []
   for (let b = 0; b < blockCount; b++) {
@@ -208,7 +208,7 @@ function startFinalRound(database: DB, runId: number, blockCount: number): void 
     finalists.push(...survivors.map(r => r.winner_id))
   }
   // 크로스 시딩: 상위 절반(A1 vs B2, C1 vs D2, ...)과 하위 절반(B1 vs A2, D1 vs C2, ...) 분리
-  // → 같은 블럭 생존자가 결승 라운드 파이널 전까지 만나지 않도록 보장
+  // → 같은 블록 생존자가 결승 라운드 파이널 전까지 만나지 않도록 보장
   const topHalf: number[] = []
   const bottomHalf: number[] = []
   for (let i = 0; i < finalists.length; i += 4) {
@@ -280,7 +280,7 @@ function calcAndStoreRunPoints(
   for (const m of matches) {
     if (m.item2_id === null) continue
     if (isWorldcup && m.phase === 'main') {
-      // D안: 블럭/결승 매치는 배율 적용 (상대 가중치 없음)
+      // D안: 블록/결승 매치는 배율 적용 (상대 가중치 없음)
       if (m.is_draw) {
         matchPts.set(m.item1_id, (matchPts.get(m.item1_id) ?? 0) + settings.basePoints.draw * wcMultiplier)
         matchPts.set(m.item2_id, (matchPts.get(m.item2_id) ?? 0) + settings.basePoints.draw * wcMultiplier)
@@ -2448,7 +2448,7 @@ export function registerIpcHandlers(): void {
       const divisionMap: Record<number, number> = {}
       for (const e of entryRows) divisionMap[e.item_id] = e.division ?? 0
 
-      // 블럭 토너먼트
+      // 블록 토너먼트
       const totalBlockCount = blocks.length
       const allMainMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'main' ORDER BY block_id, round, match_index`).all(runId) as { id: number; block_id: number | null; round: number; match_index: number; item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
       const blockMainMatches = allMainMatches.filter(m => m.block_id !== null)
@@ -2819,7 +2819,7 @@ export function registerIpcHandlers(): void {
         rk.opp_rank
       FROM h2h h
       LEFT JOIN ranked rk ON rk.item_id = h.opp_id
-      GROUP BY h.opp_id ORDER BY total DESC, wins DESC
+      GROUP BY h.opp_id HAVING COUNT(*) >= 5 ORDER BY total DESC, wins DESC
     `).all({ itemId, type }) as { opp_id: number; total: number; wins: number; draws: number; opp_rank: number | null }[]
     if (rows.length === 0) return []
     const ids = rows.map(r => r.opp_id)
@@ -3488,11 +3488,11 @@ export function registerIpcHandlers(): void {
           }
         }
 
-        // 월드컵 본선: 블럭 토너먼트 or 결승 라운드
+        // 월드컵 본선: 블록 토너먼트 or 결승 라운드
         if (tournament.format === 'worldcup' && match.phase === 'main') {
           const blockCount = Math.floor(tournament.round_total / 32)
           if (match.block_id !== null) {
-            // 블럭 토너먼트 라운드 완료 체크
+            // 블록 토너먼트 라운드 완료 체크
             const blockRoundMatches = db().prepare(
               `SELECT winner_id FROM cup_matches WHERE run_id = ? AND phase = 'main' AND round = ? AND block_id = ? ORDER BY match_index ASC`
             ).all(runId, match.round, match.block_id) as { winner_id: number | null }[]
@@ -3500,7 +3500,7 @@ export function registerIpcHandlers(): void {
             if (blockRoundDone) {
               const winners = blockRoundMatches.map(m => m.winner_id!).filter(Boolean)
               if (winners.length === 2) {
-                // 블럭 완료: 다음 블럭 or 결승 라운드
+                // 블록 완료: 다음 블록 or 결승 라운드
                 const nextBlockId = match.block_id + 1
                 if (nextBlockId < blockCount) {
                   startBlock(db(), runId, nextBlockId)
@@ -3508,7 +3508,7 @@ export function registerIpcHandlers(): void {
                   startFinalRound(db(), runId, blockCount)
                 }
               } else {
-                // 다음 블럭 라운드 (match_index 순 고정 브래킷)
+                // 다음 블록 라운드 (match_index 순 고정 브래킷)
                 const insertNext = db().prepare(
                   `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, block_id) VALUES (?, 'main', ?, ?, ?, ?, ?)`
                 )
@@ -3555,7 +3555,7 @@ export function registerIpcHandlers(): void {
         if (pending === 0) checkLeagueGroupsAdvance(db(), runId)
       }
 
-      // 월드컵 조별/동점처리: 타이브레이크 생성 + 전체 그룹 완료 체크 → 블럭 A 본선 시작
+      // 월드컵 조별/동점처리: 타이브레이크 생성 + 전체 그룹 완료 체크 → 블록 A 본선 시작
       if (tournament.format === 'worldcup' && (match.phase === 'group' || match.phase === 'tiebreak')) {
         if (match.group_id != null) processGroupPick(db(), runId, match.group_id, 'worldcup')
         const wcPending = (db().prepare(
