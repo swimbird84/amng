@@ -335,7 +335,7 @@ export default function PlayView({
                                   const roundStr = rt > 0 ? `${rt / (32 / match.round)}강(${match.round}${unit})` : `${match.round}강`
                                   return `${blk2}블록 본선 ${roundStr} — ${match.match_index + 1}/${match.round / 2}경기`
                                 })()
-                              : `결승 라운드 — ${match.match_index + 1}/${match.round / 2}경기`
+                              : `결승 라운드 — ${finalRoundLabel(match.round)} ${match.match_index + 1}/${match.round / 2}경기`
                         }
                       </p>
                     )

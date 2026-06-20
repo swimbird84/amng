@@ -4,7 +4,7 @@ import ImagePreview from '../ImagePreview'
 import WorldcupFilterModal, { type WcFilter, countActiveFilters } from '../WorldcupFilterModal'
 import MasterFilterModal, { type MasterFilter, countActiveMasterFilters } from '../MasterFilterModal'
 import type { CupTournament } from './cupTypes'
-import { FORMAT_LABEL, FORMAT_COLOR, STATUS_LABEL, STATUS_COLOR, ROUND_OPTIONS, calcPoolSize, RunDistChart, roundLabel } from './cupConstants'
+import { FORMAT_LABEL, FORMAT_COLOR, STATUS_LABEL, STATUS_COLOR, ROUND_OPTIONS, calcPoolSize, RunDistChart, roundLabel, finalRoundLabel } from './cupConstants'
 
 export default function TournamentCard({
   t,
@@ -156,7 +156,7 @@ export default function TournamentCard({
                   const blk2 = String.fromCharCode(65 + m.block_id)
                   const roundStr = rt > 0 ? `${rt / (32 / m.round)}강(${m.round}${unit})` : `${m.round}강`
                   label = `${blk2}블록 본선 ${roundStr} — ${m.match_index + 1}/${m.round / 2}경기`
-                } else label = `결승 라운드 ${m.match_index + 1}/${m.round / 2}경기`
+                } else label = `결승 라운드 ${finalRoundLabel(m.round)} — ${m.match_index + 1}/${m.round / 2}경기`
               }
             }
             return (
