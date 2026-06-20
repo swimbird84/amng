@@ -1966,15 +1966,24 @@ export function registerCupHandlers(): void {
       div >= 1 && div <= weights.length ? weights[div - 1] : 1.0
 
     const matches = db().prepare(`
-      SELECT item1_id, item2_id, winner_id, is_draw, round FROM cup_matches
+      SELECT item1_id, item2_id, winner_id, is_draw, round, phase FROM cup_matches
       WHERE run_id = ? AND is_bye = 0
-    `).all(runId) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; round: number }[]
+    `).all(runId) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; round: number; phase: string }[]
 
     // 매치 점수 계산 (calcAndStoreRunPoints와 동일 로직)
+    const isWorldcup = run.format === 'worldcup'
+    const wcMultiplier = ((settings as Record<string, unknown>).worldcupMainMultiplier as number) ?? 2.0
     const matchPts = new Map<number, number>()
     for (const m of matches) {
       if (m.item2_id === null) continue
-      if (isMixed) {
+      if (isWorldcup && m.phase === 'main') {
+        if (m.is_draw) {
+          matchPts.set(m.item1_id, (matchPts.get(m.item1_id) ?? 0) + settings.basePoints.draw * wcMultiplier)
+          matchPts.set(m.item2_id, (matchPts.get(m.item2_id) ?? 0) + settings.basePoints.draw * wcMultiplier)
+        } else if (m.winner_id !== null) {
+          matchPts.set(m.winner_id, (matchPts.get(m.winner_id) ?? 0) + settings.basePoints.win * wcMultiplier)
+        }
+      } else if (isMixed) {
         const div1 = divMap.get(m.item1_id) ?? 0
         const div2 = divMap.get(m.item2_id) ?? 0
         if (m.is_draw) {
@@ -2011,9 +2020,13 @@ export function registerCupHandlers(): void {
 
     const calcFinalPts = (item_id: number, mp: number, rank: number) => {
       const bonus = getBonus(rank)
-      if (isMaster && !isMixed) return (mp + bonus) * getDivWeight(divMap.get(item_id) ?? 0, settings.divisionWeights)
-      if (isMixed) return mp + bonus * avgDivWeight
-      return mp + bonus
+      if (isWorldcup) {
+        const w = getDivWeight(divMap.get(item_id) ?? 0, settings.divisionWeights)
+        return Math.round((mp + bonus * w) * 10) / 10
+      }
+      if (isMaster && !isMixed) return Math.round(((mp + bonus) * getDivWeight(divMap.get(item_id) ?? 0, settings.divisionWeights)) * 10) / 10
+      if (isMixed) return Math.round((mp + bonus * avgDivWeight) * 10) / 10
+      return Math.round((mp + bonus) * 10) / 10
     }
 
     // 리그전: 매치 점수만 (순위 보너스는 최종 순위 확정 후)
