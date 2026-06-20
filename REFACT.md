@@ -148,14 +148,130 @@ src/renderer/src/
 
 ## Phase 5: SearchBar.tsx 분할 (1,158줄)
 
-### 현재 문제
-- 3개 드롭다운(배우/스튜디오/태그)이 거의 동일한 구조로 반복
-- 각 드롭다운마다: useState x4, useEffect x3, onKeyDown 핸들러, 필터 리스트 렌더링
+### 현재 구조
 
-### 분할 방안
-- `useSearchDropdown` 훅 추출 (드롭다운 공통 로직)
-- 서브컴포넌트 분리 (DatePickerInput, StarSelect, NumInput 등)
-- 예상 감소: ~600-700줄
+```
+SearchBar.tsx (1,158줄)
+├── 타입/상수 (줄 5-100)
+│   ├── WorkSearchParams 인터페이스 (줄 7-27)
+│   ├── ActorSearchParams 인터페이스 (줄 29-69)
+│   ├── DEFAULT_WORK_SEARCH (줄 71-78)
+│   └── DEFAULT_ACTOR_SEARCH (줄 80-98)
+├── 헬퍼 함수 (줄 102-128)
+│   ├── KO_TO_CUP, STAR_OPTIONS 상수
+│   ├── renderStars() (줄 107)
+│   ├── subtractDate() (줄 117)
+│   └── normalizeDateRaw() (줄 123)
+├── 서브 컴포넌트 (줄 130-282)
+│   ├── DatePickerInput (줄 132-163)
+│   ├── StarDisplay (줄 165-183)
+│   ├── StarSelect (줄 184-251)
+│   ├── NumInput (줄 252-268)
+│   └── CupInput (줄 269-282)
+├── Props 타입/상수 (줄 284-320)
+│   ├── WorkSearchProps, ActorSearchProps 인터페이스
+│   ├── Props 유니온 타입
+│   └── SCORE_FIELDS_ADV 상수
+└── SearchBar 메인 컴포넌트 (줄 321-1158)
+    ├── Advanced 패널 상태/로직 (줄 328-378, ~50줄)
+    ├── Studio 드롭다운 상태/로직 (줄 380-447, ~70줄)
+    ├── Actor 드롭다운 상태/로직 (줄 413-458, ~50줄)
+    ├── Tag 드롭다운 상태/로직 (줄 460-513, ~55줄)
+    ├── 검색조건 chips 생성 (줄 553-630, ~80줄)
+    ├── 렌더: 키워드 입력 (줄 632-642)
+    ├── 렌더: Actor 드롭다운 UI (줄 644-705, ~60줄)
+    ├── 렌더: Tag 드롭다운 UI (줄 720-785, ~65줄)
+    ├── 렌더: Studio 드롭다운 UI (줄 836-884, ~50줄)
+    ├── 렌더: Works 고급 검색 패널 (줄 831-971, ~140줄)
+    ├── 렌더: Actors 고급 검색 패널 (줄 974-1113, ~140줄)
+    └── 렌더: 검색조건 status bar (줄 1115-1155, ~40줄)
+```
+
+### 문제점
+
+1. **드롭다운 반복**: Actor/Studio/Tag 3개 드롭다운이 거의 동일한 상태+이벤트 패턴 반복
+   - 각 드롭다운마다: open/filter/pos/hoverIdx useState 4개 + ESC/mousedown/scrollIntoView useEffect 3~4개
+   - 키보드 네비게이션(ArrowUp/Down/Enter) onKeyDown 핸들러 동일 구조
+   - 총 ~175줄의 상태/이벤트 코드가 3벌
+
+2. **서브 컴포넌트 내장**: DatePickerInput, StarSelect, NumInput 등이 파일 내에 정의
+   - 독립적이라 별도 파일로 추출 가능 (~150줄)
+
+3. **타입 정의 내장**: WorkSearchParams, ActorSearchParams가 SearchBar 내에 정의
+   - Works.tsx, Actors.tsx에서 import하므로 별도 타입 파일이 적절
+
+### 분할 계획
+
+#### Step 1: useFilterDropdown 훅 추출 (~80줄 신규)
+
+3개 드롭다운의 공통 로직을 커스텀 훅으로 추출:
+
+```typescript
+// hooks/useFilterDropdown.ts
+export function useFilterDropdown<T extends { id: number }>({
+  items,             // 전체 항목 목록
+  filterFn,          // 필터 함수
+  onSelect,          // 선택 시 콜백
+  buttonRef,         // 트리거 버튼 ref
+}) {
+  // 반환:
+  // open, setOpen, filter, setFilter, pos, hoverIdx
+  // dropRef, inputKeyDown, filteredItems
+  // open/close 시 ESC 핸들러 자동 등록/해제
+  // mousedown outside 자동 감지
+  // ArrowUp/Down/Enter 키보드 네비게이션
+}
+```
+
+**영향**: SearchBar.tsx에서 ~175줄(3개 드롭다운 상태/이벤트) → 3줄(훅 호출 3번)
+
+#### Step 2: 서브 컴포넌트 분리 (~150줄)
+
+```
+components/search/
+  SearchInputs.tsx    — DatePickerInput, StarDisplay, StarSelect, NumInput, CupInput
+```
+
+**영향**: SearchBar.tsx에서 서브 컴포넌트 정의 ~150줄 제거
+
+#### Step 3: 타입/상수 분리 (~120줄)
+
+```
+components/search/
+  searchTypes.ts      — WorkSearchParams, ActorSearchParams, DEFAULT_*, TagMode, Props 타입
+```
+
+**영향**: SearchBar.tsx에서 타입/상수 ~120줄 제거, Works.tsx/Actors.tsx의 import 경로 변경
+
+#### Step 4 (선택): Works/Actors 고급 검색 패널 분리
+
+고급 검색 패널(줄 831-1113, ~280줄)은 Works/Actors 각각 독립적이므로 별도 컴포넌트 가능:
+
+```
+components/search/
+  WorkAdvancedSearch.tsx   — 작품 고급 검색 (레이블, 발매일, 별점, 배우수, 타이틀, 코멘트)
+  ActorAdvancedSearch.tsx  — 배우 고급 검색 (나이, 데뷔일, 작품수, 평점, 피지컬)
+```
+
+단, props 전달이 복잡해질 수 있어 효과 대비 복잡도 증가 가능.
+
+### 예상 결과
+
+| 작업 | SearchBar.tsx 감소 | 신규 파일 |
+|------|-------------------|----------|
+| Step 1: useFilterDropdown | ~175줄 | hooks/useFilterDropdown.ts (~80줄) |
+| Step 2: 서브 컴포넌트 | ~150줄 | components/search/SearchInputs.tsx (~155줄) |
+| Step 3: 타입/상수 | ~120줄 | components/search/searchTypes.ts (~120줄) |
+| **합계** | **~445줄 감소** | **3개 파일 (~355줄)** |
+
+SearchBar.tsx: 1,158줄 → ~713줄 (Step 1~3 적용 시)
+
+### 우선순위
+
+1. **Step 1 (useFilterDropdown)** — 가장 큰 효과, 중복 제거의 핵심
+2. **Step 3 (타입/상수)** — 단순 이동, 위험도 낮음
+3. **Step 2 (서브 컴포넌트)** — 단순 이동, 위험도 낮음
+4. **Step 4 (고급 검색 패널)** — 선택사항, 복잡도 대비 효과 낮음
 
 ---
 
