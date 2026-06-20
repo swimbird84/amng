@@ -5,7 +5,7 @@ import CardTooltip, { type TooltipState } from '../CardTooltip'
 import Rating from '../Rating'
 import type { ActorScores } from '../../types'
 import { useScoreDemote, ScoreDemoteModal, SCORE_GRADE_LIMITS, type ActorScoreSnapshot, type PendingDemotion } from '../ScoreDemoteModal'
-import type { ItemInfo, CupMatch } from './cupTypes'
+import type { ItemInfo, CupMatch, CupRun } from './cupTypes'
 import { SCORE_FIELDS, SCORE_OPTIONS, itemLabel, itemImagePath, DIV_COLOR } from './cupConstants'
 
 export default function MatchCard({
