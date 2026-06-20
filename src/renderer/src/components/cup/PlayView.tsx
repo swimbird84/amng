@@ -263,7 +263,7 @@ export default function PlayView({
                           />
                         </div>
                         <p className="text-white font-bold text-lg">{itemLabel(winnerItem)}</p>
-                        <div className="self-stretch max-w-2xl mx-auto flex flex-col gap-2">
+                        <div className="w-[672px] flex flex-col gap-2">
                           <p className="text-gray-400 text-sm">코멘트 편집</p>
                           <textarea
                             value={commentDraft}
