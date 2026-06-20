@@ -7,16 +7,7 @@ import WorkForm from '../components/WorkForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
-
-function hashColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return `hsl(${Math.abs(hash) % 360}, 65%, 45%)`
-}
-
-function studioColor(name: string, color?: string | null): string {
-  return color || hashColor(name)
-}
+import { hashColor, studioColor } from '../utils/colorHelpers'
 
 const BATCH_SIZE = 100
 

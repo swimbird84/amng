@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { pushEscHandler, popEscHandler } from '../escManager'
+import { useEscHandler } from '../escManager'
 import type { TagCategory } from '../types'
 import { workTagCategoriesApi, actorTagCategoriesApi, workTagsApi, actorTagsApi } from '../api'
 
@@ -39,11 +39,7 @@ export default function TagCategoryManager({ type, onClose }: Props) {
 
   useEffect(() => { load() }, [type])
 
-  useEffect(() => {
-    const handler = () => onClose()
-    pushEscHandler(handler)
-    return () => popEscHandler(handler)
-  }, [onClose])
+  useEscHandler(() => onClose(), [onClose])
 
   const handleAddCategory = async () => {
     const name = newCatName.trim()

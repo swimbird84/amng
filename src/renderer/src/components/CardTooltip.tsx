@@ -47,15 +47,7 @@ function actorToPhysData(actor: Actor): ActorPhysicalData {
   }
 }
 
-function getAge(birthday: string | null): string {
-  if (!birthday) return '-'
-  return `${Math.floor((Date.now() - new Date(birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000))}세`
-}
-
-function getDebutAge(birthday: string | null, debutDate: string | null): string {
-  if (!birthday || !debutDate) return '-'
-  return `${Math.floor((new Date(debutDate).getTime() - new Date(birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000))}세`
-}
+import { getAge, getDebutAge } from '../utils/dateHelpers'
 
 // ---------- Content components ----------
 function ratingStars(rating: number): string {

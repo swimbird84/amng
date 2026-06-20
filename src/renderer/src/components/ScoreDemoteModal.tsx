@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { pushEscHandler, popEscHandler } from '../escManager'
+import { useState, useRef } from 'react'
+import { useEscHandler } from '../escManager'
 import type { ActorScores } from '../types'
 import ImagePreview from './ImagePreview'
 
@@ -113,10 +113,7 @@ export function ScoreDemoteModal({ step, field, onSelect, onCancel }: {
   onSelect: (id: number) => void
   onCancel: () => void
 }) {
-  useEffect(() => {
-    pushEscHandler(onCancel)
-    return () => popEscHandler(onCancel)
-  }, [onCancel])
+  useEscHandler(onCancel, [onCancel])
 
   const fieldLabel = SCORE_FIELD_LABELS[field]
 

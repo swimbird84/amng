@@ -9,20 +9,7 @@ import Rating from '../components/Rating'
 import RadarChart from '../components/RadarChart'
 import PhysicalCorrectionModal, { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
-
-function getAge(birthday: string | null): string {
-  if (!birthday) return '-'
-  const diff = Date.now() - new Date(birthday).getTime()
-  const age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
-  return `${age}세`
-}
-
-function getDebutAge(birthday: string | null, debutDate: string | null): string {
-  if (!birthday || !debutDate) return '-'
-  const diff = new Date(debutDate).getTime() - new Date(birthday).getTime()
-  const age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
-  return `${age}세`
-}
+import { getAge, getDebutAge } from '../utils/dateHelpers'
 
 interface ActorsProps {
   onNavigateToWork?: (id: number) => void

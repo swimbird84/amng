@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+
 type EscHandler = () => void
 const stack: EscHandler[] = []
 
@@ -15,3 +17,11 @@ document.addEventListener('keydown', (e) => {
   e.stopImmediatePropagation()
   stack[stack.length - 1]()
 }, true)
+
+export function useEscHandler(handler: EscHandler | null | undefined, deps: unknown[] = []): void {
+  useEffect(() => {
+    if (!handler) return
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
+  }, deps)
+}

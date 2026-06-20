@@ -7,17 +7,11 @@ import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
+import { hashColor } from '../utils/colorHelpers'
 
 interface Props {
   onNavigateToWork: (id: number) => void
   onNavigateToActor: (id: number) => void
-}
-
-// 작품 카드 (발매일 분포용, 기존 Works.tsx 카드와 동일한 디자인)
-function hashColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return `hsl(${Math.abs(hash) % 360}, 65%, 45%)`
 }
 
 function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & { rep_tags?: { id: number; name: string }[]; rep_actors?: { id: number; name: string }[] }; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {

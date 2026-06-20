@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { pushEscHandler, popEscHandler } from '../escManager'
+import { useEscHandler } from '../escManager'
 import type { Actor } from '../types'
 import { actorsApi, shellApi } from '../api'
 import ImagePreview from './ImagePreview'
@@ -15,15 +15,7 @@ interface Props {
   zIndex?: number
 }
 
-function getAge(birthday: string | null): string {
-  if (!birthday) return '-'
-  return `${Math.floor((Date.now() - new Date(birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000))}세`
-}
-
-function getDebutAge(birthday: string | null, debutDate: string | null): string {
-  if (!birthday || !debutDate) return '-'
-  return `${Math.floor((new Date(debutDate).getTime() - new Date(birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000))}세`
-}
+import { getAge, getDebutAge } from '../utils/dateHelpers'
 
 const defaultScores = { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
 
@@ -33,11 +25,7 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
-  useEffect(() => {
-    const handler = () => onCloseRef.current()
-    pushEscHandler(handler)
-    return () => popEscHandler(handler)
-  }, [])
+  useEscHandler(() => onCloseRef.current(), [])
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
   const [workSortDir, setWorkSortDir] = useState<'asc' | 'desc'>('desc')
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)

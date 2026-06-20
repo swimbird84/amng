@@ -40,15 +40,7 @@ function bucketHigh(b: string): number {
   return parseInt(b.split('~')[0])
 }
 
-function hashColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return `hsl(${Math.abs(hash) % 360}, 65%, 45%)`
-}
-
-function resolvedColor(name: string, color?: string | null): string {
-  return color || hashColor(name)
-}
+import { hashColor, studioColor as resolvedColor } from '../utils/colorHelpers'
 
 
 function ColorButton({ color, isSelected, onClick, title, children }: {

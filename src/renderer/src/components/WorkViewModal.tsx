@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { pushEscHandler, popEscHandler } from '../escManager'
+import { useEscHandler } from '../escManager'
 import type { Work } from '../types'
 import { worksApi, shellApi } from '../api'
 import ImagePreview from './ImagePreview'
@@ -13,15 +13,7 @@ interface Props {
   zIndex?: number
 }
 
-function hashColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return `hsl(${Math.abs(hash) % 360}, 65%, 45%)`
-}
-
-function studioColor(name: string, color?: string | null): string {
-  return color || hashColor(name)
-}
+import { hashColor, studioColor } from '../utils/colorHelpers'
 
 export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zIndex = 60 }: Props) {
   const [work, setWork] = useState<Work | null>(null)
@@ -29,11 +21,7 @@ export default function WorkViewModal({ workId, onClose, onViewActor, onEdit, zI
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
-  useEffect(() => {
-    const handler = () => onCloseRef.current()
-    pushEscHandler(handler)
-    return () => popEscHandler(handler)
-  }, [])
+  useEscHandler(() => onCloseRef.current(), [])
 
 
   useEffect(() => {

@@ -34,15 +34,7 @@ interface Props {
 
 type SortBy = 'name' | 'count' | 'label_count' | 'maker_created' | 'label_created'
 
-function hashColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return `hsl(${Math.abs(hash) % 360}, 65%, 45%)`
-}
-
-function resolvedColor(name: string, color?: string | null): string {
-  return color || hashColor(name)
-}
+import { hashColor, studioColor as resolvedColor } from '../utils/colorHelpers'
 
 const COLOR_PALETTE = [
   ...Array.from({ length: 100 }, (_, i) => `hsl(${i * 3.6}, 65%, 45%)`),

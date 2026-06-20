@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { pushEscHandler, popEscHandler } from '../escManager'
+import { useEscHandler } from '../escManager'
 import type { Tag } from '../types'
 import {
   workTagsApi, actorTagsApi,
@@ -65,11 +65,7 @@ export default function TagLinkModal({ type, onClose }: Props) {
     reloadLinks()
   }, [])
 
-  useEffect(() => {
-    const handler = () => onClose()
-    pushEscHandler(handler)
-    return () => popEscHandler(handler)
-  }, [onClose])
+  useEscHandler(() => onClose(), [onClose])
 
   const childrenOf = (parentId: number) =>
     links.filter(l => l.parent_tag_id === parentId).map(l => l.child_tag_id)

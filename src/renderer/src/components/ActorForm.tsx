@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { pushEscHandler, popEscHandler } from '../escManager'
+import { useEscHandler } from '../escManager'
 import type { Actor, Tag, ActorScores } from '../types'
 import { actorsApi, actorTagsApi, actorTagCategoriesApi, dialogApi, imageApi, actorTagLinksApi } from '../api'
 import TagSelector from './TagSelector'
@@ -55,12 +55,8 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [tagLinks, setTagLinks] = useState<{ parent_tag_id: number; child_tag_id: number }[]>([])
 
-  useEffect(() => {
-    const handler = () => {
-      if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel()
-    }
-    pushEscHandler(handler)
-    return () => popEscHandler(handler)
+  useEscHandler(() => {
+    if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel()
   }, [onCancel])
 
   useEffect(() => {
