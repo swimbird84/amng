@@ -187,6 +187,7 @@ export default function CardTooltip({ tooltip }: Props) {
         actorsApi.get(tooltip.id) as Promise<Actor>,
         ensurePhysStats(),
       ]).then(([a]) => {
+        if (!a) return
         setActor(a)
         if (physStatsCache) {
           const settings = loadSettings()
