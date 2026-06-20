@@ -188,8 +188,6 @@ export const cupApi = {
     api.invoke('cup:tournament-rankings', { tournamentId, ...params }) as Promise<{ rows: unknown[]; total: number }>,
   runProgress: (runId: number) =>
     api.invoke('cup:run-progress', runId) as Promise<{ match: { round: number; match_index: number; phase: string; group_id: number | null } | null; total: number; done: number; groupMatchDone: number | null; groupMatchTotal: number | null; mainRoundDone: number | null; mainRoundTotal: number | null }>,
-  runLiveScores: (runId: number) =>
-    api.invoke('cup:run-live-scores', { runId }) as Promise<{ item_id: number; pts: number; rank: number }[]>,
   lastRunRankings: (tournamentId: number, params?: { limit?: number; offset?: number }) =>
     api.invoke('cup:last-run-rankings', { tournamentId, ...params }) as Promise<{ rows: unknown[]; total: number; runId: number | null; format?: string }>,
   tournamentStats: (tournamentId: number) =>

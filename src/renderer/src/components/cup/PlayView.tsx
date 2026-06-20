@@ -23,13 +23,12 @@ export default function PlayView({
   onNavigateToActor: (id: number) => void
   onNavigateToWork: (id: number) => void
 }) {
-  const [tab, setTab] = useState<'match' | 'standings' | 'rank'>(initialTab)
+  const [tab, setTab] = useState<'match' | 'standings'>(initialTab)
   const [tournament, setTournament] = useState<CupTournament | null>(null)
   const [run, setRun] = useState<CupRun | null>(null)
   const [currentMatch, setCurrentMatch] = useState<CupMatch | null | 'done'>(null)
   const [progress, setProgress] = useState<{ total: number; done: number; groupDone: number | null; groupTotal: number | null; mainRoundDone: number | null; mainRoundTotal: number | null }>({ total: 0, done: 0, groupDone: null, groupTotal: null, mainRoundDone: null, mainRoundTotal: null })
   const [items, setItems] = useState<Map<number, ItemInfo>>(new Map())
-  const [liveScores, setLiveScores] = useState<{ item_id: number; pts: number; rank: number }[]>([])
   const [divisionMap, setDivisionMap] = useState<Record<number, number>>({})
   const [standings, setStandings] = useState<{
     type: string
@@ -125,17 +124,8 @@ export default function PlayView({
     }
   }, [run?.id, tournament, fetchItemInfo])
 
-  const loadLiveScores = useCallback(async () => {
-    const runId = run?.id
-    if (!runId || !tournament) return
-    const scores = await cupApi.runLiveScores(runId)
-    setLiveScores(scores)
-    for (const s of scores) fetchItemInfo(s.item_id, tournament.type)
-  }, [run?.id, tournament, fetchItemInfo])
-
   useEffect(() => { load() }, [load])
   useEffect(() => { if (tab === 'standings') loadStandings() }, [tab, loadStandings])
-  useEffect(() => { if (tab === 'rank') loadLiveScores() }, [tab, loadLiveScores])
 
   const doPickApi = async (matchId: number, winnerId: number | null, isDraw = false) => {
     try {
@@ -144,7 +134,6 @@ export default function PlayView({
       if ('done' in next && next.done) {
         setCurrentMatch('done')
         load()
-        if (tab === 'rank') loadLiveScores()
       } else {
         const m = next as CupMatch
         setCurrentMatch(m)
@@ -167,7 +156,6 @@ export default function PlayView({
         } else {
           setProgress(p => ({ ...p, groupDone: null, groupTotal: null, mainRoundDone: null, mainRoundTotal: null }))
         }
-        if (tab === 'rank') loadLiveScores()
       }
     } catch (e) {
       alert((e as Error).message)
@@ -225,13 +213,13 @@ export default function PlayView({
 
             {/* 탭 */}
             <div className="ml-auto flex items-center gap-1 bg-gray-800 rounded-lg px-2 py-1 shrink-0">
-              {(['match', 'standings', 'rank'] as const).map(key => (
+              {(['match', 'standings'] as const).map(key => (
                 <button
                   key={key}
                   onClick={() => setTab(key)}
                   className={`px-3 py-1 rounded text-xs font-medium transition ${tab === key ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
                 >
-                  {key === 'match' ? '매치' : key === 'standings' ? '현황' : '순위'}
+                  {key === 'match' ? '매치' : '현황'}
                 </button>
               ))}
             </div>
@@ -1141,75 +1129,6 @@ export default function PlayView({
           </div>
         )}
 
-        {tab === 'rank' && (
-          <div className="p-4">
-            {liveScores.length === 0 ? (
-              <p className="text-gray-500 text-center py-8 text-sm">아직 진행된 매치가 없습니다.</p>
-            ) : (
-              <>
-                {tournament && (tournament.format === 'tournament' || tournament.format === 'worldcup') && (
-                  <p className="text-xs text-gray-500 mb-3">
-                    진출 중인 참가자는 보장된 최소 순위 기준 예상 점수로 표시됩니다.
-                  </p>
-                )}
-                {tournament && tournament.format === 'league' && (
-                  <p className="text-xs text-gray-500 mb-3">
-                    순위 보너스는 대회 완료 후 최종 반영됩니다.
-                  </p>
-                )}
-                <div className="bg-gray-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm table-fixed">
-                    <thead>
-                      <tr className="border-b border-gray-700 text-gray-400 text-xs">
-                        <th className="px-3 py-2 text-center w-12">순위</th>
-                        <th className="px-3 py-2 text-left">이름</th>
-                        <th className="px-3 py-2 text-right w-16">점수</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {liveScores.map((row, idx) => {
-                        const item = items.get(row.item_id)
-                        const imgPath = item ? itemImagePath(item) : null
-                        const prevPts = idx > 0 ? liveScores[idx - 1].pts : null
-                        const isTied = prevPts !== null && prevPts === row.pts
-                        return (
-                          <tr
-                            key={row.item_id}
-                            className="border-b border-gray-700/50 hover:bg-gray-700/30 transition"
-                          >
-                            <td className="px-3 py-2 text-center">
-                              <span className={`font-bold text-sm ${row.rank === 1 ? 'text-yellow-400' : row.rank === 2 ? 'text-gray-300' : row.rank === 3 ? 'text-amber-600' : 'text-gray-500'}`}>
-                                {isTied ? '=' : row.rank}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 overflow-hidden">
-                              <div className="flex items-center gap-2 min-w-0">
-                                {imgPath && (
-                                  <div className="w-7 h-7 rounded overflow-hidden shrink-0">
-                                    <ImagePreview path={imgPath} alt="" className="w-full h-full" objectPosition="center 10%" />
-                                  </div>
-                                )}
-                                <span
-                                  className="text-gray-200 truncate cursor-pointer hover:text-blue-400"
-                                  onClick={() => item && (tournament?.type === 'actor' ? onNavigateToActor(item.id) : onNavigateToWork(item.id))}
-                                >
-                                  {item ? itemLabel(item) : `#${row.item_id}`}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              <span className="text-green-400 font-semibold">{row.pts.toFixed(1)}</span>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )
