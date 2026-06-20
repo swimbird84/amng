@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { actorsApi, worksApi, shellApi, masterRankingApi } from '../../api'
+import { cupApi, actorsApi, worksApi, shellApi, masterRankingApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import Rating from '../Rating'
