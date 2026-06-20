@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { cupApi } from '../../api'
 import ImagePreview from '../ImagePreview'
+import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { CupTournament, TournamentRankRow, LastRunRankRow } from './cupTypes'
 import { RANK_PAGE_SIZE, RANK_LIMIT_OPTIONS, FORMAT_LABEL, Pagination, RankTrendChart, roundLabel } from './cupConstants'
 
