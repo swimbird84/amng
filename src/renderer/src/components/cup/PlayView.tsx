@@ -628,12 +628,13 @@ export default function PlayView({
 
               // item_id → { group_id, rank, division } 맵
               const divisionMap = standings.divisionMap ?? {}
-              const itemOriginMap = new Map<number, { group_id: number; rank: number }>()
+              const itemOriginMap = new Map<number, { group_id: number; rank: number; block_label: string }>()
               standings.groupPhase?.blocks.forEach(b => b.groups.forEach(g => {
                 const gqs = (g as any).qualifiers as number[] | null | undefined
+                const blkLabel = String.fromCharCode(65 + b.block_id)
                 g.standings.forEach((row, idx) => {
                   const qIdx = gqs ? gqs.indexOf(row.item_id) : -1
-                  itemOriginMap.set(row.item_id, { group_id: g.group_id, rank: qIdx !== -1 ? qIdx + 1 : idx + 1 })
+                  itemOriginMap.set(row.item_id, { group_id: g.group_id, rank: qIdx !== -1 ? qIdx + 1 : idx + 1, block_label: blkLabel })
                 })
               }))
               const DIV_TEXT: Record<number, string> = {
@@ -645,7 +646,7 @@ export default function PlayView({
                 const div = divisionMap[itemId] ?? 0
                 const divText = div === 0 ? '미지정' : `${div}부`
                 if (!origin) return null
-                return { text: `${divText}/${origin.group_id}조/${origin.rank}위`, color: DIV_TEXT[div] ?? 'text-gray-500' }
+                return { text: `${divText}/${origin.group_id}조/${origin.rank}위/${origin.block_label}블록`, color: DIV_TEXT[div] ?? 'text-gray-500' }
               }
 
               const sortedBlocks = [...(standings.blockTournaments ?? [])].sort((a, b) => {
@@ -805,7 +806,7 @@ export default function PlayView({
                           const isLastRound = rdIdx === frRoundsSorted.length - 1
                           return (
                             <React.Fragment key={rd.round}>
-                              <div className="flex flex-col" style={{ width: 200 }}>
+                              <div className="flex flex-col" style={{ width: 240 }}>
                                 <div className="text-center text-xs text-yellow-500/70 py-1 border-b border-gray-700/40 mb-1">
                                   {finalRoundLabel(rd.round)}
                                 </div>
@@ -821,7 +822,7 @@ export default function PlayView({
                                         <div className={`text-xs px-2 py-0.5 rounded-t border-l-2 ${m.winner_id === m.item1_id ? 'border-yellow-400 bg-yellow-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
                                           {o1 ? (
                                             <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item1_id ? 'opacity-40 line-through' : ''}`}>
-                                              <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>
+                                              <span className={`w-[105px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>
                                               <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
                                             </span>
                                           ) : (
@@ -831,7 +832,7 @@ export default function PlayView({
                                         <div className={`text-xs px-2 py-0.5 rounded-b border-l-2 border-t border-gray-700/30 ${m.winner_id === m.item2_id ? 'border-yellow-400 bg-yellow-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
                                           {o2 ? (
                                             <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item2_id ? 'opacity-40 line-through' : ''}`}>
-                                              <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>
+                                              <span className={`w-[105px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>
                                               <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : `#${m.item2_id}`}</span>
                                             </span>
                                           ) : (
@@ -887,14 +888,14 @@ export default function PlayView({
                           const o = originLabel(champion)
                           const topPx = (FINAL_SLOTS / 2 - 1) * SLOT_H
                           return (
-                            <div className="flex flex-col" style={{ width: 200 }}>
+                            <div className="flex flex-col" style={{ width: 240 }}>
                               <div className="text-center text-xs text-yellow-400 py-1 border-b border-gray-700/40 mb-1">🏆 우승</div>
                               <div className="relative" style={{ height: FINAL_SLOTS * SLOT_H }}>
                                 <div className="absolute left-1 right-1" style={{ top: topPx }}>
                                   <div className="text-xs px-2 py-0.5 rounded border-l-2 border-yellow-400 bg-yellow-900/30 font-semibold">
                                     {o ? (
                                       <span className="flex items-center gap-1">
-                                        <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o.color}`}>{o.text}</span>
+                                        <span className={`w-[105px] shrink-0 font-bold text-[10px] truncate ${o.color}`}>{o.text}</span>
                                         <span className="w-[120px] shrink-0 truncate text-yellow-200">{item ? itemLabel(item) : `#${champion}`}</span>
                                       </span>
                                     ) : <span className="text-yellow-200">{item ? itemLabel(item) : `#${champion}`}</span>}
