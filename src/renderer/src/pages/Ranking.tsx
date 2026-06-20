@@ -88,9 +88,13 @@ export default function Ranking({ onNavigateToActor }: Props) {
   const [rankBy, setRankBy] = useState<RankBy>(() => {
     const idx = parseInt(sessionStorage.getItem('ranking:rotateIndex') ?? '-1')
     const next = (idx + 1) % RANK_ITEMS.length
-    sessionStorage.setItem('ranking:rotateIndex', String(next))
     return RANK_ITEMS[next].value
   })
+
+  useEffect(() => {
+    const idx = RANK_ITEMS.findIndex(i => i.value === rankBy)
+    if (idx >= 0) sessionStorage.setItem('ranking:rotateIndex', String(idx))
+  }, [])
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     () => (localStorage.getItem('ranking:sortDir') as 'asc' | 'desc') || 'desc'
   )
