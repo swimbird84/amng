@@ -4,7 +4,7 @@ import ImagePreview from '../ImagePreview'
 import WorldcupFilterModal, { type WcFilter, countActiveFilters } from '../WorldcupFilterModal'
 import MasterFilterModal, { type MasterFilter, countActiveMasterFilters } from '../MasterFilterModal'
 import type { CupTournament } from './cupTypes'
-import { FORMAT_LABEL, FORMAT_COLOR, STATUS_LABEL, STATUS_COLOR, ROUND_OPTIONS, calcPoolSize, RunDistChart } from './cupConstants'
+import { FORMAT_LABEL, FORMAT_COLOR, STATUS_LABEL, STATUS_COLOR, ROUND_OPTIONS, calcPoolSize, RunDistChart, roundLabel } from './cupConstants'
 
 export default function TournamentCard({
   t,
