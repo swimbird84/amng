@@ -118,6 +118,22 @@ export default function RankingSettingsModal({ onClose }: { onClose: () => void 
               </div>
             </section>
 
+            {/* 포인트 집계 범위 */}
+            <section>
+              <h3 className="text-gray-300 font-semibold text-sm mb-1">포인트 집계 범위 <span className="text-gray-500 font-normal text-xs">(0 = 전체 누적)</span></h3>
+              <div className="flex items-center gap-3 mt-2">
+                <label className="text-xs text-gray-400">최근</label>
+                <NumInput
+                  value={cur.recentRunLimit ?? 0}
+                  onChange={v => update(s => ({ ...s, recentRunLimit: Math.max(0, Math.round(v)) }))}
+                  min={0}
+                  step={1}
+                />
+                <span className="text-xs text-gray-400">회</span>
+                <span className="text-xs text-gray-500">{(cur.recentRunLimit ?? 0) === 0 ? '(모든 대회 포인트 합산)' : `(최근 ${cur.recentRunLimit}회 포인트만 합산)`}</span>
+              </div>
+            </section>
+
             {/* 부별 가중치 */}
             <section>
               <h3 className="text-gray-300 font-semibold text-sm mb-1">부별 가중치 <span className="text-gray-500 font-normal text-xs">(부별 대회: 자기 부 기준)</span></h3>

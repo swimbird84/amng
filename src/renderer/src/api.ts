@@ -133,25 +133,17 @@ export const dashboardApi = {
   ratingDist: () => api.invoke('dashboard:rating-dist'),
   newActors: () => api.invoke('dashboard:new-actors'),
   ageDist: () => api.invoke('dashboard:age-dist'),
-  actorScoreRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-score-ranking', limit, reverse),
-  actorWorkCountRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-workcount-ranking', limit, reverse),
-  actorBustRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-bust-ranking', limit, reverse),
-  actorHipRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-hip-ranking', limit, reverse),
-  actorWaistRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-waist-ranking', limit, reverse),
-  actorHeightRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-height-ranking', limit, reverse),
-  actorRatioRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-ratio-ranking', limit, reverse),
-  actorFavoriteRanking: (limit?: number, reverse?: boolean) => api.invoke('dashboard:actor-favorite-ranking', limit, reverse),
-  workTagDist: () => api.invoke('dashboard:work-tag-dist'),
-  actorTagDist: () => api.invoke('dashboard:actor-tag-dist'),
   actorScoreDist: () => api.invoke('dashboard:actor-score-dist'),
   actorPhysicalDist: () => api.invoke('dashboard:actor-physical-dist'),
-  actorCupDist: () => api.invoke('dashboard:actor-cup-dist'),
   ratingWorks: (bucket: number) => api.invoke('dashboard:rating-works', bucket),
   debutAgeDist: () => api.invoke('dashboard:debut-age-dist'),
   debutYears: () => api.invoke('dashboard:debut-years'),
   debutMonths: (year: string) => api.invoke('dashboard:debut-months', year),
   debutMonthActors: (year: string, month: number) => api.invoke('dashboard:debut-month-actors', year, month),
-  studioDist: () => api.invoke('dashboard:studio-dist'),
+  rankChangeChart: (type: 'actor' | 'work', limit?: number, division?: number, maxRank?: number) => api.invoke('dashboard:rank-change-chart', { type, limit, division, maxRank }) as Promise<{
+    runs: { runId: number; label: string; completedAt: string }[]
+    series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[] }[]
+  }>,
 }
 
 // 이미지

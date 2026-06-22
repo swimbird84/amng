@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { cupApi, masterRankingApi } from '../../api'
+import { cupApi, masterRankingApi, dashboardApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { MasterRankRow, FormatStat, H2HRow, DivHistEntry, RateTooltip } from './cupTypes'
 import { RANK_MEDAL, MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
 import RankingSettingsModal from './RankingSettingsModal'
+import { pushEscHandler, popEscHandler } from '../../escManager'
 
 export default function MasterRankingView({
   onBack,
@@ -51,6 +52,16 @@ export default function MasterRankingView({
   const [h2hDivFilter, setH2hDivFilter] = useState<number | null>(null)
   const [h2hDivDropdown, setH2hDivDropdown] = useState(false)
 
+  // 랭킹 차트
+  const [rankChartModal, setRankChartModal] = useState(false)
+  const [rankChartDiv, setRankChartDiv] = useState(1)
+  const [rankChartLimit, setRankChartLimit] = useState(10)
+  const [rankChartData, setRankChartData] = useState<{
+    runs: { runId: number; label: string; completedAt: string }[]
+    series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[] }[]
+  } | null>(null)
+  const [rankChartHover, setRankChartHover] = useState<number | null>(null)
+
   const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc') => {
     setLoading(true)
     try {
@@ -83,6 +94,26 @@ export default function MasterRankingView({
   useEffect(() => {
     cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
   }, [type])
+
+  useEffect(() => {
+    if (!rankChartModal) return
+    const handler = () => setRankChartModal(false)
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
+  }, [rankChartModal])
+
+  const CHART_DIV_CONFIG: { div: number; label: string; maxRank?: number }[] = [
+    { div: 1, label: '1부 전체' },
+    { div: 2, label: '2부 30위', maxRank: 30 },
+    { div: 3, label: '3부 20위', maxRank: 20 },
+  ]
+
+  useEffect(() => {
+    if (!rankChartModal) return
+    setRankChartData(null)
+    const cfg = CHART_DIV_CONFIG.find(c => c.div === rankChartDiv)
+    dashboardApi.rankChangeChart(type, rankChartLimit, rankChartDiv, cfg?.maxRank).then(setRankChartData)
+  }, [rankChartModal, type, rankChartLimit, rankChartDiv])
 
   const imgPath = (row: MasterRankRow) => row.photo_path ?? row.cover_path ?? null
   const label = (row: MasterRankRow) => row.name ?? row.title ?? row.product_number ?? `#${row.id}`
@@ -250,6 +281,13 @@ export default function MasterRankingView({
                 {DIV_LABEL[division] ?? `${division}부`} <span className="opacity-70">{DIV_STD_SIZES[division] != null ? `${DIV_STD_SIZES[division]}(${count})` : count}</span>
               </button>
             ))}
+            <div className="flex-1" />
+            <button
+              onClick={() => setRankChartModal(true)}
+              className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
+            >
+              랭킹차트
+            </button>
           </div>
         )}
       </div>
@@ -815,6 +853,131 @@ export default function MasterRankingView({
                   </div>
                 )
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1부리그 랭킹차트 모달 */}
+      {rankChartModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setRankChartModal(false)}>
+          <div className="bg-gray-800 rounded-lg w-[95vw] h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setRankChartModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
+            <div className="shrink-0 px-6 pt-6 pb-3 border-b border-gray-700 flex items-center gap-4">
+              <h2 className="text-lg font-bold text-white">{type === 'actor' ? '배우' : '작품'} 랭킹차트</h2>
+              <div className="flex">
+                {CHART_DIV_CONFIG.map(cfg => (
+                  <button
+                    key={cfg.div}
+                    onClick={() => setRankChartDiv(cfg.div)}
+                    className={`text-xs px-2.5 py-1 border-r last:border-r-0 border-gray-600 first:rounded-l last:rounded-r ${
+                      rankChartDiv === cfg.div ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {cfg.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-400">최근</span>
+                <select
+                  value={rankChartLimit}
+                  onChange={(e) => setRankChartLimit(Number(e.target.value))}
+                  className="bg-gray-700 text-white text-xs px-2 py-1 rounded"
+                >
+                  <option value={5}>5회</option>
+                  <option value={10}>10회</option>
+                  <option value={20}>20회</option>
+                  <option value={9999}>전체</option>
+                </select>
+              </div>
+              {rankChartData && (
+                <span className="text-xs text-gray-500">{rankChartData.series.length}명 · {rankChartData.runs.length}회</span>
+              )}
+            </div>
+            <div className="flex-1 overflow-hidden p-6">
+              {rankChartData && rankChartData.runs.length > 0 && rankChartData.series.length > 0 ? (() => {
+                const { runs, series } = rankChartData
+                const cfg = CHART_DIV_CONFIG.find(c => c.div === rankChartDiv)
+                const maxRank = cfg?.maxRank ?? 32
+                const PADDING = { top: 20, right: 20, bottom: 40, left: 50 }
+                return (
+                  <svg
+                    className="w-full h-full"
+                    viewBox="0 0 1000 700"
+                    preserveAspectRatio="xMidYMid meet"
+                    onMouseLeave={() => setRankChartHover(null)}
+                  >
+                    {Array.from({ length: maxRank }, (_, i) => {
+                      const rank = i + 1
+                      const y = PADDING.top + (rank - 1) / (maxRank - 1) * (700 - PADDING.top - PADDING.bottom)
+                      return (
+                        <g key={`y-${rank}`}>
+                          <line x1={PADDING.left} y1={y} x2={1000 - PADDING.right} y2={y} stroke="#374151" strokeWidth={0.5} />
+                          {(rank === 1 || rank % 5 === 0 || rank === maxRank) && (
+                            <text x={PADDING.left - 8} y={y + 4} textAnchor="end" fill="#9CA3AF" fontSize={11}>{rank}</text>
+                          )}
+                        </g>
+                      )
+                    })}
+                    {runs.map((run, i) => {
+                      const x = PADDING.left + i / Math.max(runs.length - 1, 1) * (1000 - PADDING.left - PADDING.right)
+                      const lbl = run.label.length > 10 ? run.label.slice(0, 10) + '...' : run.label
+                      return (
+                        <g key={`x-${i}`}>
+                          <line x1={x} y1={PADDING.top} x2={x} y2={700 - PADDING.bottom} stroke="#374151" strokeWidth={0.5} />
+                          <text x={x} y={700 - PADDING.bottom + 16} textAnchor="middle" fill="#9CA3AF" fontSize={10}>{lbl}</text>
+                          <text x={x} y={700 - PADDING.bottom + 28} textAnchor="middle" fill="#6B7280" fontSize={8}>{run.completedAt?.slice(0, 10) ?? ''}</text>
+                        </g>
+                      )
+                    })}
+                    {series.map((s, si) => {
+                      const hue = (si * 360) / Math.max(series.length, 1)
+                      const color = `hsl(${hue}, 70%, 55%)`
+                      const isHovered = rankChartHover === s.id
+                      const isOtherHovered = rankChartHover !== null && rankChartHover !== s.id
+                      const opacity = isOtherHovered ? 0.08 : isHovered ? 1 : 0.5
+                      const strokeW = isHovered ? 3 : s.currentRank <= 5 ? 2 : 1.2
+                      const points: { x: number; y: number; rank: number }[] = []
+                      for (let i = 0; i < runs.length; i++) {
+                        const rank = s.ranks[i]
+                        if (rank != null && rank <= maxRank) {
+                          const x = PADDING.left + i / Math.max(runs.length - 1, 1) * (1000 - PADDING.left - PADDING.right)
+                          const y = PADDING.top + (rank - 1) / (maxRank - 1) * (700 - PADDING.top - PADDING.bottom)
+                          points.push({ x, y, rank })
+                        }
+                      }
+                      if (points.length === 0) return null
+                      const pathD = points.map((p, pi) => `${pi === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+                      const navigateFn = type === 'actor' ? onNavigateToActor : onNavigateToWork
+                      return (
+                        <g
+                          key={s.id}
+                          opacity={opacity}
+                          onMouseEnter={() => setRankChartHover(s.id)}
+                          onClick={() => { navigateFn(s.id); setRankChartModal(false) }}
+                          className="cursor-pointer"
+                        >
+                          <path d={pathD} fill="none" stroke={color} strokeWidth={strokeW} strokeLinejoin="round" />
+                          {points.map((p, pi) => (
+                            <circle key={pi} cx={p.x} cy={p.y} r={isHovered ? 4 : 2.5} fill={color} />
+                          ))}
+                          {isHovered && points.map((p, pi) => (
+                            <text key={`t-${pi}`} x={p.x} y={p.y - 8} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">{p.rank}</text>
+                          ))}
+                          {isHovered && points.length > 0 && (
+                            <text x={points[points.length - 1].x + 8} y={points[points.length - 1].y + 4} fill={color} fontSize={11} fontWeight="bold">{s.name}</text>
+                          )}
+                        </g>
+                      )
+                    })}
+                  </svg>
+                )
+              })() : (
+                <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                  {rankChartData ? '마스터 대회 기록이 없습니다' : '로딩 중...'}
+                </div>
+              )}
             </div>
           </div>
         </div>

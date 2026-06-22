@@ -224,162 +224,6 @@ export function registerDashboardHandlers(): void {
     return rawActors.map(a => ({ ...a, rep_tags: aRepTagMap.get(a.id as number) ?? [] }))
   })
 
-  ipcMain.handle('dashboard:actor-score-ranking', (_e, limit?: number, reverse?: boolean) => {
-    const lim = limit ? `LIMIT ${limit}` : ''
-    const d = reverse ? 'ASC' : 'DESC'
-    return db().prepare(`
-      SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        COUNT(*) OVER () AS total_count
-      FROM actors a
-      LEFT JOIN work_actors wa ON wa.actor_id = a.id
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      GROUP BY a.id ORDER BY avg_score ${d}, work_count ${d} ${lim}
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-workcount-ranking', (_e, limit?: number, reverse?: boolean) => {
-    const lim = limit ? `LIMIT ${limit}` : ''
-    const d = reverse ? 'ASC' : 'DESC'
-    return db().prepare(`
-      SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        COUNT(*) OVER () AS total_count
-      FROM actors a
-      LEFT JOIN work_actors wa ON wa.actor_id = a.id
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      GROUP BY a.id ORDER BY work_count ${d}, avg_score ${d} ${lim}
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-bust-ranking', (_e, limit?: number, reverse?: boolean) => {
-    const lim = limit ? `LIMIT ${limit}` : ''
-    const d = reverse ? 'ASC' : 'DESC'
-    return db().prepare(`
-      SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        COUNT(*) OVER () AS total_count
-      FROM actors a
-      LEFT JOIN work_actors wa ON wa.actor_id = a.id
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.bust IS NOT NULL
-      GROUP BY a.id ORDER BY a.bust ${d}, avg_score ${d}, work_count ${d} ${lim}
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-hip-ranking', (_e, limit?: number, reverse?: boolean) => {
-    const lim = limit ? `LIMIT ${limit}` : ''
-    const d = reverse ? 'ASC' : 'DESC'
-    return db().prepare(`
-      SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        COUNT(*) OVER () AS total_count
-      FROM actors a
-      LEFT JOIN work_actors wa ON wa.actor_id = a.id
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.hip IS NOT NULL
-      GROUP BY a.id ORDER BY a.hip ${d}, avg_score ${d}, work_count ${d} ${lim}
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-waist-ranking', (_e, limit?: number, reverse?: boolean) => {
-    const lim = limit ? `LIMIT ${limit}` : ''
-    const primary = reverse ? 'DESC' : 'ASC'
-    const secondary = reverse ? 'ASC' : 'DESC'
-    return db().prepare(`
-      SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        COUNT(*) OVER () AS total_count
-      FROM actors a
-      LEFT JOIN work_actors wa ON wa.actor_id = a.id
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.waist IS NOT NULL
-      GROUP BY a.id ORDER BY a.waist ${primary}, avg_score ${secondary}, work_count ${secondary} ${lim}
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-height-ranking', (_e, limit?: number, reverse?: boolean) => {
-    const lim = limit ? `LIMIT ${limit}` : ''
-    const d = reverse ? 'ASC' : 'DESC'
-    return db().prepare(`
-      SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        COUNT(*) OVER () AS total_count
-      FROM actors a
-      LEFT JOIN work_actors wa ON wa.actor_id = a.id
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.height IS NOT NULL
-      GROUP BY a.id ORDER BY a.height ${d}, avg_score ${d}, work_count ${d} ${lim}
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-ratio-ranking', (_e, limit?: number, reverse?: boolean) => {
-    const lim = limit ? `LIMIT ${limit}` : ''
-    const d = reverse ? 'ASC' : 'DESC'
-    return db().prepare(`
-      WITH stats AS (
-        SELECT
-          MIN(height) AS min_h, MAX(height) AS max_h,
-          MIN(bust)   AS min_b, MAX(bust)   AS max_b,
-          MIN(waist)  AS min_w, MAX(waist)  AS max_w,
-          MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
-        FROM actors
-        WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
-      )
-      SELECT a.*, COUNT(wa.work_id) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        ROUND((
-          (
-            COALESCE(CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10, 5.0) +
-            COALESCE(CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10, 5.0) +
-            COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
-            COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
-          ) / 4.0 * 0.3 +
-          (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 6.5 * 0.7
-        ), 2) AS ratio_score,
-        COUNT(*) OVER () AS total_count
-      FROM actors a, stats
-      LEFT JOIN work_actors wa ON wa.actor_id = a.id
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
-      GROUP BY a.id ORDER BY ratio_score ${d}, avg_score ${d}, work_count ${d} ${lim}
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-favorite-ranking', (_e, limit?: number, reverse?: boolean) => {
-    const lim = limit ? `LIMIT ${limit}` : ''
-    const d = reverse ? 'ASC' : 'DESC'
-    return db().prepare(`
-      SELECT a.*, COUNT(wa.work_id) AS fav_work_count,
-        COALESCE((SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.actor_id = a.id), 0) AS work_count,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        COUNT(*) OVER () AS total_count
-      FROM actors a
-      JOIN work_actors wa ON wa.actor_id = a.id
-      JOIN works w ON w.id = wa.work_id AND w.is_favorite = 1
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      GROUP BY a.id ORDER BY fav_work_count ${d}, avg_score ${d}, work_count ${d} ${lim}
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:work-tag-dist', () => {
-    return db().prepare(`
-      SELECT t.id, t.name, COUNT(wt.work_id) AS count
-      FROM work_tags_master t
-      JOIN work_tags wt ON wt.tag_id = t.id
-      GROUP BY t.id ORDER BY count DESC
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-tag-dist', () => {
-    return db().prepare(`
-      SELECT t.id, t.name, COUNT(at2.actor_id) AS count
-      FROM actor_tags_master t
-      JOIN actor_tags at2 ON at2.tag_id = t.id
-      GROUP BY t.id ORDER BY count DESC
-    `).all()
-  })
-
   ipcMain.handle('dashboard:actor-score-dist', () => {
     const where = ''
     return db().prepare(`
@@ -438,6 +282,119 @@ export function registerDashboardHandlers(): void {
     `).all()
   })
 
+  ipcMain.handle('dashboard:rank-change-chart', (_e, params: { type: 'actor' | 'work'; limit?: number; division?: number; maxRank?: number }) => {
+    const { type, limit = 10, division = 1, maxRank: maxRankParam } = params
+    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const rankLo = division === 1 ? 1 : (divBoundaries[division - 2] + 1)
+    const rankHi = divBoundaries[division - 1] ?? 2016
+    const chartMaxRank = maxRankParam ?? (rankHi - rankLo + 1)
+
+    // recentRunLimit 설정 읽기
+    const rlRow = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
+    const recentRunLimit = rlRow ? (JSON.parse(rlRow.settings_json).recentRunLimit ?? 0) : 0
+
+    // 1) 해당 부의 아이템 추출
+    const nameCol = type === 'actor' ? 'a.name' : 'COALESCE(w.product_number, w.title)'
+    const photoCol = type === 'actor' ? 'a.photo_path' : 'w.cover_path'
+    const fromClause = type === 'actor' ? 'actors a' : 'works w'
+    const idCol = type === 'actor' ? 'a.id' : 'w.id'
+
+    // 포인트 CTE (recentRunLimit 반영)
+    let ptsCte: string
+    if (recentRunLimit <= 0) {
+      ptsCte = `SELECT item_id, SUM(points) AS total_points FROM master_ranking_history WHERE type = '${type}' GROUP BY item_id`
+    } else {
+      ptsCte = `SELECT item_id, SUM(points) AS total_points FROM (
+        SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY recorded_at DESC) AS rn
+        FROM master_ranking_history WHERE type = '${type}'
+      ) WHERE rn <= ${recentRunLimit} GROUP BY item_id`
+    }
+
+    const topItems = db().prepare(`
+      WITH pts AS (${ptsCte}),
+      mrc AS (
+        SELECT item_id, COUNT(DISTINCT run_id) AS run_count
+        FROM master_ranking_history WHERE type = '${type}' GROUP BY item_id
+      ),
+      ranked AS (
+        SELECT ${idCol} AS id, ${nameCol} AS name, ${photoCol} AS photo_path,
+          COALESCE(pts.total_points, 0) AS total_points,
+          COALESCE(mrc.run_count, 0) AS run_count,
+          RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank
+        FROM ${fromClause}
+        LEFT JOIN pts ON pts.item_id = ${idCol}
+        LEFT JOIN mrc ON mrc.item_id = ${idCol}
+        WHERE COALESCE(mrc.run_count, 0) > 0
+      )
+      SELECT * FROM ranked WHERE rank >= ? AND rank <= ?
+    `).all(rankLo, rankLo + chartMaxRank - 1) as { id: number; name: string; photo_path: string | null; total_points: number; rank: number }[]
+
+    if (topItems.length === 0) return { runs: [], series: [] }
+    const itemIds = topItems.map(i => i.id)
+    const itemMap = new Map(topItems.map(i => [i.id, i]))
+
+    // 2) 완료된 마스터 대회 run 목록 (최근 limit개)
+    const runs = db().prepare(`
+      SELECT r.id AS run_id, t.name AS tournament_name, r.completed_at
+      FROM cup_runs r
+      JOIN cup_tournaments t ON t.id = r.tournament_id
+      WHERE r.status = 'completed' AND t.type = ? AND t.is_master = 1
+      ORDER BY r.completed_at DESC
+      LIMIT ?
+    `).all(type, limit) as { run_id: number; tournament_name: string; completed_at: string }[]
+    runs.reverse()
+
+    if (runs.length === 0) return { runs: [], series: [] }
+
+    // 3) 각 run 시점의 순위 계산 (recentRunLimit 반영)
+    // 각 run의 completed_at 시점까지의 포인트로 순위 계산
+    const runRanks = new Map<number, Map<number, number>>()
+    for (const run of runs) {
+      let atTimeSql: string
+      if (recentRunLimit <= 0) {
+        atTimeSql = `SELECT item_id, SUM(points) AS total
+          FROM master_ranking_history mh
+          JOIN cup_runs r ON r.id = mh.run_id
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+          WHERE mh.type = ? AND r.completed_at <= ?
+          GROUP BY item_id`
+      } else {
+        atTimeSql = `SELECT item_id, SUM(pts) AS total FROM (
+          SELECT mh.item_id, mh.points AS pts,
+            ROW_NUMBER() OVER (PARTITION BY mh.item_id ORDER BY mh.recorded_at DESC) AS rn
+          FROM master_ranking_history mh
+          JOIN cup_runs r ON r.id = mh.run_id
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+          WHERE mh.type = ? AND r.completed_at <= ?
+        ) WHERE rn <= ${recentRunLimit} GROUP BY item_id`
+      }
+      const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
+      allPts.sort((a, b) => b.total - a.total)
+      const rankMap = new Map<number, number>()
+      for (let i = 0; i < allPts.length; i++) {
+        rankMap.set(allPts[i].item_id, i + 1)
+      }
+      runRanks.set(run.run_id, rankMap)
+    }
+
+    // 4) 해당 부 아이템들의 시계열 데이터 구성 (부 내 상대 순위)
+    const series = itemIds.map(id => {
+      const info = itemMap.get(id)!
+      const ranks = runs.map(r => {
+        const rankMap = runRanks.get(r.run_id)
+        const globalRank = rankMap?.get(id) ?? null
+        if (globalRank === null) return null
+        return globalRank - rankLo + 1
+      })
+      return { id, name: info.name, photo_path: info.photo_path, currentRank: info.rank - rankLo + 1, ranks }
+    })
+
+    return {
+      runs: runs.map(r => ({ runId: r.run_id, label: r.tournament_name, completedAt: r.completed_at })),
+      series
+    }
+  })
+
   ipcMain.handle('dashboard:rating-works', (_e, bucket: number) => {
     const works = db().prepare(`
       SELECT * FROM works
@@ -468,50 +425,6 @@ export function registerDashboardHandlers(): void {
       repActorMap4.get(r.work_id)!.push({ id: r.id, name: r.name })
     }
     return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [], rep_actors: repActorMap4.get(w.id as number) ?? [] }))
-  })
-
-  ipcMain.handle('dashboard:studio-dist', () => {
-    return db().prepare(`
-      SELECT s.id, s.name, s.color, COUNT(w.id) AS work_count
-      FROM studios s
-      LEFT JOIN works w ON w.studio_id = s.id
-      GROUP BY s.id
-      ORDER BY work_count DESC, s.name
-    `).all()
-  })
-
-  ipcMain.handle('dashboard:actor-cup-dist', () => {
-    return db().prepare(`
-      WITH stats AS (
-        SELECT
-          MIN(height) AS min_h, MAX(height) AS max_h,
-          MIN(bust)   AS min_b, MAX(bust)   AS max_b,
-          MIN(waist)  AS min_w, MAX(waist)  AS max_w,
-          MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
-        FROM actors
-        WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
-      )
-      SELECT a.*,
-        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
-        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
-        CASE WHEN a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
-          THEN ROUND((
-            (
-              COALESCE(CAST(a.height - stats.min_h AS REAL) / NULLIF(stats.max_h - stats.min_h, 0) * 10, 5.0) +
-              COALESCE(CAST(a.bust   - stats.min_b AS REAL) / NULLIF(stats.max_b - stats.min_b, 0) * 10, 5.0) +
-              COALESCE(CAST(stats.max_w - a.waist  AS REAL) / NULLIF(stats.max_w - stats.min_w, 0) * 10, 5.0) +
-              COALESCE(CAST(a.hip - stats.min_hip  AS REAL) / NULLIF(stats.max_hip - stats.min_hip, 0) * 10, 5.0)
-            ) / 4.0 * 0.3 +
-            (COALESCE(s.bust, 0) + COALESCE(s.hip, 0) + COALESCE(s.physical, 0) + COALESCE(s.skin, 0) + COALESCE(s.proportions, 0)) / 6.5 * 0.7
-          ), 2)
-          ELSE NULL
-        END AS ratio_score
-      FROM actors a
-      CROSS JOIN stats
-      LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.cup IS NOT NULL AND a.cup != ''
-      ORDER BY a.cup, avg_score DESC, work_count DESC
-    `).all()
   })
 
 }

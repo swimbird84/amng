@@ -3,6 +3,53 @@ import { getDatabase } from './db'
 
 type DB = ReturnType<typeof getDatabase>
 
+function getRecentRunLimit(database: DB, type: 'actor' | 'work'): number {
+  const row = database.prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
+  if (!row) return 0
+  const s = JSON.parse(row.settings_json)
+  return s.recentRunLimit ?? 0
+}
+
+// recentRunLimit에 따른 포인트 집계 SQL 조각 생성
+// limit=0: 전체 누적, limit>0: 최근 N회만 합산
+function buildPointsCte(type: 'actor' | 'work', limit: number, alias = 'pts', masterOnly = true): string {
+  const masterJoin = masterOnly
+    ? `JOIN cup_runs r ON r.id = mh2.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1`
+    : ''
+  if (limit <= 0) {
+    return `(SELECT mh2.item_id, SUM(mh2.points) AS total_points
+      FROM master_ranking_history mh2 ${masterJoin}
+      WHERE mh2.type = '${type}'
+      GROUP BY mh2.item_id) ${alias}`
+  }
+  return `(SELECT mh.item_id, SUM(mh.points) AS total_points
+    FROM (
+      SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
+      FROM master_ranking_history mh2 ${masterJoin}
+      WHERE mh2.type = '${type}'
+    ) mh WHERE rn <= ${limit} GROUP BY mh.item_id) ${alias}`
+}
+
+// 특정 시점까지의 포인트 집계 SQL (rank-history, division-history용)
+function buildPointsAtTimeSql(type: 'actor' | 'work', limit: number): string {
+  if (limit <= 0) {
+    return `SELECT mh.item_id, SUM(mh.points) AS total
+      FROM master_ranking_history mh
+      JOIN cup_runs r ON r.id = mh.run_id
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+      WHERE mh.type = ? AND r.completed_at <= ?
+      GROUP BY mh.item_id`
+  }
+  return `SELECT item_id, SUM(pts) AS total FROM (
+    SELECT mh.item_id, mh.points AS pts,
+      ROW_NUMBER() OVER (PARTITION BY mh.item_id ORDER BY mh.recorded_at DESC) AS rn
+    FROM master_ranking_history mh
+    JOIN cup_runs r ON r.id = mh.run_id
+    JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+    WHERE mh.type = ? AND r.completed_at <= ?
+  ) WHERE rn <= ${limit} GROUP BY item_id`
+}
+
 function shuffleArr<T>(arr: T[]): T[] {
   for (let k = arr.length - 1; k > 0; k--) {
     const r = Math.floor(Math.random() * (k + 1))
@@ -647,8 +694,6 @@ export function registerCupHandlers(): void {
   })
 
   ipcMain.handle('ranking-settings:update', (_e, type: 'actor' | 'work', settings: object) => {
-    const inProgress = db().prepare(`SELECT 1 FROM cup_runs WHERE status = 'in_progress' LIMIT 1`).get()
-    if (inProgress) throw new Error('진행 중인 대회가 있어 설정을 변경할 수 없습니다')
     db().prepare(`UPDATE ranking_settings SET settings_json = ? WHERE type = ?`).run(JSON.stringify(settings), type)
     return { ok: true }
   })
@@ -683,6 +728,8 @@ export function registerCupHandlers(): void {
     }
     const searchWhere = search ? (type === 'actor' ? ` AND name LIKE ?` : ` AND (title LIKE ? OR product_number LIKE ?)`) : ''
     const searchBindings: unknown[] = search ? (type === 'work' ? [`%${search}%`, `%${search}%`] : [`%${search}%`]) : []
+    const rl = getRecentRunLimit(db(), type)
+    const ptsCte = buildPointsCte(type, rl)
     if (type === 'actor') {
       const cte = `
         WITH ranked AS (
@@ -692,16 +739,7 @@ export function registerCupHandlers(): void {
             COALESCE(pts.total_points, 0) AS total_points,
             COALESCE(mrc.master_run_count, 0) AS master_run_count
           FROM actors a
-          LEFT JOIN (
-            SELECT mh.item_id, SUM(mh.points) AS total_points
-            FROM (
-              SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
-              FROM master_ranking_history mh2
-              JOIN cup_runs r ON r.id = mh2.run_id
-              JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-              WHERE mh2.type = 'actor'
-            ) mh WHERE rn <= 10 GROUP BY mh.item_id
-          ) pts ON pts.item_id = a.id
+          LEFT JOIN ${ptsCte} ON pts.item_id = a.id
           LEFT JOIN (
             SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
             FROM cup_entries e
@@ -731,16 +769,7 @@ export function registerCupHandlers(): void {
             COALESCE(pts.total_points, 0) AS total_points,
             COALESCE(mrc.master_run_count, 0) AS master_run_count
           FROM works w
-          LEFT JOIN (
-            SELECT mh.item_id, SUM(mh.points) AS total_points
-            FROM (
-              SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
-              FROM master_ranking_history mh2
-              JOIN cup_runs r ON r.id = mh2.run_id
-              JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-              WHERE mh2.type = 'work'
-            ) mh WHERE rn <= 10 GROUP BY mh.item_id
-          ) pts ON pts.item_id = w.id
+          LEFT JOIN ${ptsCte} ON pts.item_id = w.id
           LEFT JOIN (
             SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
             FROM cup_entries e
@@ -766,22 +795,13 @@ export function registerCupHandlers(): void {
 
   ipcMain.handle('master-ranking:item-stats', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
     const { type, itemId } = params
-    const ptsRow = db().prepare(`
-      SELECT SUM(points) AS total_points FROM (
-        SELECT points, ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY recorded_at DESC) AS rn
-        FROM master_ranking_history
-        WHERE type = ? AND item_id = ?
-      ) WHERE rn = 1
-    `).get(type, itemId) as { total_points: number | null }
+    const rl = getRecentRunLimit(db(), type)
+    const ptsCte = buildPointsCte(type, rl, 'pts', true)
+    const ptsRow = db().prepare(`SELECT total_points FROM ${ptsCte} WHERE pts.item_id = ?`).get(itemId) as { total_points: number } | undefined
     const totalPoints = ptsRow?.total_points ?? 0
     const rankRow = db().prepare(`
-      SELECT COUNT(*) + 1 AS rank FROM (
-        SELECT item_id, SUM(points) AS pts FROM (
-          SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id, run_id ORDER BY recorded_at DESC) AS rn
-          FROM master_ranking_history WHERE type = ?
-        ) WHERE rn = 1 GROUP BY item_id
-      ) WHERE pts > ?
-    `).get(type, totalPoints) as { rank: number }
+      SELECT COUNT(*) + 1 AS rank FROM ${ptsCte} WHERE pts.total_points > ?
+    `).get(totalPoints) as { rank: number }
     const statsRow = db().prepare(`SELECT total_cups, cup_wins, total_matches, match_wins FROM cup_stats WHERE type = ? AND item_id = ?`).get(type, itemId) as { total_cups: number; cup_wins: number; total_matches: number; match_wins: number } | undefined
     const masterCupsRow = db().prepare(`
       SELECT COUNT(DISTINCT r.id) AS master_run_count,
@@ -825,32 +845,17 @@ export function registerCupHandlers(): void {
     `).get() as { completed_at: string } | undefined
     if (!latestRun) return []
 
+    const rl = getRecentRunLimit(db(), type)
     // Current points per item
-    const currentRows = db().prepare(`
-      SELECT item_id, SUM(points) AS pts FROM (
-        SELECT mh2.item_id, mh2.points,
-          ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
-        FROM master_ranking_history mh2
-        JOIN cup_runs r ON r.id = mh2.run_id
-        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-        WHERE mh2.type = ?
-      ) WHERE rn <= 10 GROUP BY item_id
-    `).all(type) as { item_id: number; pts: number }[]
+    const currentRows = db().prepare(`SELECT item_id, total_points AS pts FROM ${buildPointsCte(type, rl)}`).all() as { item_id: number; pts: number }[]
 
     // Previous points (excluding most recent run)
-    const prevRows = db().prepare(`
-      SELECT item_id, SUM(points) AS pts FROM (
-        SELECT mh2.item_id, mh2.points,
-          ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
-        FROM master_ranking_history mh2
-        JOIN cup_runs r ON r.id = mh2.run_id
-        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-        WHERE mh2.type = ? AND r.completed_at < ?
-      ) WHERE rn <= 10 GROUP BY item_id
-    `).all(type, latestRun.completed_at) as { item_id: number; pts: number }[]
+    const prevPtsSql = buildPointsAtTimeSql(type, rl)
+    const prevRows = db().prepare(prevPtsSql).all(type, latestRun.completed_at) as { item_id: number; total: number }[]
+    const prevMapped = prevRows.map(r => ({ item_id: r.item_id, pts: r.total }))
 
     // Assign previous ranks (sorted desc by pts)
-    const sortedPrev = [...prevRows].sort((a, b) => b.pts - a.pts)
+    const sortedPrev = [...prevMapped].sort((a, b) => b.pts - a.pts)
     const prevRankMap = new Map<number, number>()
     sortedPrev.forEach((r, i) => prevRankMap.set(r.item_id, i + 1))
 
@@ -870,18 +875,11 @@ export function registerCupHandlers(): void {
     `).all(type) as { id: number; completed_at: string }[]
     if (runs.length === 0) return []
     runs.reverse()
+    const rl = getRecentRunLimit(db(), type)
+    const atTimeSql = buildPointsAtTimeSql(type, rl)
     const result: { rank: number; recorded_at: string }[] = []
     for (const run of runs) {
-      const allPts = db().prepare(`
-        SELECT item_id, SUM(pts) AS total FROM (
-          SELECT mh.item_id, mh.points AS pts,
-            ROW_NUMBER() OVER (PARTITION BY mh.item_id ORDER BY mh.recorded_at DESC) AS rn
-          FROM master_ranking_history mh
-          JOIN cup_runs r ON r.id = mh.run_id
-          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-          WHERE mh.type = ? AND r.completed_at <= ?
-        ) WHERE rn <= 10 GROUP BY item_id
-      `).all(type, run.completed_at) as { item_id: number; total: number }[]
+      const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
       const itemPts = allPts.find(r => r.item_id === itemId)?.total ?? 0
       const rank = allPts.filter(r => r.total > itemPts).length + 1
       result.push({ rank, recorded_at: run.completed_at })
@@ -952,12 +950,7 @@ export function registerCupHandlers(): void {
         WHERE m.item2_id = $itemId AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
       ),
       pts AS (
-        SELECT item_id, SUM(points) AS total_points
-        FROM (
-          SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY recorded_at DESC) AS rn
-          FROM master_ranking_history WHERE type = $type
-        ) WHERE rn <= 10
-        GROUP BY item_id
+        SELECT item_id, total_points FROM ${buildPointsCte(type, getRecentRunLimit(db(), type), 'rpt', false)}
       ),
       ranked AS (
         SELECT item_id, RANK() OVER (ORDER BY total_points DESC) AS opp_rank
@@ -992,18 +985,11 @@ export function registerCupHandlers(): void {
       WHERE mh.item_id = ?
       ORDER BY r.completed_at ASC
     `).all(type, itemId) as { run_id: number; points: number; completed_at: string }[]
+    const rl = getRecentRunLimit(db(), type)
+    const atTimeSql = buildPointsAtTimeSql(type, rl)
     const result: { recorded_at: string; rank: number; total_points: number }[] = []
     for (const run of itemHistory) {
-      const allPts = db().prepare(`
-        SELECT item_id, SUM(pts) AS total FROM (
-          SELECT mh.item_id, mh.points AS pts,
-            ROW_NUMBER() OVER (PARTITION BY mh.item_id ORDER BY mh.recorded_at DESC) AS rn
-          FROM master_ranking_history mh
-          JOIN cup_runs r2 ON r2.id = mh.run_id
-          JOIN cup_tournaments t ON t.id = r2.tournament_id AND t.is_master = 1
-          WHERE mh.type = ? AND r2.completed_at <= ?
-        ) WHERE rn <= 10 GROUP BY item_id
-      `).all(type, run.completed_at) as { item_id: number; total: number }[]
+      const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
       const itemPts = allPts.find(r => r.item_id === itemId)?.total ?? 0
       const rank = allPts.filter(r => r.total > itemPts).length + 1
       result.push({ recorded_at: run.completed_at, rank, total_points: itemPts })
@@ -1016,16 +1002,10 @@ export function registerCupHandlers(): void {
     const divBoundaries = [32, 96, 224, 480, 992, 2016]
     const itemCol = type === 'actor' ? 'a.id' : 'w.id'
     const fromClause = type === 'actor' ? 'actors a' : 'works w'
+    const rl = getRecentRunLimit(db(), type)
     const ranked = db().prepare(`
       WITH pts AS (
-        SELECT mh.item_id, SUM(mh.points) AS total_points
-        FROM (
-          SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
-          FROM master_ranking_history mh2
-          JOIN cup_runs r ON r.id = mh2.run_id
-          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-          WHERE mh2.type = ?
-        ) mh WHERE rn <= 10 GROUP BY mh.item_id
+        SELECT item_id, total_points FROM ${buildPointsCte(type, rl, 'rpt')}
       ),
       mrc AS (
         SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
@@ -1041,7 +1021,7 @@ export function registerCupHandlers(): void {
       FROM ${fromClause}
       LEFT JOIN pts ON pts.item_id = ${itemCol}
       LEFT JOIN mrc ON mrc.item_id = ${itemCol}
-    `).all(type, type) as { rank: number; id: number; master_run_count: number }[]
+    `).all(type) as { rank: number; id: number; master_run_count: number }[]
 
     const countMap = new Map<number, number>()
     for (const row of ranked) {
@@ -1072,17 +1052,14 @@ export function registerCupHandlers(): void {
     if (t.is_master) {
       const itemCol = t.type === 'actor' ? 'a.id' : 'w.id'
       const fromClause = t.type === 'actor' ? 'actors a' : 'works w'
+      const rl = getRecentRunLimit(db(), t.type as 'actor' | 'work')
       const ranked = db().prepare(`
         WITH pts AS (
-          SELECT mh.item_id, SUM(mh.points) AS total_points
-          FROM (
-            SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
-            FROM master_ranking_history mh2 WHERE mh2.type = ?
-          ) mh WHERE rn <= 10 GROUP BY mh.item_id
+          SELECT item_id, total_points FROM ${buildPointsCte(t.type as 'actor' | 'work', rl, 'rpt', false)}
         )
         SELECT RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank, ${itemCol} AS id
         FROM ${fromClause} LEFT JOIN pts ON pts.item_id = ${itemCol}
-      `).all(t.type) as { rank: number; id: number }[]
+      `).all() as { rank: number; id: number }[]
       const divBoundaries = [32, 96, 224, 480, 992, 2016]
       const divisionMap = new Map<number, number>()
       for (const row of ranked) {
@@ -1320,17 +1297,14 @@ export function registerCupHandlers(): void {
       settingsSnapshot = settings?.settings_json ?? null
       const itemCol = tournament.type === 'actor' ? 'a.id' : 'w.id'
       const fromClause = tournament.type === 'actor' ? 'actors a' : 'works w'
+      const rlStart = getRecentRunLimit(db(), tournament.type as 'actor' | 'work')
       const ranked = db().prepare(`
         WITH pts AS (
-          SELECT mh.item_id, SUM(mh.points) AS total_points
-          FROM (
-            SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
-            FROM master_ranking_history mh2 WHERE mh2.type = ?
-          ) mh WHERE rn <= 10 GROUP BY mh.item_id
+          SELECT item_id, total_points FROM ${buildPointsCte(tournament.type as 'actor' | 'work', rlStart, 'rpt', false)}
         )
         SELECT RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank, ${itemCol} AS id
         FROM ${fromClause} LEFT JOIN pts ON pts.item_id = ${itemCol}
-      `).all(tournament.type) as { rank: number; id: number }[]
+      `).all() as { rank: number; id: number }[]
       const divBoundaries = [32, 96, 224, 480, 992, 2016]
       for (const row of ranked) {
         let div = 0
@@ -1505,12 +1479,8 @@ export function registerCupHandlers(): void {
         if (participants.length < groupCount * 4) throw new Error(`조 구성 인원 부족 (${groupCount}조 × 최소 4명 = ${groupCount * 4}명 필요)`)
 
         // 승점 조회 (부 내 정렬용)
-        const wcRankRows = db().prepare(`
-          SELECT item_id, SUM(points) AS total_points
-          FROM (SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY recorded_at DESC) AS rn
-                FROM master_ranking_history WHERE type = ?) WHERE rn <= 10
-          GROUP BY item_id
-        `).all(tournament.type) as { item_id: number; total_points: number }[]
+        const rlWc = getRecentRunLimit(db(), tournament.type as 'actor' | 'work')
+        const wcRankRows = db().prepare(`SELECT item_id, total_points FROM ${buildPointsCte(tournament.type as 'actor' | 'work', rlWc, 'rpt', false)}`).all() as { item_id: number; total_points: number }[]
         const wcPtsMap = new Map(wcRankRows.map(r => [r.item_id, r.total_points]))
 
         // 포트(부) 기반 정렬: 부 오름차순(미분류=맨 뒤), 부 내에서 승점 내림차순

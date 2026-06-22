@@ -469,6 +469,18 @@ export function initDatabase(): void {
     }
   }
 
+  // recentRunLimit 마이그레이션 (기존 설치 대상)
+  for (const type of ['actor', 'work'] as const) {
+    const row = db.prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
+    if (row) {
+      const s = JSON.parse(row.settings_json)
+      if (s.recentRunLimit === undefined) {
+        s.recentRunLimit = 0
+        db.prepare(`UPDATE ranking_settings SET settings_json = ? WHERE type = ?`).run(JSON.stringify(s), type)
+      }
+    }
+  }
+
   // B안 마이그레이션: tournament_id → run_id (기존 설치 대상)
   const cupEntriesCols = (db.prepare("PRAGMA table_info(cup_entries)").all() as { name: string }[]).map(c => c.name)
   if (cupEntriesCols.includes('tournament_id')) {

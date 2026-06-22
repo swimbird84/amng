@@ -185,6 +185,7 @@ export default function PlayView({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' || tab !== 'match' || picking || !match) return
+      if (document.querySelector('.fixed.inset-0')) return
       if (hoveredCard === 'item1') handlePick(match.item1_id, match.item2_id ?? null)
       else if (hoveredCard === 'item2' && match.item2_id != null) handlePick(match.item2_id, match.item1_id)
       else if (hoveredCard === 'draw' && match.phase === 'group') handlePick(null, null, true)
