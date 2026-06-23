@@ -1450,9 +1450,9 @@ export function registerCupHandlers(): void {
       const lgMinSessions = leaguePool.length > 0 ? Math.min(...leaguePool.map(i => statsMap.get(i.id) ?? 0)) : Infinity
       const lgMinTier = leaguePool.filter(i => (statsMap.get(i.id) ?? 0) === lgMinSessions)
       let lgForced: { id: number }[] = []
-      if (lgMinTier.length <= needed / 20) {
+      if (lgMinTier.length <= poolSize / 20) {
         lgForced = [...lgMinTier]
-      } else if (lgMinTier.length <= needed / 10) {
+      } else if (lgMinTier.length <= poolSize / 10) {
         shuffleArr(lgMinTier)
         lgForced = lgMinTier.slice(0, Math.ceil(lgMinTier.length / 2))
       }
