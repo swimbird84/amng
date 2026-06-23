@@ -30,6 +30,8 @@ function createWindow(): void {
     width: 1300,
     height: 870,
     ...(savedPos ?? {}),
+    show: false,
+    backgroundColor: '#111827',
     resizable: false,
     fullscreenable: false,
     webPreferences: {
@@ -38,6 +40,10 @@ function createWindow(): void {
       nodeIntegration: false,
       spellcheck: false
     }
+  })
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
   })
 
   mainWindow.on('moved', saveWindowPosition)

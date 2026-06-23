@@ -44,6 +44,14 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const splash = document.getElementById('splash')
+    if (splash) {
+      splash.classList.add('fade-out')
+      setTimeout(() => splash.remove(), 400)
+    }
+  }, [])
+
+  useEffect(() => {
     if (viewStack.length === 0) return
     const handler = () => setViewStack([])
     pushEscHandler(handler)
