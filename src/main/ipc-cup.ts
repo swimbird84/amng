@@ -1446,7 +1446,27 @@ export function registerCupHandlers(): void {
       const poolSize = Math.min(items.length, Math.round(needed * multiplier))
       const leaguePool = items.slice(0, poolSize)
       shuffleArr(leaguePool)
-      participants = leaguePool.slice(0, needed)
+      // 최솟값 티어 강제 포함
+      const lgMinSessions = leaguePool.length > 0 ? Math.min(...leaguePool.map(i => statsMap.get(i.id) ?? 0)) : Infinity
+      const lgMinTier = leaguePool.filter(i => (statsMap.get(i.id) ?? 0) === lgMinSessions)
+      let lgForced: { id: number }[] = []
+      if (lgMinTier.length <= needed / 20) {
+        lgForced = [...lgMinTier]
+      } else if (lgMinTier.length <= needed / 10) {
+        shuffleArr(lgMinTier)
+        lgForced = lgMinTier.slice(0, Math.ceil(lgMinTier.length / 2))
+      }
+      if (lgForced.length > 0) {
+        const forcedSet = new Set(lgForced.map(i => i.id))
+        const rest = leaguePool.filter(i => !forcedSet.has(i.id))
+        shuffleArr(rest)
+        const slotsLeft = Math.max(0, needed - lgForced.length)
+        const combined = [...lgForced, ...rest.slice(0, slotsLeft)]
+        shuffleArr(combined)
+        participants = combined
+      } else {
+        participants = leaguePool.slice(0, needed)
+      }
     }
 
     if (participants.length < 2) throw new Error('참가 항목이 2개 미만입니다')
