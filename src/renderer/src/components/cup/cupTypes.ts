@@ -110,6 +110,7 @@ export type MasterRankRow = {
   cup_wins: number
   total_matches: number
   match_wins: number
+  last_run_points?: number | null
 }
 
 export type FormatStat = {

@@ -434,6 +434,9 @@ export default function MasterRankingView({
                         <span className={`font-bold ${row.total_points > 0 ? 'text-green-400' : 'text-gray-600'}`}>
                           {row.total_points.toFixed(1)}
                         </span>
+                        {row.last_run_points != null && (
+                          <div className="text-[10px] text-gray-500">{row.last_run_points >= 0 ? '+' : ''}{row.last_run_points.toFixed(1)}</div>
+                        )}
                       </td>
                       {/* 우승률 */}
                       <td
@@ -900,7 +903,7 @@ export default function MasterRankingView({
                 const { runs, series } = rankChartData
                 const cfg = CHART_DIV_CONFIG.find(c => c.div === rankChartDiv)
                 const maxRank = cfg?.maxRank ?? 32
-                const PADDING = { top: 20, right: 20, bottom: 40, left: 50 }
+                const PADDING = { top: 20, right: 80, bottom: 40, left: 50 }
                 return (
                   <svg
                     className="w-full h-full"
@@ -936,7 +939,7 @@ export default function MasterRankingView({
                       const color = `hsl(${hue}, 70%, 55%)`
                       const isHovered = rankChartHover === s.id
                       const isOtherHovered = rankChartHover !== null && rankChartHover !== s.id
-                      const opacity = isOtherHovered ? 0.08 : isHovered ? 1 : 0.5
+                      const opacity = isOtherHovered ? 0.08 : isHovered ? 1 : 0.6
                       const strokeW = isHovered ? 3 : s.currentRank <= 5 ? 2 : 1.2
                       const points: { x: number; y: number; rank: number }[] = []
                       for (let i = 0; i < runs.length; i++) {
@@ -949,6 +952,7 @@ export default function MasterRankingView({
                       }
                       if (points.length === 0) return null
                       const pathD = points.map((p, pi) => `${pi === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+                      const lastPt = points[points.length - 1]
                       const navigateFn = type === 'actor' ? onNavigateToActor : onNavigateToWork
                       return (
                         <g
@@ -962,12 +966,10 @@ export default function MasterRankingView({
                           {points.map((p, pi) => (
                             <circle key={pi} cx={p.x} cy={p.y} r={isHovered ? 4 : 2.5} fill={color} />
                           ))}
+                          <text x={lastPt.x + 8} y={lastPt.y + 4} fill={color} fontSize={isHovered ? 11 : 9} fontWeight={isHovered ? 'bold' : 'normal'}>{s.name}</text>
                           {isHovered && points.map((p, pi) => (
                             <text key={`t-${pi}`} x={p.x} y={p.y - 8} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">{p.rank}</text>
                           ))}
-                          {isHovered && points.length > 0 && (
-                            <text x={points[points.length - 1].x + 8} y={points[points.length - 1].y + 4} fill={color} fontSize={11} fontWeight="bold">{s.name}</text>
-                          )}
                         </g>
                       )
                     })}

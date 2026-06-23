@@ -484,6 +484,127 @@ function saveRankSnapshot(
   }
 }
 
+// 대회의 전체 대상 아이템 수 계산 (cup:item-count / cup:tournament-stats 공용)
+function countEligibleItems(database: DB, tournamentId: number): number {
+  const t = database.prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId) as { type: string; is_master: number; filter_json?: string | null } | undefined
+  if (!t) return 0
+  const filter = t.filter_json ? JSON.parse(t.filter_json) as Record<string, unknown> : null
+
+  if (t.is_master) {
+    const itemCol = t.type === 'actor' ? 'a.id' : 'w.id'
+    const fromClause = t.type === 'actor' ? 'actors a' : 'works w'
+    const rl = getRecentRunLimit(database, t.type as 'actor' | 'work')
+    const ranked = database.prepare(`
+      WITH pts AS (
+        SELECT item_id, total_points FROM ${buildPointsCte(t.type as 'actor' | 'work', rl, 'rpt', false)}
+      )
+      SELECT RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank, ${itemCol} AS id
+      FROM ${fromClause} LEFT JOIN pts ON pts.item_id = ${itemCol}
+    `).all() as { rank: number; id: number }[]
+    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const divisionMap = new Map<number, number>()
+    for (const row of ranked) {
+      let div = 0
+      for (let d = 0; d < divBoundaries.length; d++) {
+        if (row.rank <= divBoundaries[d]) { div = d + 1; break }
+      }
+      divisionMap.set(row.id, div)
+    }
+    const selectedDivisions = filter?.selectedDivisions as number[] | undefined
+    if (selectedDivisions?.length) {
+      const divSet = new Set(selectedDivisions)
+      return ranked.filter(row => divSet.has(divisionMap.get(row.id) ?? 0)).length
+    }
+    return ranked.length
+  }
+
+  const extraConditions: string[] = []
+  const extraBindings: unknown[] = []
+  let extraJoins = ''
+  if (filter) {
+    const tagIds = filter.tagIds as number[] | undefined
+    if (tagIds?.length) {
+      const ph = tagIds.map(() => '?').join(',')
+      if (t.type === 'actor') {
+        if (filter.tagInclude === 'exclude') {
+          extraConditions.push(`NOT EXISTS (SELECT 1 FROM actor_tags at2 WHERE at2.actor_id = a.id AND at2.tag_id IN (${ph}))`)
+          extraBindings.push(...tagIds)
+        } else {
+          extraJoins += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
+          extraConditions.push(`at2.tag_id IN (${ph})`)
+          extraBindings.push(...tagIds)
+          if (filter.tagMode === 'and') {
+            extraConditions.push(`(SELECT COUNT(DISTINCT at3.tag_id) FROM actor_tags at3 WHERE at3.actor_id = a.id AND at3.tag_id IN (${ph})) = ?`)
+            extraBindings.push(...tagIds, tagIds.length)
+          }
+        }
+      } else {
+        if (filter.tagInclude === 'exclude') {
+          extraConditions.push(`NOT EXISTS (SELECT 1 FROM work_tags wt WHERE wt.work_id = w.id AND wt.tag_id IN (${ph}))`)
+          extraBindings.push(...tagIds)
+        } else {
+          extraJoins += ` JOIN work_tags wt ON wt.work_id = w.id`
+          extraConditions.push(`wt.tag_id IN (${ph})`)
+          extraBindings.push(...tagIds)
+          if (filter.tagMode === 'and') {
+            extraConditions.push(`(SELECT COUNT(DISTINCT wt2.tag_id) FROM work_tags wt2 WHERE wt2.work_id = w.id AND wt2.tag_id IN (${ph})) = ?`)
+            extraBindings.push(...tagIds, tagIds.length)
+          }
+        }
+      }
+    }
+    if (t.type === 'actor') {
+      const actorIds = filter.actorIds as number[] | undefined
+      if (actorIds?.length) {
+        const ph = actorIds.map(() => '?').join(',')
+        extraConditions.push(filter.actorMode === 'exclude' ? `a.id NOT IN (${ph})` : `a.id IN (${ph})`)
+        extraBindings.push(...actorIds)
+      }
+      if (filter.ratingFrom !== undefined || filter.ratingTo !== undefined) {
+        extraJoins += ` LEFT JOIN actor_scores asc_f ON asc_f.actor_id = a.id`
+        if (filter.ratingFrom !== undefined) { extraConditions.push(`COALESCE((asc_f.face + asc_f.bust + asc_f.hip + asc_f.physical + asc_f.skin + asc_f.acting + asc_f.sexy + asc_f.charm + asc_f.technique + asc_f.proportions) / 13.0, 0) >= ?`); extraBindings.push(filter.ratingFrom) }
+        if (filter.ratingTo !== undefined) { extraConditions.push(`COALESCE((asc_f.face + asc_f.bust + asc_f.hip + asc_f.physical + asc_f.skin + asc_f.acting + asc_f.sexy + asc_f.charm + asc_f.technique + asc_f.proportions) / 13.0, 0) <= ?`); extraBindings.push(filter.ratingTo) }
+      }
+      if (filter.heightFrom !== undefined) { extraConditions.push('a.height >= ?'); extraBindings.push(filter.heightFrom) }
+      if (filter.heightTo !== undefined) { extraConditions.push('a.height <= ?'); extraBindings.push(filter.heightTo) }
+      if (filter.bustFrom !== undefined) { extraConditions.push('a.bust >= ?'); extraBindings.push(filter.bustFrom) }
+      if (filter.bustTo !== undefined) { extraConditions.push('a.bust <= ?'); extraBindings.push(filter.bustTo) }
+      if (filter.waistFrom !== undefined) { extraConditions.push('a.waist >= ?'); extraBindings.push(filter.waistFrom) }
+      if (filter.waistTo !== undefined) { extraConditions.push('a.waist <= ?'); extraBindings.push(filter.waistTo) }
+      if (filter.hipFrom !== undefined) { extraConditions.push('a.hip >= ?'); extraBindings.push(filter.hipFrom) }
+      if (filter.hipTo !== undefined) { extraConditions.push('a.hip <= ?'); extraBindings.push(filter.hipTo) }
+      if (filter.cupFrom) { extraConditions.push('a.cup >= ?'); extraBindings.push(filter.cupFrom) }
+      if (filter.cupTo) { extraConditions.push('a.cup <= ?'); extraBindings.push(filter.cupTo) }
+      if (filter.scoreExcluded) { extraConditions.push('COALESCE(a.score_excluded, 0) = 0') }
+      if (filter.favoriteOnly) extraConditions.push('a.is_favorite = 1')
+    } else {
+      const workActorIds = filter.actorIds as number[] | undefined
+      if (workActorIds?.length) {
+        const ph = workActorIds.map(() => '?').join(',')
+        extraConditions.push(filter.actorMode === 'exclude'
+          ? `NOT EXISTS (SELECT 1 FROM work_actors wa_f WHERE wa_f.work_id = w.id AND wa_f.actor_id IN (${ph}))`
+          : `EXISTS (SELECT 1 FROM work_actors wa_f WHERE wa_f.work_id = w.id AND wa_f.actor_id IN (${ph}))`)
+        extraBindings.push(...workActorIds)
+      }
+      if (filter.ratingFrom !== undefined) { extraConditions.push('w.rating >= ?'); extraBindings.push(filter.ratingFrom) }
+      if (filter.ratingTo !== undefined) { extraConditions.push('w.rating <= ?'); extraBindings.push(filter.ratingTo) }
+      const studioIds = filter.studioIds as number[] | undefined
+      if (studioIds?.length) {
+        const ph = studioIds.map(() => '?').join(',')
+        extraConditions.push(`w.studio_id IN (${ph})`)
+        extraBindings.push(...studioIds)
+      }
+      if (filter.favoriteOnly) extraConditions.push('w.is_favorite = 1')
+    }
+  }
+  const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
+  if (t.type === 'actor') {
+    return (database.prepare(`SELECT COUNT(DISTINCT a.id) as cnt FROM actors a${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt
+  } else {
+    return (database.prepare(`SELECT COUNT(DISTINCT w.id) as cnt FROM works w${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt
+  }
+}
+
 export function registerCupHandlers(): void {
   const db = () => getDatabase()
 
@@ -752,7 +873,11 @@ export function registerCupHandlers(): void {
           COALESCE(cs2.total_cups, 0) AS total_cups,
           COALESCE(cs2.cup_wins, 0) AS cup_wins,
           COALESCE(cs2.total_matches, 0) AS total_matches,
-          COALESCE(cs2.match_wins, 0) AS match_wins
+          COALESCE(cs2.match_wins, 0) AS match_wins,
+          (SELECT mh.points FROM master_ranking_history mh
+           JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+           WHERE mh.type = 'actor' AND mh.item_id = ranked.id
+           ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
         FROM ranked
         LEFT JOIN cup_stats cs2 ON cs2.type = 'actor' AND cs2.item_id = ranked.id
         WHERE 1=1${divWhere}${searchWhere}
@@ -782,7 +907,11 @@ export function registerCupHandlers(): void {
           COALESCE(cs2.total_cups, 0) AS total_cups,
           COALESCE(cs2.cup_wins, 0) AS cup_wins,
           COALESCE(cs2.total_matches, 0) AS total_matches,
-          COALESCE(cs2.match_wins, 0) AS match_wins
+          COALESCE(cs2.match_wins, 0) AS match_wins,
+          (SELECT mh.points FROM master_ranking_history mh
+           JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+           WHERE mh.type = 'work' AND mh.item_id = ranked.id
+           ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
         FROM ranked
         LEFT JOIN cup_stats cs2 ON cs2.type = 'work' AND cs2.item_id = ranked.id
         WHERE 1=1${divWhere}${searchWhere}
@@ -850,7 +979,21 @@ export function registerCupHandlers(): void {
     const currentRows = db().prepare(`SELECT item_id, total_points AS pts FROM ${buildPointsCte(type, rl)}`).all() as { item_id: number; pts: number }[]
 
     // Previous points (excluding most recent run)
-    const prevPtsSql = buildPointsAtTimeSql(type, rl)
+    const prevPtsSql = rl <= 0
+      ? `SELECT mh.item_id, SUM(mh.points) AS total
+        FROM master_ranking_history mh
+        JOIN cup_runs r ON r.id = mh.run_id
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+        WHERE mh.type = ? AND r.completed_at < ?
+        GROUP BY mh.item_id`
+      : `SELECT item_id, SUM(pts) AS total FROM (
+        SELECT mh.item_id, mh.points AS pts,
+          ROW_NUMBER() OVER (PARTITION BY mh.item_id ORDER BY mh.recorded_at DESC) AS rn
+        FROM master_ranking_history mh
+        JOIN cup_runs r ON r.id = mh.run_id
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+        WHERE mh.type = ? AND r.completed_at < ?
+      ) WHERE rn <= ${rl} GROUP BY item_id`
     const prevRows = db().prepare(prevPtsSql).all(type, latestRun.completed_at) as { item_id: number; total: number }[]
     const prevMapped = prevRows.map(r => ({ item_id: r.item_id, pts: r.total }))
 
@@ -1044,125 +1187,7 @@ export function registerCupHandlers(): void {
   })
 
   ipcMain.handle('cup:item-count', (_e, params: { tournamentId: number }) => {
-    const t = db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(params.tournamentId) as { type: string; is_master: number; filter_json?: string | null } | undefined
-    if (!t) return 0
-    const filter = t.filter_json ? JSON.parse(t.filter_json) as Record<string, unknown> : null
-
-    // 마스터 대회: RANK() 기반 division 계산 후 selectedDivisions 필터 적용
-    if (t.is_master) {
-      const itemCol = t.type === 'actor' ? 'a.id' : 'w.id'
-      const fromClause = t.type === 'actor' ? 'actors a' : 'works w'
-      const rl = getRecentRunLimit(db(), t.type as 'actor' | 'work')
-      const ranked = db().prepare(`
-        WITH pts AS (
-          SELECT item_id, total_points FROM ${buildPointsCte(t.type as 'actor' | 'work', rl, 'rpt', false)}
-        )
-        SELECT RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank, ${itemCol} AS id
-        FROM ${fromClause} LEFT JOIN pts ON pts.item_id = ${itemCol}
-      `).all() as { rank: number; id: number }[]
-      const divBoundaries = [32, 96, 224, 480, 992, 2016]
-      const divisionMap = new Map<number, number>()
-      for (const row of ranked) {
-        let div = 0
-        for (let d = 0; d < divBoundaries.length; d++) {
-          if (row.rank <= divBoundaries[d]) { div = d + 1; break }
-        }
-        divisionMap.set(row.id, div)
-      }
-      const selectedDivisions = filter?.selectedDivisions as number[] | undefined
-      if (selectedDivisions?.length) {
-        const divSet = new Set(selectedDivisions)
-        return ranked.filter(row => divSet.has(divisionMap.get(row.id) ?? 0)).length
-      }
-      return ranked.length
-    }
-
-    // 일반 대회: cup:start 와 동일한 필터 조건 적용
-    const extraConditions: string[] = []
-    const extraBindings: unknown[] = []
-    let extraJoins = ''
-    if (filter) {
-      const tagIds = filter.tagIds as number[] | undefined
-      if (tagIds?.length) {
-        const ph = tagIds.map(() => '?').join(',')
-        if (t.type === 'actor') {
-          if (filter.tagInclude === 'exclude') {
-            extraConditions.push(`NOT EXISTS (SELECT 1 FROM actor_tags at2 WHERE at2.actor_id = a.id AND at2.tag_id IN (${ph}))`)
-            extraBindings.push(...tagIds)
-          } else {
-            extraJoins += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
-            extraConditions.push(`at2.tag_id IN (${ph})`)
-            extraBindings.push(...tagIds)
-            if (filter.tagMode === 'and') {
-              extraConditions.push(`(SELECT COUNT(DISTINCT at3.tag_id) FROM actor_tags at3 WHERE at3.actor_id = a.id AND at3.tag_id IN (${ph})) = ?`)
-              extraBindings.push(...tagIds, tagIds.length)
-            }
-          }
-        } else {
-          if (filter.tagInclude === 'exclude') {
-            extraConditions.push(`NOT EXISTS (SELECT 1 FROM work_tags wt WHERE wt.work_id = w.id AND wt.tag_id IN (${ph}))`)
-            extraBindings.push(...tagIds)
-          } else {
-            extraJoins += ` JOIN work_tags wt ON wt.work_id = w.id`
-            extraConditions.push(`wt.tag_id IN (${ph})`)
-            extraBindings.push(...tagIds)
-            if (filter.tagMode === 'and') {
-              extraConditions.push(`(SELECT COUNT(DISTINCT wt2.tag_id) FROM work_tags wt2 WHERE wt2.work_id = w.id AND wt2.tag_id IN (${ph})) = ?`)
-              extraBindings.push(...tagIds, tagIds.length)
-            }
-          }
-        }
-      }
-      if (t.type === 'actor') {
-        const actorIds = filter.actorIds as number[] | undefined
-        if (actorIds?.length) {
-          const ph = actorIds.map(() => '?').join(',')
-          extraConditions.push(filter.actorMode === 'exclude' ? `a.id NOT IN (${ph})` : `a.id IN (${ph})`)
-          extraBindings.push(...actorIds)
-        }
-        if (filter.ratingFrom !== undefined || filter.ratingTo !== undefined) {
-          extraJoins += ` LEFT JOIN actor_scores asc_f ON asc_f.actor_id = a.id`
-          if (filter.ratingFrom !== undefined) { extraConditions.push(`COALESCE((asc_f.face + asc_f.bust + asc_f.hip + asc_f.physical + asc_f.skin + asc_f.acting + asc_f.sexy + asc_f.charm + asc_f.technique + asc_f.proportions) / 13.0, 0) >= ?`); extraBindings.push(filter.ratingFrom) }
-          if (filter.ratingTo !== undefined) { extraConditions.push(`COALESCE((asc_f.face + asc_f.bust + asc_f.hip + asc_f.physical + asc_f.skin + asc_f.acting + asc_f.sexy + asc_f.charm + asc_f.technique + asc_f.proportions) / 13.0, 0) <= ?`); extraBindings.push(filter.ratingTo) }
-        }
-        if (filter.heightFrom !== undefined) { extraConditions.push('a.height >= ?'); extraBindings.push(filter.heightFrom) }
-        if (filter.heightTo !== undefined) { extraConditions.push('a.height <= ?'); extraBindings.push(filter.heightTo) }
-        if (filter.bustFrom !== undefined) { extraConditions.push('a.bust >= ?'); extraBindings.push(filter.bustFrom) }
-        if (filter.bustTo !== undefined) { extraConditions.push('a.bust <= ?'); extraBindings.push(filter.bustTo) }
-        if (filter.waistFrom !== undefined) { extraConditions.push('a.waist >= ?'); extraBindings.push(filter.waistFrom) }
-        if (filter.waistTo !== undefined) { extraConditions.push('a.waist <= ?'); extraBindings.push(filter.waistTo) }
-        if (filter.hipFrom !== undefined) { extraConditions.push('a.hip >= ?'); extraBindings.push(filter.hipFrom) }
-        if (filter.hipTo !== undefined) { extraConditions.push('a.hip <= ?'); extraBindings.push(filter.hipTo) }
-        if (filter.cupFrom) { extraConditions.push('a.cup >= ?'); extraBindings.push(filter.cupFrom) }
-        if (filter.cupTo) { extraConditions.push('a.cup <= ?'); extraBindings.push(filter.cupTo) }
-        if (filter.scoreExcluded) { extraConditions.push('COALESCE(a.score_excluded, 0) = 0') }
-        if (filter.favoriteOnly) extraConditions.push('a.is_favorite = 1')
-      } else {
-        const workActorIds = filter.actorIds as number[] | undefined
-        if (workActorIds?.length) {
-          const ph = workActorIds.map(() => '?').join(',')
-          extraConditions.push(filter.actorMode === 'exclude'
-            ? `NOT EXISTS (SELECT 1 FROM work_actors wa_f WHERE wa_f.work_id = w.id AND wa_f.actor_id IN (${ph}))`
-            : `EXISTS (SELECT 1 FROM work_actors wa_f WHERE wa_f.work_id = w.id AND wa_f.actor_id IN (${ph}))`)
-          extraBindings.push(...workActorIds)
-        }
-        if (filter.ratingFrom !== undefined) { extraConditions.push('w.rating >= ?'); extraBindings.push(filter.ratingFrom) }
-        if (filter.ratingTo !== undefined) { extraConditions.push('w.rating <= ?'); extraBindings.push(filter.ratingTo) }
-        const studioIds = filter.studioIds as number[] | undefined
-        if (studioIds?.length) {
-          const ph = studioIds.map(() => '?').join(',')
-          extraConditions.push(`w.studio_id IN (${ph})`)
-          extraBindings.push(...studioIds)
-        }
-        if (filter.favoriteOnly) extraConditions.push('w.is_favorite = 1')
-      }
-    }
-    const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
-    if (t.type === 'actor') {
-      return (db().prepare(`SELECT COUNT(DISTINCT a.id) as cnt FROM actors a${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt
-    } else {
-      return (db().prepare(`SELECT COUNT(DISTINCT w.id) as cnt FROM works w${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt
-    }
+    return countEligibleItems(db(), params.tournamentId)
   })
 
   ipcMain.handle('cup:start', (_e, params: { tournamentId: number; roundTotal: number; force?: boolean }) => {
@@ -1943,17 +1968,21 @@ export function registerCupHandlers(): void {
     if (!runStats) return null
 
     // 마스터 대회: 마스터 대회 전체 기준, 일반 대회: 해당 대회 기준
+    // 삭제된 아이템을 제외하기 위해 actors/works JOIN
+    const existsJoin = tInfo.type === 'actor' ? 'JOIN actors a ON a.id = e.item_id' : 'JOIN works w ON w.id = e.item_id'
     const participated = tInfo.is_master
       ? (db().prepare(`
           SELECT COUNT(DISTINCT e.item_id) AS cnt
           FROM cup_entries e
           JOIN cup_runs r ON r.id = e.run_id
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+          ${existsJoin}
         `).get(tInfo.type) as { cnt: number }).cnt
       : (db().prepare(`
           SELECT COUNT(DISTINCT e.item_id) AS cnt
           FROM cup_entries e
           JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
+          ${existsJoin}
         `).get(tournamentId) as { cnt: number }).cnt
 
     const runDist = tInfo.is_master
@@ -1963,6 +1992,7 @@ export function registerCupHandlers(): void {
             FROM cup_entries e
             JOIN cup_runs r ON r.id = e.run_id
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+            ${existsJoin}
             GROUP BY e.item_id
           ) GROUP BY run_count ORDER BY run_count ASC
         `).all(tInfo.type) as { run_count: number; count: number }[]
@@ -1971,38 +2001,14 @@ export function registerCupHandlers(): void {
             SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
             FROM cup_entries e
             JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
+            ${existsJoin}
             GROUP BY e.item_id
           ) GROUP BY run_count ORDER BY run_count ASC
         `).all(tournamentId) as { run_count: number; count: number }[]
 
-    const t = tInfo
-    if (t) {
-      const filter = t.filter_json ? JSON.parse(t.filter_json) as Record<string, unknown> : null
-      const extraConditions: string[] = []
-      const extraBindings: unknown[] = []
-      let extraJoins = ''
-      if (filter) {
-        const tagIds = filter.tagIds as number[] | undefined
-        if (tagIds?.length) {
-          const ph = tagIds.map(() => '?').join(',')
-          if (t.type === 'actor') {
-            extraJoins += ` JOIN actor_tags at2 ON at2.actor_id = a.id`
-            extraConditions.push(`at2.tag_id IN (${ph})`)
-          } else {
-            extraJoins += ` JOIN work_tags wt2 ON wt2.work_id = w.id`
-            extraConditions.push(`wt2.tag_id IN (${ph})`)
-          }
-          extraBindings.push(...tagIds)
-        }
-        if (filter.favoriteOnly) extraConditions.push(t.type === 'actor' ? 'a.is_favorite = 1' : 'w.is_favorite = 1')
-      }
-      const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
-      const totalEligible = t.type === 'actor'
-        ? ((db().prepare(`SELECT COUNT(DISTINCT a.id) as cnt FROM actors a${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt)
-        : ((db().prepare(`SELECT COUNT(DISTINCT w.id) as cnt FROM works w${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt)
-      const zeroCount = totalEligible - participated
-      if (zeroCount > 0) runDist.unshift({ run_count: 0, count: zeroCount })
-    }
+    const totalEligible = countEligibleItems(db(), tournamentId)
+    const zeroCount = totalEligible - participated
+    if (zeroCount > 0) runDist.unshift({ run_count: 0, count: zeroCount })
 
     return { ...runStats, participated_items: participated, run_dist: runDist }
   })
