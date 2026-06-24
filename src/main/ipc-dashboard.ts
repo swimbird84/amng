@@ -377,7 +377,7 @@ export function registerDashboardHandlers(): void {
       runRanks.set(run.run_id, rankMap)
     }
 
-    // 4) 해당 부 아이템들의 시계열 데이터 구성 (부 내 상대 순위)
+    // 4) 해당 부 아이템들의 시계열 데이터 구성 (부 내 상대 순위 + 글로벌 순위)
     const series = itemIds.map(id => {
       const info = itemMap.get(id)!
       const ranks = runs.map(r => {
@@ -386,7 +386,11 @@ export function registerDashboardHandlers(): void {
         if (globalRank === null) return null
         return globalRank - rankLo + 1
       })
-      return { id, name: info.name, photo_path: info.photo_path, currentRank: info.rank - rankLo + 1, ranks }
+      const globalRanks = runs.map(r => {
+        const rankMap = runRanks.get(r.run_id)
+        return rankMap?.get(id) ?? null
+      })
+      return { id, name: info.name, photo_path: info.photo_path, currentRank: info.rank - rankLo + 1, ranks, globalRanks }
     })
 
     return {

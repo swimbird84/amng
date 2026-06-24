@@ -142,7 +142,7 @@ export const dashboardApi = {
   debutMonthActors: (year: string, month: number) => api.invoke('dashboard:debut-month-actors', year, month),
   rankChangeChart: (type: 'actor' | 'work', limit?: number, division?: number, maxRank?: number) => api.invoke('dashboard:rank-change-chart', { type, limit, division, maxRank }) as Promise<{
     runs: { runId: number; label: string; completedAt: string }[]
-    series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[] }[]
+    series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[]; globalRanks: (number | null)[] }[]
   }>,
 }
 

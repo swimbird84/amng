@@ -58,9 +58,11 @@ export default function MasterRankingView({
   const [rankChartLimit, setRankChartLimit] = useState(10)
   const [rankChartData, setRankChartData] = useState<{
     runs: { runId: number; label: string; completedAt: string }[]
-    series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[] }[]
+    series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[]; globalRanks: (number | null)[] }[]
   } | null>(null)
   const [rankChartHover, setRankChartHover] = useState<number | null>(null)
+  const [rankChartTrend, setRankChartTrend] = useState<{ itemId: number; name: string; img: string | null } | null>(null)
+  const [rankChartTrendData, setRankChartTrendData] = useState<{ rank: number; recorded_at: string }[] | null>(null)
 
   const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc') => {
     setLoading(true)
@@ -114,6 +116,19 @@ export default function MasterRankingView({
     const cfg = CHART_DIV_CONFIG.find(c => c.div === rankChartDiv)
     dashboardApi.rankChangeChart(type, rankChartLimit, rankChartDiv, cfg?.maxRank).then(setRankChartData)
   }, [rankChartModal, type, rankChartLimit, rankChartDiv])
+
+  useEffect(() => {
+    if (!rankChartTrend) return
+    const handler = () => { setRankChartTrend(null); setRankChartTrendData(null) }
+    pushEscHandler(handler)
+    return () => popEscHandler(handler)
+  }, [rankChartTrend])
+
+  useEffect(() => {
+    if (!rankChartTrend) return
+    setRankChartTrendData(null)
+    masterRankingApi.rankHistory(type, rankChartTrend.itemId).then(setRankChartTrendData)
+  }, [rankChartTrend, type])
 
   const imgPath = (row: MasterRankRow) => row.photo_path ?? row.cover_path ?? null
   const label = (row: MasterRankRow) => row.name ?? row.title ?? row.product_number ?? `#${row.id}`
@@ -903,7 +918,16 @@ export default function MasterRankingView({
                 const { runs, series } = rankChartData
                 const cfg = CHART_DIV_CONFIG.find(c => c.div === rankChartDiv)
                 const maxRank = cfg?.maxRank ?? 32
-                const PADDING = { top: 20, right: 80, bottom: 40, left: 50 }
+                const PADDING = { top: 20, right: 80, bottom: 60, left: 50 }
+                const chartH = 700
+                const mainBottom = chartH - PADDING.bottom
+                const outerZoneTop = mainBottom + 8
+                const outerZoneBottom = chartH - 8
+                const divBounds = [32, 96, 224, 480, 992, 2016]
+                const getDiv = (gRank: number) => { for (let d = 0; d < divBounds.length; d++) { if (gRank <= divBounds[d]) return d + 1 } return 6 }
+                const getDivRank = (gRank: number) => { const div = getDiv(gRank); const lo = div === 1 ? 1 : divBounds[div - 2] + 1; return gRank - lo + 1 }
+                const getX = (i: number) => PADDING.left + i / Math.max(runs.length - 1, 1) * (1000 - PADDING.left - PADDING.right)
+                const getY = (rank: number) => PADDING.top + (rank - 1) / (maxRank - 1) * (mainBottom - PADDING.top)
                 return (
                   <svg
                     className="w-full h-full"
@@ -911,9 +935,10 @@ export default function MasterRankingView({
                     preserveAspectRatio="xMidYMid meet"
                     onMouseLeave={() => setRankChartHover(null)}
                   >
+                    {/* Y축 그리드 */}
                     {Array.from({ length: maxRank }, (_, i) => {
                       const rank = i + 1
-                      const y = PADDING.top + (rank - 1) / (maxRank - 1) * (700 - PADDING.top - PADDING.bottom)
+                      const y = getY(rank)
                       return (
                         <g key={`y-${rank}`}>
                           <line x1={PADDING.left} y1={y} x2={1000 - PADDING.right} y2={y} stroke="#374151" strokeWidth={0.5} />
@@ -923,17 +948,20 @@ export default function MasterRankingView({
                         </g>
                       )
                     })}
+                    {/* 부 경계선 */}
+                    <line x1={PADDING.left} y1={mainBottom + 2} x2={1000 - PADDING.right} y2={mainBottom + 2} stroke="#4B5563" strokeWidth={1} strokeDasharray="4,4" />
+                    {/* X축 라벨 */}
                     {runs.map((run, i) => {
-                      const x = PADDING.left + i / Math.max(runs.length - 1, 1) * (1000 - PADDING.left - PADDING.right)
+                      const x = getX(i)
                       const lbl = run.label.length > 10 ? run.label.slice(0, 10) + '...' : run.label
                       return (
                         <g key={`x-${i}`}>
-                          <line x1={x} y1={PADDING.top} x2={x} y2={700 - PADDING.bottom} stroke="#374151" strokeWidth={0.5} />
-                          <text x={x} y={700 - PADDING.bottom + 16} textAnchor="middle" fill="#9CA3AF" fontSize={10}>{lbl}</text>
-                          <text x={x} y={700 - PADDING.bottom + 28} textAnchor="middle" fill="#6B7280" fontSize={8}>{run.completedAt?.slice(0, 10) ?? ''}</text>
+                          <line x1={x} y1={PADDING.top} x2={x} y2={mainBottom} stroke="#374151" strokeWidth={0.5} />
+                          <text x={x} y={chartH - 2} textAnchor="middle" fill="#9CA3AF" fontSize={9}>{lbl}</text>
                         </g>
                       )
                     })}
+                    {/* 라인 */}
                     {series.map((s, si) => {
                       const hue = (si * 360) / Math.max(series.length, 1)
                       const color = `hsl(${hue}, 70%, 55%)`
@@ -941,34 +969,51 @@ export default function MasterRankingView({
                       const isOtherHovered = rankChartHover !== null && rankChartHover !== s.id
                       const opacity = isOtherHovered ? 0.08 : isHovered ? 1 : 0.6
                       const strokeW = isHovered ? 3 : s.currentRank <= 5 ? 2 : 1.2
-                      const points: { x: number; y: number; rank: number }[] = []
+
+                      type Pt = { x: number; y: number; rank: number; outside: boolean; globalRank: number | null; divLabel: string; transLabel: string }
+                      const allPts: Pt[] = []
                       for (let i = 0; i < runs.length; i++) {
                         const rank = s.ranks[i]
-                        if (rank != null && rank <= maxRank) {
-                          const x = PADDING.left + i / Math.max(runs.length - 1, 1) * (1000 - PADDING.left - PADDING.right)
-                          const y = PADDING.top + (rank - 1) / (maxRank - 1) * (700 - PADDING.top - PADDING.bottom)
-                          points.push({ x, y, rank })
+                        const gRank = s.globalRanks[i]
+                        if (rank == null && gRank == null) continue
+                        const x = getX(i)
+                        const inside = rank != null && rank <= maxRank
+                        const y = inside ? getY(rank!) : (outerZoneTop + (outerZoneBottom - outerZoneTop) / 2)
+                        const div = gRank != null ? getDiv(gRank) : 0
+                        const divR = gRank != null ? getDivRank(gRank) : 0
+                        const divLabel = !inside && gRank != null ? `${DIV_LABEL[div] ?? `${div}부`} ${divR}위` : ''
+                        // 승격/강등 판정
+                        let transLabel = ''
+                        if (!inside) {
+                          const prevRank = i > 0 ? s.ranks[i - 1] : null
+                          const nextRank = i < runs.length - 1 ? s.ranks[i + 1] : null
+                          const prevInside = prevRank != null && prevRank <= maxRank
+                          const nextInside = nextRank != null && nextRank <= maxRank
+                          if (prevInside) transLabel = ' - 강등'
+                          else if (nextInside) transLabel = ' - 승격'
                         }
+                        allPts.push({ x, y, rank: rank ?? 0, outside: !inside, globalRank: gRank, divLabel, transLabel })
                       }
-                      if (points.length === 0) return null
-                      const pathD = points.map((p, pi) => `${pi === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-                      const lastPt = points[points.length - 1]
-                      const navigateFn = type === 'actor' ? onNavigateToActor : onNavigateToWork
+                      if (allPts.length === 0) return null
+                      const pathD = allPts.map((p, pi) => `${pi === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+                      const lastPt = allPts[allPts.length - 1]
                       return (
                         <g
                           key={s.id}
                           opacity={opacity}
                           onMouseEnter={() => setRankChartHover(s.id)}
-                          onClick={() => { navigateFn(s.id); setRankChartModal(false) }}
+                          onClick={() => setRankChartTrend({ itemId: s.id, name: s.name, img: s.photo_path })}
                           className="cursor-pointer"
                         >
                           <path d={pathD} fill="none" stroke={color} strokeWidth={strokeW} strokeLinejoin="round" />
-                          {points.map((p, pi) => (
-                            <circle key={pi} cx={p.x} cy={p.y} r={isHovered ? 4 : 2.5} fill={color} />
+                          {allPts.map((p, pi) => (
+                            <circle key={pi} cx={p.x} cy={p.y} r={isHovered ? 4 : 2.5} fill={p.outside ? 'none' : color} stroke={p.outside ? color : 'none'} strokeWidth={p.outside ? 1.5 : 0} />
                           ))}
                           <text x={lastPt.x + 8} y={lastPt.y + 4} fill={color} fontSize={isHovered ? 11 : 9} fontWeight={isHovered ? 'bold' : 'normal'}>{s.name}</text>
-                          {isHovered && points.map((p, pi) => (
-                            <text key={`t-${pi}`} x={p.x} y={p.y - 8} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">{p.rank}</text>
+                          {isHovered && allPts.map((p, pi) => (
+                            <text key={`t-${pi}`} x={p.x} y={p.y - 8} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">
+                              {p.outside ? `${p.divLabel}${p.transLabel}` : p.rank}
+                            </text>
                           ))}
                         </g>
                       )
@@ -980,6 +1025,68 @@ export default function MasterRankingView({
                   {rankChartData ? '마스터 대회 기록이 없습니다' : '로딩 중...'}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 랭킹차트 내 개별 순위추이 모달 */}
+      {rankChartTrend && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={() => { setRankChartTrend(null); setRankChartTrendData(null) }}>
+          <div className="bg-gray-800 rounded-lg w-[500px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 shrink-0">
+              <div className="flex items-center gap-2">
+                {rankChartTrend.img && <ImagePreview path={rankChartTrend.img} alt="" className="w-8 h-8 rounded" objectPosition="center 10%" />}
+                <span className="text-white font-bold text-sm">{rankChartTrend.name}</span>
+                <span className="text-gray-400 text-xs">글로벌 순위 추이</span>
+              </div>
+              <button onClick={() => { setRankChartTrend(null); setRankChartTrendData(null) }} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div className="p-4">
+              {rankChartTrendData ? (
+                rankChartTrendData.length > 0 ? (() => {
+                  const W = 460, H = 200, PX = 40, PY = 20
+                  const maxR = Math.max(...rankChartTrendData.map(h => h.rank), 1)
+                  const pts = rankChartTrendData.map((h, i) => ({
+                    x: PX + (rankChartTrendData.length > 1 ? i / (rankChartTrendData.length - 1) : 0.5) * (W - PX * 2),
+                    y: PY + ((h.rank - 1) / Math.max(maxR - 1, 1)) * (H - PY * 2),
+                    rank: h.rank,
+                    date: h.recorded_at,
+                    div: getDivision(h.rank, 1),
+                  }))
+                  const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+                  return (
+                    <div>
+                      <svg width={W} height={H} className="overflow-visible">
+                        {[1, Math.ceil(maxR / 4), Math.ceil(maxR / 2), Math.ceil(maxR * 3 / 4), maxR].filter((v, i, a) => a.indexOf(v) === i).map(r => {
+                          const y = PY + ((r - 1) / Math.max(maxR - 1, 1)) * (H - PY * 2)
+                          return (
+                            <g key={r}>
+                              <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="#374151" strokeDasharray="3,3" />
+                              <text x={PX - 6} y={y + 4} fill="#9ca3af" fontSize="10" textAnchor="end">{r}</text>
+                            </g>
+                          )
+                        })}
+                        <polyline points={polyPts} fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinejoin="round" />
+                        {pts.map((p, i) => {
+                          const divColor = DIV_COLOR[p.div]?.includes('yellow') ? '#facc15' : DIV_COLOR[p.div]?.includes('blue') ? '#60a5fa' : '#9ca3af'
+                          return (
+                            <g key={i}>
+                              <circle cx={p.x} cy={p.y} r={4} fill={divColor} />
+                              <text x={p.x} y={p.y - 8} textAnchor="middle" fill="white" fontSize="9" fontWeight="bold">{p.rank}</text>
+                            </g>
+                          )
+                        })}
+                      </svg>
+                      <div className="flex items-center justify-between text-xs text-gray-500 mt-1 px-2">
+                        <span>{rankChartTrendData[0]?.recorded_at?.slice(0, 10)}</span>
+                        <span>{rankChartTrendData.length}회</span>
+                        <span>{rankChartTrendData[rankChartTrendData.length - 1]?.recorded_at?.slice(0, 10)}</span>
+                      </div>
+                    </div>
+                  )
+                })() : <p className="text-gray-500 text-sm text-center py-4">순위 이력이 없습니다</p>
+              ) : <p className="text-gray-500 text-sm text-center py-4">로딩 중...</p>}
             </div>
           </div>
         </div>
