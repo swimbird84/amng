@@ -918,11 +918,13 @@ export default function MasterRankingView({
                 const { runs, series } = rankChartData
                 const cfg = CHART_DIV_CONFIG.find(c => c.div === rankChartDiv)
                 const maxRank = cfg?.maxRank ?? 32
-                const PADDING = { top: 20, right: 80, bottom: 60, left: 50 }
+                const PADDING = { top: 45, right: 80, bottom: 60, left: 50 }
                 const chartH = 700
                 const mainBottom = chartH - PADDING.bottom
-                const outerZoneTop = mainBottom + 8
-                const outerZoneBottom = chartH - 8
+                const outerBelowTop = mainBottom + 8
+                const outerBelowBottom = chartH - 8
+                const outerAboveTop = 4
+                const outerAboveBottom = PADDING.top - 8
                 const divBounds = [32, 96, 224, 480, 992, 2016]
                 const getDiv = (gRank: number) => { for (let d = 0; d < divBounds.length; d++) { if (gRank <= divBounds[d]) return d + 1 } return 6 }
                 const getDivRank = (gRank: number) => { const div = getDiv(gRank); const lo = div === 1 ? 1 : divBounds[div - 2] + 1; return gRank - lo + 1 }
@@ -949,6 +951,7 @@ export default function MasterRankingView({
                       )
                     })}
                     {/* 부 경계선 */}
+                    <line x1={PADDING.left} y1={PADDING.top - 4} x2={1000 - PADDING.right} y2={PADDING.top - 4} stroke="#4B5563" strokeWidth={1} strokeDasharray="4,4" />
                     <line x1={PADDING.left} y1={mainBottom + 2} x2={1000 - PADDING.right} y2={mainBottom + 2} stroke="#4B5563" strokeWidth={1} strokeDasharray="4,4" />
                     {/* X축 라벨 */}
                     {runs.map((run, i) => {
@@ -977,24 +980,30 @@ export default function MasterRankingView({
                         const gRank = s.globalRanks[i]
                         if (rank == null && gRank == null) continue
                         const x = getX(i)
-                        const inside = rank != null && rank <= maxRank
-                        const y = inside ? getY(rank!) : (outerZoneTop + (outerZoneBottom - outerZoneTop) / 2)
+                        const inside = rank != null && rank >= 1 && rank <= maxRank
+                        const outsideAbove = rank != null && rank < 1
+                        const y = inside ? getY(rank!)
+                          : outsideAbove ? (outerAboveTop + (outerAboveBottom - outerAboveTop) / 2)
+                          : (outerBelowTop + (outerBelowBottom - outerBelowTop) / 2)
                         const div = gRank != null ? getDiv(gRank) : 0
                         const divR = gRank != null ? getDivRank(gRank) : 0
                         const divLabel = !inside && gRank != null ? `${DIV_LABEL[div] ?? `${div}부`} ${divR}위` : ''
+                        const isAbove = outsideAbove || (rank == null && gRank != null && getDiv(gRank) < rankChartDiv)
                         // 승격/강등 판정
                         let transLabel = ''
                         if (!inside) {
                           const prevRank = i > 0 ? s.ranks[i - 1] : null
                           const nextRank = i < runs.length - 1 ? s.ranks[i + 1] : null
-                          const prevInside = prevRank != null && prevRank <= maxRank
-                          const nextInside = nextRank != null && nextRank <= maxRank
-                          if (prevInside) transLabel = ' - 강등'
-                          else if (nextInside) transLabel = ' - 승격'
+                          const prevInside = prevRank != null && prevRank >= 1 && prevRank <= maxRank
+                          const nextInside = nextRank != null && nextRank >= 1 && nextRank <= maxRank
+                          if (prevInside) transLabel = isAbove ? ' - 승격' : ' - 강등'
+                          else if (nextInside) transLabel = isAbove ? ' - 강등' : ' - 승격'
                         }
                         allPts.push({ x, y, rank: rank ?? 0, outside: !inside, globalRank: gRank, divLabel, transLabel })
                       }
                       if (allPts.length === 0) return null
+                      // 현재(마지막) 시점에 부 범위 안에 없으면 제외
+                      if (allPts[allPts.length - 1].outside) return null
                       const pathD = allPts.map((p, pi) => `${pi === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
                       const lastPt = allPts[allPts.length - 1]
                       return (
