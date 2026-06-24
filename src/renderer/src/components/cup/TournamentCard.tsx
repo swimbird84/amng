@@ -41,7 +41,7 @@ export default function TournamentCard({
     cupApi.itemCount(t.id).then(count => {
       setItemCount(count as number)
       const allValid = ROUND_OPTIONS.filter(o => {
-        if (o.value === 0) return t.format === 'tournament'
+        if (o.value === 0) return t.format === 'tournament' || t.format === 'league'
         if (t.format === 'worldcup') return (count as number) >= o.value * 2
         if (t.format === 'league') return (count as number) >= o.value * 2
         return o.value <= (count as number)
@@ -76,7 +76,7 @@ export default function TournamentCard({
 
   const validOptions = (() => {
     const allValid = ROUND_OPTIONS.filter(o => {
-      if (o.value === 0) return t.format === 'tournament'
+      if (o.value === 0) return t.format === 'tournament' || t.format === 'league'
       if (t.format === 'worldcup') return itemCount >= o.value * 2
       if (t.format === 'league') return itemCount >= o.value * 2
       return o.value <= itemCount
@@ -221,7 +221,9 @@ export default function TournamentCard({
               {validOptions.map(o => (
                 <option key={o.value} value={o.value}>
                   {o.value === 0
-                    ? `전체 (${itemCount}${t.type === 'actor' ? '명' : '작품'})`
+                    ? t.format === 'league'
+                      ? `전체 (${itemCount}${t.type === 'actor' ? '명' : '작품'} ${Math.floor(itemCount / 4)}조)`
+                      : `전체 (${itemCount}${t.type === 'actor' ? '명' : '작품'})`
                     : t.format === 'worldcup'
                       ? `${o.label} (${o.value / 2}조)`
                       : t.format === 'league'

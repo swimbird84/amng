@@ -205,10 +205,17 @@ function checkLeagueGroupsAdvance(database: DB, runId: number): void {
   shuffleArr(allQualifiers)
   const roundSize = allQualifiers.length
   const insertMain = database.prepare(
-    `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id) VALUES (?, 'main', ?, ?, ?, ?)`
+    `INSERT INTO cup_matches (run_id, phase, round, match_index, item1_id, item2_id, winner_id, is_bye) VALUES (?, 'main', ?, ?, ?, ?, ?, ?)`
   )
-  for (let i = 0; i < allQualifiers.length; i += 2)
-    insertMain.run(runId, roundSize, i / 2, allQualifiers[i], allQualifiers[i + 1] ?? null)
+  let matchIdx = 0
+  for (let i = 0; i < allQualifiers.length; i += 2) {
+    if (i + 1 < allQualifiers.length) {
+      insertMain.run(runId, roundSize, matchIdx++, allQualifiers[i], allQualifiers[i + 1], null, 0)
+    } else {
+      // 홀수 진출자: 마지막 1명 부전승
+      insertMain.run(runId, roundSize, matchIdx++, allQualifiers[i], null, null, 1)
+    }
+  }
 }
 
 // 월드컵 전용: 블록 토너먼트 시작 (block_id 기준 16개 조 진출자 32명 → 고정 크로스 시딩)
@@ -367,12 +374,35 @@ function calcAndStoreRunPoints(
       for (const loserId of losers) rankMap.set(loserId, rankStart)
     }
   } else {
-    // 리그전: raw matchPts 기준 순위
-    const sorted = [...entries].sort((a, b) => (matchPts.get(b.item_id) ?? 0) - (matchPts.get(a.item_id) ?? 0))
-    let rank = 1
-    for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && (matchPts.get(sorted[i].item_id) ?? 0) < (matchPts.get(sorted[i - 1].item_id) ?? 0)) rank = i + 1
-      rankMap.set(sorted[i].item_id, rank)
+    // 리그전: 본선 진출자 = 브래킷 순위, 조별 탈락자 = 본선 뒤에 matchPts 순
+    const mainMatches = matches.filter(m => m.phase === 'main')
+    const mainParticipants = new Set<number>()
+    for (const m of mainMatches) {
+      mainParticipants.add(m.item1_id)
+      if (m.item2_id != null) mainParticipants.add(m.item2_id)
+    }
+    // 본선 진출자: 브래킷 순위
+    if (run.winner_id !== null) rankMap.set(run.winner_id, 1)
+    const roundGroups = new Map<number, number[]>()
+    for (const m of mainMatches) {
+      if (m.winner_id === null || m.item2_id === null || m.is_draw) continue
+      const loserId = m.item1_id === m.winner_id ? m.item2_id : m.item1_id
+      const group = roundGroups.get(m.round) ?? []
+      group.push(loserId)
+      roundGroups.set(m.round, group)
+    }
+    for (const [round, losers] of roundGroups.entries()) {
+      const rankStart = Math.floor(round / 2) + 1
+      for (const loserId of losers) rankMap.set(loserId, rankStart)
+    }
+    // 조별 탈락자: 본선 진출자 뒤에 matchPts 순 배치
+    const maxMainRank = mainParticipants.size > 0 ? Math.max(...Array.from(mainParticipants).map(id => rankMap.get(id) ?? 0)) : 0
+    const groupOnly = entries.filter(e => !mainParticipants.has(e.item_id))
+    const sortedGroupOnly = [...groupOnly].sort((a, b) => (matchPts.get(b.item_id) ?? 0) - (matchPts.get(a.item_id) ?? 0))
+    let goRank = maxMainRank + 1
+    for (let i = 0; i < sortedGroupOnly.length; i++) {
+      if (i > 0 && (matchPts.get(sortedGroupOnly[i].item_id) ?? 0) < (matchPts.get(sortedGroupOnly[i - 1].item_id) ?? 0)) goRank = maxMainRank + 1 + i
+      rankMap.set(sortedGroupOnly[i].item_id, goRank)
     }
   }
 
@@ -1442,8 +1472,8 @@ export function registerCupHandlers(): void {
       }
     }
 
-    // 리그전: calcPoolSize 기준 풀에서 roundTotal × 2명 선발
-    if (tournament.format === 'league') {
+    // 리그전: calcPoolSize 기준 풀에서 roundTotal × 2명 선발 (전체 모드 제외)
+    if (tournament.format === 'league' && roundTotal > 0) {
       const needed = roundTotal * 2
       if (items.length < needed) throw new Error(`참가 항목 부족 (${needed}명 필요, 현재 ${items.length}명)`)
       const multiplier = Math.max(2, Math.sqrt(items.length / needed))
@@ -1503,11 +1533,20 @@ export function registerCupHandlers(): void {
           for (let i = byeCount; i < totalCount; i += 2) insertMatch.run(runId, roundSize, matchIdx++, shuffled[i].id, shuffled[i + 1]?.id ?? null, null, 0)
         }
       } else if (tournament.format === 'league') {
-        if (roundTotal === 0 || roundTotal % 2 !== 0) throw new Error('리그전은 강 수(짝수)를 선택해야 합니다')
-        const groupCount = roundTotal / 2
-        const poolNeeded = groupCount * 4
-        if (participants.length < poolNeeded) throw new Error(`조 구성 인원 부족 (${groupCount}조 × 4명 = ${poolNeeded}명 필요, 현재 ${participants.length}명)`)
-        const pool = participants.slice(0, poolNeeded)
+        let groupCount: number
+        let pool: { id: number }[]
+        if (roundTotal === 0) {
+          // 전체 참가 모드: 4인 1조 기본, 나머지 1~3명은 앞 조에 편입 (5인조)
+          if (participants.length < 4) throw new Error('리그전은 최소 4명이 필요합니다')
+          groupCount = Math.floor(participants.length / 4)
+          pool = participants
+        } else {
+          if (roundTotal % 2 !== 0) throw new Error('리그전은 강 수(짝수)를 선택해야 합니다')
+          groupCount = roundTotal / 2
+          const poolNeeded = groupCount * 4
+          if (participants.length < poolNeeded) throw new Error(`조 구성 인원 부족 (${groupCount}조 × 4명 = ${poolNeeded}명 필요, 현재 ${participants.length}명)`)
+          pool = participants.slice(0, poolNeeded)
+        }
         shuffleArr(pool)
         const groups: number[][] = Array.from({ length: groupCount }, () => [])
         pool.forEach((p, i) => groups[i % groupCount].push(p.id))
