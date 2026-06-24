@@ -107,7 +107,7 @@ export default function MasterRankingView({
   const CHART_DIV_CONFIG: { div: number; label: string; maxRank?: number }[] = [
     { div: 1, label: '1부 전체' },
     { div: 2, label: '2부 30위', maxRank: 30 },
-    { div: 3, label: '3부 20위', maxRank: 20 },
+    { div: 3, label: '3부 30위', maxRank: 30 },
   ]
 
   useEffect(() => {
