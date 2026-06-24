@@ -484,10 +484,10 @@ function saveRankSnapshot(
   }
 }
 
-// 대회의 전체 대상 아이템 수 계산 (cup:item-count / cup:tournament-stats 공용)
-function countEligibleItems(database: DB, tournamentId: number): number {
+// 대회의 전체 대상 아이템 ID 목록 (cup:item-count / cup:tournament-stats 공용)
+function getEligibleItemIds(database: DB, tournamentId: number): number[] {
   const t = database.prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId) as { type: string; is_master: number; filter_json?: string | null } | undefined
-  if (!t) return 0
+  if (!t) return []
   const filter = t.filter_json ? JSON.parse(t.filter_json) as Record<string, unknown> : null
 
   if (t.is_master) {
@@ -513,9 +513,9 @@ function countEligibleItems(database: DB, tournamentId: number): number {
     const selectedDivisions = filter?.selectedDivisions as number[] | undefined
     if (selectedDivisions?.length) {
       const divSet = new Set(selectedDivisions)
-      return ranked.filter(row => divSet.has(divisionMap.get(row.id) ?? 0)).length
+      return ranked.filter(row => divSet.has(divisionMap.get(row.id) ?? 0)).map(row => row.id)
     }
-    return ranked.length
+    return ranked.map(row => row.id)
   }
 
   const extraConditions: string[] = []
@@ -599,10 +599,14 @@ function countEligibleItems(database: DB, tournamentId: number): number {
   }
   const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
   if (t.type === 'actor') {
-    return (database.prepare(`SELECT COUNT(DISTINCT a.id) as cnt FROM actors a${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt
+    return (database.prepare(`SELECT DISTINCT a.id FROM actors a${extraJoins} WHERE 1=1${filterWhere}`).all(...extraBindings) as { id: number }[]).map(r => r.id)
   } else {
-    return (database.prepare(`SELECT COUNT(DISTINCT w.id) as cnt FROM works w${extraJoins} WHERE 1=1${filterWhere}`).get(...extraBindings) as { cnt: number }).cnt
+    return (database.prepare(`SELECT DISTINCT w.id FROM works w${extraJoins} WHERE 1=1${filterWhere}`).all(...extraBindings) as { id: number }[]).map(r => r.id)
   }
+}
+
+function countEligibleItems(database: DB, tournamentId: number): number {
+  return getEligibleItemIds(database, tournamentId).length
 }
 
 export function registerCupHandlers(): void {
@@ -1987,47 +1991,45 @@ export function registerCupHandlers(): void {
     `).get(tournamentId) as { total_runs: number; completed_runs: number; last_run_at: string | null } | undefined
     if (!runStats) return null
 
-    // 마스터 대회: 마스터 대회 전체 기준, 일반 대회: 해당 대회 기준
-    // 삭제된 아이템을 제외하기 위해 actors/works JOIN
+    // 대회 필터 기반 대상 아이템 목록
+    const eligibleIds = getEligibleItemIds(db(), tournamentId)
+    const eligibleSet = new Set(eligibleIds)
+
+    // participated/runDist: 대상 아이템 범위 내에서만 집계
     const existsJoin = tInfo.type === 'actor' ? 'JOIN actors a ON a.id = e.item_id' : 'JOIN works w ON w.id = e.item_id'
-    const participated = tInfo.is_master
-      ? (db().prepare(`
-          SELECT COUNT(DISTINCT e.item_id) AS cnt
-          FROM cup_entries e
-          JOIN cup_runs r ON r.id = e.run_id
-          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-          ${existsJoin}
-        `).get(tInfo.type) as { cnt: number }).cnt
-      : (db().prepare(`
-          SELECT COUNT(DISTINCT e.item_id) AS cnt
-          FROM cup_entries e
-          JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
-          ${existsJoin}
-        `).get(tournamentId) as { cnt: number }).cnt
+    let participated: number
+    let runDist: { run_count: number; count: number }[]
 
-    const runDist = tInfo.is_master
-      ? db().prepare(`
-          SELECT run_count, COUNT(*) AS count FROM (
-            SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
-            FROM cup_entries e
-            JOIN cup_runs r ON r.id = e.run_id
-            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-            ${existsJoin}
-            GROUP BY e.item_id
-          ) GROUP BY run_count ORDER BY run_count ASC
-        `).all(tInfo.type) as { run_count: number; count: number }[]
-      : db().prepare(`
-          SELECT run_count, COUNT(*) AS count FROM (
-            SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
-            FROM cup_entries e
-            JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
-            ${existsJoin}
-            GROUP BY e.item_id
-          ) GROUP BY run_count ORDER BY run_count ASC
-        `).all(tournamentId) as { run_count: number; count: number }[]
+    if (tInfo.is_master) {
+      const allEntries = db().prepare(`
+        SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
+        FROM cup_entries e
+        JOIN cup_runs r ON r.id = e.run_id
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        ${existsJoin}
+        GROUP BY e.item_id
+      `).all(tInfo.type) as { item_id: number; run_count: number }[]
+      const filtered = allEntries.filter(e => eligibleSet.has(e.item_id))
+      participated = filtered.length
+      const distMap = new Map<number, number>()
+      for (const e of filtered) distMap.set(e.run_count, (distMap.get(e.run_count) ?? 0) + 1)
+      runDist = Array.from(distMap.entries()).map(([run_count, count]) => ({ run_count, count })).sort((a, b) => a.run_count - b.run_count)
+    } else {
+      const allEntries = db().prepare(`
+        SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
+        FROM cup_entries e
+        JOIN cup_runs r ON r.id = e.run_id AND r.tournament_id = ?
+        ${existsJoin}
+        GROUP BY e.item_id
+      `).all(tournamentId) as { item_id: number; run_count: number }[]
+      const filtered = allEntries.filter(e => eligibleSet.has(e.item_id))
+      participated = filtered.length
+      const distMap = new Map<number, number>()
+      for (const e of filtered) distMap.set(e.run_count, (distMap.get(e.run_count) ?? 0) + 1)
+      runDist = Array.from(distMap.entries()).map(([run_count, count]) => ({ run_count, count })).sort((a, b) => a.run_count - b.run_count)
+    }
 
-    const totalEligible = countEligibleItems(db(), tournamentId)
-    const zeroCount = totalEligible - participated
+    const zeroCount = eligibleIds.length - participated
     if (zeroCount > 0) runDist.unshift({ run_count: 0, count: zeroCount })
 
     return { ...runStats, participated_items: participated, run_dist: runDist }
