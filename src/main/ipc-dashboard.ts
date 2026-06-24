@@ -282,12 +282,8 @@ export function registerDashboardHandlers(): void {
     `).all()
   })
 
-  ipcMain.handle('dashboard:rank-change-chart', (_e, params: { type: 'actor' | 'work'; limit?: number; division?: number; maxRank?: number }) => {
-    const { type, limit = 10, division = 1, maxRank: maxRankParam } = params
-    const divBoundaries = [32, 96, 224, 480, 992, 2016]
-    const rankLo = division === 1 ? 1 : (divBoundaries[division - 2] + 1)
-    const rankHi = divBoundaries[division - 1] ?? 2016
-    const chartMaxRank = maxRankParam ?? (rankHi - rankLo + 1)
+  ipcMain.handle('dashboard:rank-change-chart', (_e, params: { type: 'actor' | 'work'; limit?: number; rankFrom?: number; rankTo?: number }) => {
+    const { type, limit = 10, rankFrom = 1, rankTo = 32 } = params
 
     // recentRunLimit 설정 읽기
     const rlRow = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
@@ -310,6 +306,7 @@ export function registerDashboardHandlers(): void {
       ) WHERE rn <= ${recentRunLimit} GROUP BY item_id`
     }
 
+    const nameSort = type === 'actor' ? `${nameCol} ASC` : `COALESCE(${nameCol}, '') ASC`
     const topItems = db().prepare(`
       WITH pts AS (${ptsCte}),
       mrc AS (
@@ -320,14 +317,15 @@ export function registerDashboardHandlers(): void {
         SELECT ${idCol} AS id, ${nameCol} AS name, ${photoCol} AS photo_path,
           COALESCE(pts.total_points, 0) AS total_points,
           COALESCE(mrc.run_count, 0) AS run_count,
+          ROW_NUMBER() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC, ${nameSort}) AS row_num,
           RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank
         FROM ${fromClause}
         LEFT JOIN pts ON pts.item_id = ${idCol}
         LEFT JOIN mrc ON mrc.item_id = ${idCol}
         WHERE COALESCE(mrc.run_count, 0) > 0
       )
-      SELECT * FROM ranked WHERE rank >= ? AND rank <= ?
-    `).all(rankLo, rankLo + chartMaxRank - 1) as { id: number; name: string; photo_path: string | null; total_points: number; rank: number }[]
+      SELECT * FROM ranked WHERE row_num >= ? AND row_num <= ?
+    `).all(rankFrom, rankTo) as { id: number; name: string; photo_path: string | null; total_points: number; rank: number; row_num: number }[]
 
     if (topItems.length === 0) return { runs: [], series: [] }
     const itemIds = topItems.map(i => i.id)
@@ -349,6 +347,7 @@ export function registerDashboardHandlers(): void {
     // 3) 각 run 시점의 순위 계산 (recentRunLimit 반영)
     // 각 run의 completed_at 시점까지의 포인트로 순위 계산
     const runRanks = new Map<number, Map<number, number>>()
+    const runDisplayRanks = new Map<number, Map<number, number>>()
     for (const run of runs) {
       let atTimeSql: string
       if (recentRunLimit <= 0) {
@@ -370,27 +369,33 @@ export function registerDashboardHandlers(): void {
       }
       const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
       allPts.sort((a, b) => b.total - a.total)
-      const rankMap = new Map<number, number>()
+      // rowNum: 위치용 (ROW_NUMBER 방식), displayRank: 표시용 (RANK 방식 - 동점 동순위)
+      const rowNumMap = new Map<number, number>()
+      const displayRankMap = new Map<number, number>()
       for (let i = 0; i < allPts.length; i++) {
-        rankMap.set(allPts[i].item_id, i + 1)
+        rowNumMap.set(allPts[i].item_id, i + 1)
+        if (i === 0 || allPts[i].total < allPts[i - 1].total) {
+          displayRankMap.set(allPts[i].item_id, i + 1)
+        } else {
+          displayRankMap.set(allPts[i].item_id, displayRankMap.get(allPts[i - 1].item_id)!)
+        }
       }
-      runRanks.set(run.run_id, rankMap)
+      runRanks.set(run.run_id, rowNumMap)
+      runDisplayRanks.set(run.run_id, displayRankMap)
     }
 
-    // 4) 해당 부 아이템들의 시계열 데이터 구성 (부 내 상대 순위 + 글로벌 순위)
+    // 4) 시계열 데이터 구성 (글로벌 순위 기준)
     const series = itemIds.map(id => {
       const info = itemMap.get(id)!
-      const ranks = runs.map(r => {
-        const rankMap = runRanks.get(r.run_id)
-        const globalRank = rankMap?.get(id) ?? null
-        if (globalRank === null) return null
-        return globalRank - rankLo + 1
-      })
       const globalRanks = runs.map(r => {
-        const rankMap = runRanks.get(r.run_id)
-        return rankMap?.get(id) ?? null
+        const rowMap = runRanks.get(r.run_id)
+        return rowMap?.get(id) ?? null
       })
-      return { id, name: info.name, photo_path: info.photo_path, currentRank: info.rank - rankLo + 1, ranks, globalRanks }
+      const displayRanks = runs.map(r => {
+        const drMap = runDisplayRanks.get(r.run_id)
+        return drMap?.get(id) ?? null
+      })
+      return { id, name: info.name, photo_path: info.photo_path, currentRank: info.rank, ranks: globalRanks, globalRanks, displayRanks }
     })
 
     return {

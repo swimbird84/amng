@@ -54,11 +54,11 @@ export default function MasterRankingView({
 
   // 랭킹 차트
   const [rankChartModal, setRankChartModal] = useState(false)
-  const [rankChartDiv, setRankChartDiv] = useState(1)
+  const [rankChartDiv, setRankChartDiv] = useState(0)
   const [rankChartLimit, setRankChartLimit] = useState(10)
   const [rankChartData, setRankChartData] = useState<{
     runs: { runId: number; label: string; completedAt: string }[]
-    series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[]; globalRanks: (number | null)[] }[]
+    series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[]; globalRanks: (number | null)[]; displayRanks: (number | null)[] }[]
   } | null>(null)
   const [rankChartHover, setRankChartHover] = useState<number | null>(null)
   const [rankChartTrend, setRankChartTrend] = useState<{ itemId: number; name: string; img: string | null } | null>(null)
@@ -104,17 +104,18 @@ export default function MasterRankingView({
     return () => popEscHandler(handler)
   }, [rankChartModal])
 
-  const CHART_DIV_CONFIG: { div: number; label: string; maxRank?: number }[] = [
-    { div: 1, label: '1부 전체' },
-    { div: 2, label: '2부 30위', maxRank: 30 },
-    { div: 3, label: '3부 30위', maxRank: 30 },
+  const CHART_RANGE_CONFIG = [
+    { key: 0, label: '1부 전체', rankFrom: 1, rankTo: 32 },
+    { key: 1, label: '2부 상위', rankFrom: 33, rankTo: 64 },
+    { key: 2, label: '2부 하위', rankFrom: 65, rankTo: 96 },
+    { key: 3, label: '3부 상위', rankFrom: 97, rankTo: 128 },
   ]
 
   useEffect(() => {
     if (!rankChartModal) return
     setRankChartData(null)
-    const cfg = CHART_DIV_CONFIG.find(c => c.div === rankChartDiv)
-    dashboardApi.rankChangeChart(type, rankChartLimit, rankChartDiv, cfg?.maxRank).then(setRankChartData)
+    const cfg = CHART_RANGE_CONFIG[rankChartDiv] ?? CHART_RANGE_CONFIG[0]
+    dashboardApi.rankChangeChart(type, rankChartLimit, cfg.rankFrom, cfg.rankTo).then(setRankChartData)
   }, [rankChartModal, type, rankChartLimit, rankChartDiv])
 
   useEffect(() => {
@@ -884,12 +885,12 @@ export default function MasterRankingView({
             <div className="shrink-0 px-6 pt-6 pb-3 border-b border-gray-700 flex items-center gap-4">
               <h2 className="text-lg font-bold text-white">{type === 'actor' ? '배우' : '작품'} 랭킹차트</h2>
               <div className="flex">
-                {CHART_DIV_CONFIG.map(cfg => (
+                {CHART_RANGE_CONFIG.map(cfg => (
                   <button
-                    key={cfg.div}
-                    onClick={() => setRankChartDiv(cfg.div)}
+                    key={cfg.key}
+                    onClick={() => setRankChartDiv(cfg.key)}
                     className={`text-xs px-2.5 py-1 border-r last:border-r-0 border-gray-600 first:rounded-l last:rounded-r ${
-                      rankChartDiv === cfg.div ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      rankChartDiv === cfg.key ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                     }`}
                   >
                     {cfg.label}
@@ -916,8 +917,10 @@ export default function MasterRankingView({
             <div className="flex-1 overflow-hidden p-6">
               {rankChartData && rankChartData.runs.length > 0 && rankChartData.series.length > 0 ? (() => {
                 const { runs, series } = rankChartData
-                const cfg = CHART_DIV_CONFIG.find(c => c.div === rankChartDiv)
-                const maxRank = cfg?.maxRank ?? 32
+                const rcfg = CHART_RANGE_CONFIG[rankChartDiv] ?? CHART_RANGE_CONFIG[0]
+                const rankFrom = rcfg.rankFrom
+                const rankTo = rcfg.rankTo
+                const maxRank = rankTo - rankFrom + 1
                 const PADDING = { top: 45, right: 80, bottom: 60, left: 50 }
                 const chartH = 700
                 const mainBottom = chartH - PADDING.bottom
@@ -929,7 +932,7 @@ export default function MasterRankingView({
                 const getDiv = (gRank: number) => { for (let d = 0; d < divBounds.length; d++) { if (gRank <= divBounds[d]) return d + 1 } return 6 }
                 const getDivRank = (gRank: number) => { const div = getDiv(gRank); const lo = div === 1 ? 1 : divBounds[div - 2] + 1; return gRank - lo + 1 }
                 const getX = (i: number) => PADDING.left + i / Math.max(runs.length - 1, 1) * (1000 - PADDING.left - PADDING.right)
-                const getY = (rank: number) => PADDING.top + (rank - 1) / (maxRank - 1) * (mainBottom - PADDING.top)
+                const getY = (globalRank: number) => PADDING.top + (globalRank - rankFrom) / Math.max(maxRank - 1, 1) * (mainBottom - PADDING.top)
                 return (
                   <svg
                     className="w-full h-full"
@@ -939,13 +942,13 @@ export default function MasterRankingView({
                   >
                     {/* Y축 그리드 */}
                     {Array.from({ length: maxRank }, (_, i) => {
-                      const rank = i + 1
-                      const y = getY(rank)
+                      const gRank = rankFrom + i
+                      const y = getY(gRank)
                       return (
-                        <g key={`y-${rank}`}>
+                        <g key={`y-${gRank}`}>
                           <line x1={PADDING.left} y1={y} x2={1000 - PADDING.right} y2={y} stroke="#374151" strokeWidth={0.5} />
-                          {(rank === 1 || rank % 5 === 0 || rank === maxRank) && (
-                            <text x={PADDING.left - 8} y={y + 4} textAnchor="end" fill="#9CA3AF" fontSize={11}>{rank}</text>
+                          {(i === 0 || (gRank % 5 === 0) || i === maxRank - 1) && (
+                            <text x={PADDING.left - 8} y={y + 4} textAnchor="end" fill="#9CA3AF" fontSize={11}>{gRank}</text>
                           )}
                         </g>
                       )
@@ -973,33 +976,34 @@ export default function MasterRankingView({
                       const opacity = isOtherHovered ? 0.08 : isHovered ? 1 : 0.6
                       const strokeW = isHovered ? 3 : s.currentRank <= 5 ? 2 : 1.2
 
-                      type Pt = { x: number; y: number; rank: number; outside: boolean; globalRank: number | null; divLabel: string; transLabel: string }
+                      type Pt = { x: number; y: number; rank: number; displayRank: number; outside: boolean; globalRank: number | null; divLabel: string; transLabel: string }
                       const allPts: Pt[] = []
                       for (let i = 0; i < runs.length; i++) {
                         const rank = s.ranks[i]
                         const gRank = s.globalRanks[i]
+                        const dRank = s.displayRanks?.[i] ?? gRank
                         if (rank == null && gRank == null) continue
                         const x = getX(i)
-                        const inside = rank != null && rank >= 1 && rank <= maxRank
-                        const outsideAbove = rank != null && rank < 1
-                        const y = inside ? getY(rank!)
+                        const gRankVal = gRank ?? rank
+                        const inside = gRankVal != null && gRankVal >= rankFrom && gRankVal <= rankTo
+                        const outsideAbove = gRankVal != null && gRankVal < rankFrom
+                        const y = inside ? getY(gRankVal!)
                           : outsideAbove ? (outerAboveTop + (outerAboveBottom - outerAboveTop) / 2)
                           : (outerBelowTop + (outerBelowBottom - outerBelowTop) / 2)
                         const div = gRank != null ? getDiv(gRank) : 0
                         const divR = gRank != null ? getDivRank(gRank) : 0
                         const divLabel = !inside && gRank != null ? `${DIV_LABEL[div] ?? `${div}부`} ${divR}위` : ''
-                        const isAbove = outsideAbove || (rank == null && gRank != null && getDiv(gRank) < rankChartDiv)
                         // 승격/강등 판정
                         let transLabel = ''
                         if (!inside) {
-                          const prevRank = i > 0 ? s.ranks[i - 1] : null
-                          const nextRank = i < runs.length - 1 ? s.ranks[i + 1] : null
-                          const prevInside = prevRank != null && prevRank >= 1 && prevRank <= maxRank
-                          const nextInside = nextRank != null && nextRank >= 1 && nextRank <= maxRank
-                          if (prevInside) transLabel = isAbove ? ' - 승격' : ' - 강등'
-                          else if (nextInside) transLabel = isAbove ? ' - 강등' : ' - 승격'
+                          const prevGR = i > 0 ? s.globalRanks[i - 1] : null
+                          const nextGR = i < runs.length - 1 ? s.globalRanks[i + 1] : null
+                          const prevInside = prevGR != null && prevGR >= rankFrom && prevGR <= rankTo
+                          const nextInside = nextGR != null && nextGR >= rankFrom && nextGR <= rankTo
+                          if (prevInside) transLabel = outsideAbove ? ' - 승격' : ' - 강등'
+                          else if (nextInside) transLabel = outsideAbove ? ' - 강등' : ' - 승격'
                         }
-                        allPts.push({ x, y, rank: rank ?? 0, outside: !inside, globalRank: gRank, divLabel, transLabel })
+                        allPts.push({ x, y, rank: gRankVal ?? 0, displayRank: dRank ?? gRankVal ?? 0, outside: !inside, globalRank: gRank, divLabel, transLabel })
                       }
                       if (allPts.length === 0) return null
                       // 현재(마지막) 시점에 부 범위 안에 없으면 제외
@@ -1021,7 +1025,7 @@ export default function MasterRankingView({
                           <text x={lastPt.x + 8} y={lastPt.y + 4} fill={color} fontSize={isHovered ? 11 : 9} fontWeight={isHovered ? 'bold' : 'normal'}>{s.name}</text>
                           {isHovered && allPts.map((p, pi) => (
                             <text key={`t-${pi}`} x={p.x} y={p.y - 8} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">
-                              {p.outside ? `${p.divLabel}${p.transLabel}` : p.rank}
+                              {p.outside ? `${p.divLabel}${p.transLabel}` : p.displayRank}
                             </text>
                           ))}
                         </g>
