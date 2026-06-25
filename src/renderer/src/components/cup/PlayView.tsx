@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { cupApi, actorsApi, worksApi } from '../../api'
+import { cupApi, actorsApi, worksApi, masterRankingApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { CupTournament, CupRun, CupMatch, ItemInfo, StandingsRow } from './cupTypes'
@@ -30,6 +30,7 @@ export default function PlayView({
   const [progress, setProgress] = useState<{ total: number; done: number; groupDone: number | null; groupTotal: number | null; mainRoundDone: number | null; mainRoundTotal: number | null }>({ total: 0, done: 0, groupDone: null, groupTotal: null, mainRoundDone: null, mainRoundTotal: null })
   const [items, setItems] = useState<Map<number, ItemInfo>>(new Map())
   const [divisionMap, setDivisionMap] = useState<Record<number, number>>({})
+  const [masterPtsMap, setMasterPtsMap] = useState<Map<number, number>>(new Map())
   const [standings, setStandings] = useState<{
     type: string
     standings?: StandingsRow[]
@@ -126,6 +127,24 @@ export default function PlayView({
 
   useEffect(() => { load() }, [load])
   useEffect(() => { if (tab === 'standings') loadStandings() }, [tab, loadStandings])
+  useEffect(() => {
+    if (!tournament) return
+    masterRankingApi.list({ type: tournament.type as 'actor' | 'work', limit: 9999, offset: 0 })
+      .then(res => setMasterPtsMap(new Map((res.rows as { id: number; total_points: number }[]).map(r => [r.id, r.total_points]))))
+      .catch(() => {})
+  }, [tournament?.id])
+
+  const divBadge = (itemId: number) => {
+    const div = divisionMap[itemId]
+    if (div === undefined) return null
+    const label = div === 0 ? '미' : `${div}부`
+    return <span className={`text-[9px] px-1 py-0.5 rounded border font-bold shrink-0 ${DIV_COLOR[div] ?? DIV_COLOR[0]}`}>{label}</span>
+  }
+  const ptsLabel = (itemId: number) => {
+    const pts = masterPtsMap.get(itemId)
+    if (pts == null) return null
+    return <span className="text-[9px] text-gray-500 shrink-0">{pts.toFixed(1)}</span>
+  }
 
   const doPickApi = async (matchId: number, winnerId: number | null, isDraw = false) => {
     try {
@@ -421,15 +440,22 @@ export default function PlayView({
                               const i1 = items.get(m.item1_id)
                               const i2 = m.item2_id ? items.get(m.item2_id) : null
                               return (
-                                <div key={m.id} className="px-4 py-2 flex items-center gap-2 text-sm">
-                                  <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                    {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                <div key={m.id} className="px-4 py-1.5 flex items-center gap-1.5 text-sm">
+                                  <span className={`flex-1 flex items-center justify-end gap-1 ${m.winner_id === m.item1_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
+                                    {ptsLabel(m.item1_id)}
+                                    <span className={`truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                      {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                    </span>
+                                    {divBadge(m.item1_id)}
                                   </span>
                                   <span className="text-gray-600 text-xs w-6 text-center shrink-0">vs</span>
-                                  <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                    {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                  <span className={`flex-1 flex items-center gap-1 ${m.winner_id === m.item2_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
+                                    {divBadge(m.item2_id ?? 0)}
+                                    <span className={`truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                      {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                    </span>
+                                    {ptsLabel(m.item2_id ?? 0)}
                                   </span>
-                                  {m.winner_id === null && <span className="text-gray-600 text-xs shrink-0">대기 중</span>}
                                 </div>
                               )
                             })}
@@ -582,19 +608,22 @@ export default function PlayView({
                         const i1 = items.get(m.item1_id)
                         const i2 = m.item2_id ? items.get(m.item2_id) : null
                         return (
-                          <div key={m.id} className="px-4 py-2 flex items-center gap-2 text-sm">
-                            <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                              {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                          <div key={m.id} className="px-4 py-1.5 flex items-center gap-1.5 text-sm">
+                            <span className={`flex-1 flex items-center justify-end gap-1 ${m.winner_id === m.item1_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
+                              {ptsLabel(m.item1_id)}
+                              <span className={`truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                              </span>
+                              {divBadge(m.item1_id)}
                             </span>
-                            <span className="text-gray-600 text-xs w-6 text-center shrink-0">
-                              {m.winner_id ? 'vs' : 'vs'}
+                            <span className="text-gray-600 text-xs w-6 text-center shrink-0">vs</span>
+                            <span className={`flex-1 flex items-center gap-1 ${m.winner_id === m.item2_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
+                              {divBadge(m.item2_id ?? 0)}
+                              <span className={`truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                              </span>
+                              {ptsLabel(m.item2_id ?? 0)}
                             </span>
-                            <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                              {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
-                            </span>
-                            {m.winner_id === null && (
-                              <span className="text-gray-600 text-xs shrink-0">대기 중</span>
-                            )}
                           </div>
                         )
                       })}

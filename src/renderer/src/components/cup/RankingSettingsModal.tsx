@@ -134,6 +134,20 @@ export default function RankingSettingsModal({ onClose }: { onClose: () => void 
               </div>
             </section>
 
+            {/* 상대전적 최소 대전 수 */}
+            <section>
+              <h3 className="text-gray-300 font-semibold text-sm mb-1">상대전적 최소 대전 수</h3>
+              <div className="flex items-center gap-3 mt-2">
+                <NumInput
+                  value={cur.h2hMinMatches ?? 3}
+                  onChange={v => update(s => ({ ...s, h2hMinMatches: Math.max(1, Math.round(v)) }))}
+                  min={1}
+                  step={1}
+                />
+                <span className="text-xs text-gray-400">전 이상</span>
+              </div>
+            </section>
+
             {/* 부별 가중치 */}
             <section>
               <h3 className="text-gray-300 font-semibold text-sm mb-1">부별 가중치 <span className="text-gray-500 font-normal text-xs">(부별 대회: 자기 부 기준)</span></h3>

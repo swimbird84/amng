@@ -114,11 +114,12 @@ export function registerSystemHandlers(): void {
 
   // ========== 이미지 복사 ==========
 
-  ipcMain.handle('image:copy', (_e, sourcePath: string, type: 'works' | 'actors', id: number) => {
+  ipcMain.handle('image:copy', (_e, sourcePath: string, type: 'works' | 'actors' | 'actor-photos', id: number) => {
     const ext = path.extname(sourcePath)
     const imagesDir = path.join(app.getPath('userData'), 'images', type)
     fs.mkdirSync(imagesDir, { recursive: true })
-    const destPath = path.join(imagesDir, `${id}${ext}`)
+    const fileName = type === 'actor-photos' ? `${id}_${Date.now()}` : `${id}`
+    const destPath = path.join(imagesDir, `${fileName}${ext}`)
     fs.copyFileSync(sourcePath, destPath)
     return destPath
   })

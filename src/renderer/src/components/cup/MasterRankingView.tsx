@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { cupApi, masterRankingApi, dashboardApi } from '../../api'
+import { cupApi, masterRankingApi, dashboardApi, actorsApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { MasterRankRow, FormatStat, H2HRow, DivHistEntry, RateTooltip } from './cupTypes'
 import { RANK_MEDAL, MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
 import RankingSettingsModal from './RankingSettingsModal'
+import ActorForm from '../ActorForm'
 import { pushEscHandler, popEscHandler } from '../../escManager'
 
 export default function MasterRankingView({
@@ -52,6 +53,10 @@ export default function MasterRankingView({
   const [h2hDivFilter, setH2hDivFilter] = useState<number | null>(null)
   const [h2hDivDropdown, setH2hDivDropdown] = useState(false)
 
+  // 평점 편집
+  const [editActorId, setEditActorId] = useState<number | null>(null)
+  const [editActorData, setEditActorData] = useState<any>(null)
+
   // 랭킹 차트
   const [rankChartModal, setRankChartModal] = useState(false)
   const [rankChartDiv, setRankChartDiv] = useState(0)
@@ -96,6 +101,11 @@ export default function MasterRankingView({
   useEffect(() => {
     cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
   }, [type])
+
+  useEffect(() => {
+    if (!editActorId) { setEditActorData(null); return }
+    actorsApi.get(editActorId).then(setEditActorData)
+  }, [editActorId])
 
   useEffect(() => {
     if (!rankChartModal) return
@@ -308,7 +318,12 @@ export default function MasterRankingView({
         )}
       </div>
 
-      {showSettings && <RankingSettingsModal onClose={() => setShowSettings(false)} />}
+      {showSettings && <RankingSettingsModal onClose={() => {
+        setShowSettings(false)
+        load(type, search, page, divFilter, pageSize, sortBy, sortDir)
+        loadTrends(type)
+        cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+      }} />}
 
       {showResetConfirm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowResetConfirm(false)}>
@@ -358,6 +373,8 @@ export default function MasterRankingView({
                 <col />
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
+                {type === 'actor' && <col style={{ width: '5rem' }} />}
+                <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5rem' }} />
                 <col style={{ width: '5.5rem' }} />
@@ -370,6 +387,7 @@ export default function MasterRankingView({
                   <th className="px-2 py-2.5 text-left text-gray-400">썸네일</th>
                   <th className="px-3 py-2.5 text-left text-gray-400">이름</th>
                   <SortTh col="total_points" label="마스터" subLabel="포인트" subLabelClass="font-normal" />
+                  {type === 'actor' && <SortTh col="score_rank" label="평점" />}
                   <SortTh col="win_rate" label="우승률" subLabel="(우승/런)" subLabelClass="text-[9px] text-gray-600 font-normal" />
                   <SortTh col="match_win_rate" label="승률" subLabel="(승리/매치)" subLabelClass="text-[9px] text-gray-600 font-normal" />
                   <th className="px-3 py-2.5 text-right text-gray-400 text-xs">
@@ -454,6 +472,35 @@ export default function MasterRankingView({
                           <div className="text-[10px] text-gray-500">{row.last_run_points >= 0 ? '+' : ''}{row.last_run_points.toFixed(1)}</div>
                         )}
                       </td>
+                      {/* 평점 (배우만) */}
+                      {type === 'actor' && (() => {
+                        const scoreRank = (row as any).score_rank as number | undefined
+                        const avgScore = (row as any).avg_score as number | undefined
+                        const gap = scoreRank != null ? row.rank - scoreRank : null
+                        return (
+                          <td
+                            className="px-2 py-2 text-center cursor-pointer"
+                            onMouseEnter={e => setNameTooltip({ type: 'actor', id: row.id, x: e.clientX, y: e.clientY })}
+                            onMouseMove={e => setNameTooltip({ type: 'actor', id: row.id, x: e.clientX, y: e.clientY })}
+                            onMouseLeave={() => setNameTooltip(null)}
+                            onClick={() => setEditActorId(row.id)}
+                          >
+                            {scoreRank != null && (
+                              <div className="text-xs text-gray-300">
+                                {scoreRank}위
+                                {gap != null && gap !== 0 && (
+                                  <span className={`ml-0.5 text-[10px] ${gap > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    ({gap > 0 ? `↑${gap}` : `↓${Math.abs(gap)}`})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {avgScore != null && (
+                              <div className="text-[10px] text-gray-500">{avgScore.toFixed(2)}</div>
+                            )}
+                          </td>
+                        )
+                      })()}
                       {/* 우승률 */}
                       <td
                         className="px-3 py-2 text-right cursor-default"
@@ -930,7 +977,6 @@ export default function MasterRankingView({
                 const outerAboveBottom = PADDING.top - 8
                 const divBounds = [32, 96, 224, 480, 992, 2016]
                 const getDiv = (gRank: number) => { for (let d = 0; d < divBounds.length; d++) { if (gRank <= divBounds[d]) return d + 1 } return 6 }
-                const getDivRank = (gRank: number) => { const div = getDiv(gRank); const lo = div === 1 ? 1 : divBounds[div - 2] + 1; return gRank - lo + 1 }
                 const getX = (i: number) => PADDING.left + i / Math.max(runs.length - 1, 1) * (1000 - PADDING.left - PADDING.right)
                 const getY = (globalRank: number) => PADDING.top + (globalRank - rankFrom) / Math.max(maxRank - 1, 1) * (mainBottom - PADDING.top)
                 return (
@@ -991,8 +1037,7 @@ export default function MasterRankingView({
                           : outsideAbove ? (outerAboveTop + (outerAboveBottom - outerAboveTop) / 2)
                           : (outerBelowTop + (outerBelowBottom - outerBelowTop) / 2)
                         const div = gRank != null ? getDiv(gRank) : 0
-                        const divR = gRank != null ? getDivRank(gRank) : 0
-                        const divLabel = !inside && gRank != null ? `${DIV_LABEL[div] ?? `${div}부`} ${divR}위` : ''
+                        const divLabel = !inside && gRank != null ? `${DIV_LABEL[div] ?? `${div}부`} ${gRank}위` : ''
                         // 승격/강등 판정
                         let transLabel = ''
                         if (!inside) {
@@ -1103,6 +1148,19 @@ export default function MasterRankingView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 평점 편집 모달 */}
+      {editActorId && editActorData && (
+        <ActorForm
+          actor={editActorData}
+          onSave={() => {
+            setEditActorId(null)
+            setEditActorData(null)
+            load(type, search, page, divFilter, pageSize, sortBy, sortDir)
+          }}
+          onCancel={() => { setEditActorId(null); setEditActorData(null) }}
+        />
       )}
     </div>
   )

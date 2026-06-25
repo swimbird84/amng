@@ -22,6 +22,13 @@ export const actorsApi = {
   workTags: (actorId: number) => api.invoke('actors:workTags', actorId) as Promise<{ category_id: number | null; category_name: string | null; category_sort_order: number | null; tag_id: number; tag_name: string; count: number }[]>,
 }
 
+// 배우 추가 사진
+export const actorPhotosApi = {
+  list: (actorId: number) => api.invoke('actor-photos:list', actorId) as Promise<{ id: number; actor_id: number; photo_path: string; sort_order: number }[]>,
+  add: (actorId: number, photoPath: string) => api.invoke('actor-photos:add', actorId, photoPath) as Promise<number>,
+  delete: (photoId: number) => api.invoke('actor-photos:delete', photoId) as Promise<boolean>,
+}
+
 // 태그 카테고리
 export const workTagCategoriesApi = {
   list: () => api.invoke('work-tag-categories:list'),

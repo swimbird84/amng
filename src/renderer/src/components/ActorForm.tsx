@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useEscHandler } from '../escManager'
 import type { Actor, Tag, ActorScores } from '../types'
-import { actorsApi, actorTagsApi, actorTagCategoriesApi, dialogApi, imageApi, actorTagLinksApi } from '../api'
+import { actorsApi, actorTagsApi, actorTagCategoriesApi, dialogApi, imageApi, actorTagLinksApi, actorPhotosApi } from '../api'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
 import DateInput from './DateInput'
@@ -54,6 +54,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   const [repTagIds, setRepTagIds] = useState<number[]>(actor?.rep_tags?.map((t) => t.id) || [])
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [tagLinks, setTagLinks] = useState<{ parent_tag_id: number; child_tag_id: number }[]>([])
+  const [extraPhotos, setExtraPhotos] = useState<{ id: number; photo_path: string }[]>([])
 
   useEscHandler(() => {
     if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel()
@@ -62,6 +63,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   useEffect(() => {
     actorTagsApi.list().then((t) => setAllTags(t as Tag[]))
     actorTagLinksApi.list().then(l => setTagLinks(l))
+    if (actor) actorPhotosApi.list(actor.id).then(setExtraPhotos)
   }, [])
 
   const handleSelectPhoto = async () => {
@@ -203,6 +205,40 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                 </button>
               </div>
             </div>
+
+            {actor && (
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">추가 사진 ({extraPhotos.length}/3)</label>
+              <div className="flex gap-2 items-start">
+                {extraPhotos.map((p) => (
+                  <div key={p.id} className="relative group">
+                    <ImagePreview path={p.photo_path} alt="추가 사진" className="w-20 h-20 rounded object-cover" />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await actorPhotosApi.delete(p.id)
+                        setExtraPhotos(prev => prev.filter(x => x.id !== p.id))
+                      }}
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 hover:bg-red-500 text-white text-xs rounded-full leading-none opacity-0 group-hover:opacity-100 transition"
+                    >✕</button>
+                  </div>
+                ))}
+                {extraPhotos.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const src = await dialogApi.openImage() as string | null
+                      if (!src) return
+                      const newPath = await imageApi.copy(src, 'actor-photos', actor.id) as string
+                      const photoId = await actorPhotosApi.add(actor.id, newPath)
+                      setExtraPhotos(prev => [...prev, { id: photoId as number, photo_path: newPath }])
+                    }}
+                    className="w-20 h-20 rounded border-2 border-dashed border-gray-600 hover:border-gray-400 flex items-center justify-center text-gray-500 hover:text-gray-300 transition"
+                  >+</button>
+                )}
+              </div>
+            </div>
+            )}
 
             <div>
               <label className="text-sm text-gray-400 block mb-1">이름</label>

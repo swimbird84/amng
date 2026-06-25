@@ -481,6 +481,18 @@ export function initDatabase(): void {
     }
   }
 
+  // h2hMinMatches 마이그레이션 (기존 설치 대상)
+  for (const type of ['actor', 'work'] as const) {
+    const row = db.prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
+    if (row) {
+      const s = JSON.parse(row.settings_json)
+      if (s.h2hMinMatches === undefined) {
+        s.h2hMinMatches = 3
+        db.prepare(`UPDATE ranking_settings SET settings_json = ? WHERE type = ?`).run(JSON.stringify(s), type)
+      }
+    }
+  }
+
   // B안 마이그레이션: tournament_id → run_id (기존 설치 대상)
   const cupEntriesCols = (db.prepare("PRAGMA table_info(cup_entries)").all() as { name: string }[]).map(c => c.name)
   if (cupEntriesCols.includes('tournament_id')) {
@@ -657,4 +669,14 @@ export function initDatabase(): void {
   if (!cupMatchesCols.includes('block_id')) {
     db.prepare('ALTER TABLE cup_matches ADD COLUMN block_id INTEGER DEFAULT NULL').run()
   }
+
+  // actor_photos 테이블 추가
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS actor_photos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+      photo_path TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `)
 }

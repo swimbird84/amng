@@ -863,6 +863,8 @@ export function registerCupHandlers(): void {
           return `CASE WHEN total_cups > 0 THEN CAST(cup_wins AS REAL) / total_cups ELSE -1 END ${dir}, CASE WHEN total_matches > 0 THEN CAST(match_wins AS REAL) / total_matches ELSE -1 END ${dir}, ${nameSortCol} ASC`
         case 'match_win_rate':
           return `CASE WHEN total_matches > 0 THEN CAST(match_wins AS REAL) / total_matches ELSE -1 END ${dir}, CASE WHEN total_cups > 0 THEN CAST(cup_wins AS REAL) / total_cups ELSE -1 END ${dir}, ${nameSortCol} ASC`
+        case 'score_rank':
+          return `score_rank ${dir}, ${nameSortCol} ASC`
         default:
           return `total_points ${dir}, ${nameSortCol} ASC`
       }
@@ -892,7 +894,9 @@ export function registerCupHandlers(): void {
             RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
             a.id, a.name, a.photo_path,
             COALESCE(pts.total_points, 0) AS total_points,
-            COALESCE(mrc.master_run_count, 0) AS master_run_count
+            COALESCE(mrc.master_run_count, 0) AS master_run_count,
+            COALESCE((sc.face + sc.bust + sc.hip + sc.physical + sc.skin + sc.acting + sc.sexy + sc.charm + sc.technique + sc.proportions) / 13.0, 0) AS avg_score,
+            RANK() OVER (ORDER BY COALESCE((sc.face + sc.bust + sc.hip + sc.physical + sc.skin + sc.acting + sc.sexy + sc.charm + sc.technique + sc.proportions) / 13.0, 0) DESC) AS score_rank
           FROM actors a
           LEFT JOIN ${ptsCte} ON pts.item_id = a.id
           LEFT JOIN (
@@ -902,8 +906,10 @@ export function registerCupHandlers(): void {
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'actor'
             GROUP BY e.item_id
           ) mrc ON mrc.item_id = a.id
+          LEFT JOIN actor_scores sc ON sc.actor_id = a.id
         )
         SELECT ranked.rank, ranked.id, ranked.name, ranked.photo_path, ranked.total_points, ranked.master_run_count,
+          ranked.avg_score, ranked.score_rank,
           COALESCE(cs2.total_cups, 0) AS total_cups,
           COALESCE(cs2.cup_wins, 0) AS cup_wins,
           COALESCE(cs2.total_matches, 0) AS total_matches,
@@ -1112,6 +1118,8 @@ export function registerCupHandlers(): void {
 
   ipcMain.handle('cup:head-to-head', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
     const { type, itemId } = params
+    const h2hRow = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
+    const h2hMin = h2hRow ? (JSON.parse(h2hRow.settings_json).h2hMinMatches ?? 3) : 3
     const rows = db().prepare(`
       WITH h2h AS (
         SELECT item2_id AS opp_id, m.winner_id, m.is_draw
@@ -1140,7 +1148,7 @@ export function registerCupHandlers(): void {
         rk.opp_rank
       FROM h2h h
       LEFT JOIN ranked rk ON rk.item_id = h.opp_id
-      GROUP BY h.opp_id HAVING COUNT(*) >= 5 ORDER BY total DESC, wins DESC
+      GROUP BY h.opp_id HAVING COUNT(*) >= ${h2hMin} ORDER BY total DESC, wins DESC
     `).all({ itemId, type }) as { opp_id: number; total: number; wins: number; draws: number; opp_rank: number | null }[]
     if (rows.length === 0) return []
     const ids = rows.map(r => r.opp_id)

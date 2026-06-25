@@ -304,7 +304,9 @@ export function registerActorsHandlers(): void {
       face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0
     }
 
-    return { ...actor as object, works, tags, rep_tags, scores }
+    const photos = db().prepare('SELECT * FROM actor_photos WHERE actor_id = ? ORDER BY sort_order, id').all(id)
+
+    return { ...actor as object, works, tags, rep_tags, scores, photos }
   })
 
   ipcMain.handle('actors:create', (_e, data: {
@@ -510,5 +512,23 @@ export function registerActorsHandlers(): void {
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
     `).all()
+  })
+
+  // ========== 배우 추가 사진 ==========
+
+  ipcMain.handle('actor-photos:list', (_e, actorId: number) => {
+    return db().prepare('SELECT * FROM actor_photos WHERE actor_id = ? ORDER BY sort_order, id').all(actorId)
+  })
+
+  ipcMain.handle('actor-photos:add', (_e, actorId: number, photoPath: string) => {
+    const count = (db().prepare('SELECT COUNT(*) AS cnt FROM actor_photos WHERE actor_id = ?').get(actorId) as { cnt: number }).cnt
+    if (count >= 3) throw new Error('추가 사진은 최대 3장까지 가능합니다')
+    const result = db().prepare('INSERT INTO actor_photos (actor_id, photo_path, sort_order) VALUES (?, ?, ?)').run(actorId, photoPath, count)
+    return result.lastInsertRowid
+  })
+
+  ipcMain.handle('actor-photos:delete', (_e, photoId: number) => {
+    db().prepare('DELETE FROM actor_photos WHERE id = ?').run(photoId)
+    return true
   })
 }

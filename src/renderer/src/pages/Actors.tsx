@@ -42,6 +42,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
   const [workSortDir, setWorkSortDir] = useState<'desc' | 'asc'>('desc')
   const [hoverCover, setHoverCover] = useState<string | null>(null)
+  const [hoverActorPhoto, setHoverActorPhoto] = useState<string | null>(null)
   const [physScoreMap, setPhysScoreMap] = useState<Map<number, number>>(new Map())
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
@@ -429,6 +430,16 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
         </div>
       )}
 
+      {/* 추가 사진 호버 프리뷰 */}
+      {hoverActorPhoto && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{ left: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh' }}
+        >
+          <ImagePreview path={hoverActorPhoto} alt="추가 사진 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
+        </div>
+      )}
+
       {/* 상세 모달 */}
       {selected && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40" onClick={() => setSelected(null)}>
@@ -480,34 +491,51 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                 </div>
               </div>
 
-              {(selected.height || selected.bust || selected.waist || selected.hip || selected.cup) && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">신체</p>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-300">
-                      {(() => {
-                        const ar = new Set((selected.phys_arbitrary ?? '').split('|').filter(Boolean))
-                        return <>
-                          {selected.height && <span>신장 {selected.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
-                          {(selected.bust || selected.waist || selected.hip) && <span>
-                            B{selected.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
-                            {' - '}W{selected.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
-                            {' - '}H{selected.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
-                            {'  '}
-                          </span>}
-                          {selected.cup && <span>{selected.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
-                        </>
-                      })()}
-                    </p>
-                    {(physScoreMap.get(selected.id) != null || selected.ratio_score != null) && (
-                      <p className="text-sm text-blue-400 shrink-0 ml-2">{(physScoreMap.get(selected.id) ?? selected.ratio_score!).toFixed(2)}점</p>
-                    )}
+              <div className="flex gap-0">
+                {/* 좌: 신체 + 레이더 차트 */}
+                <div className="flex-1 min-w-0">
+                  {(selected.height || selected.bust || selected.waist || selected.hip || selected.cup) && (
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-gray-300">
+                          {(() => {
+                            const ar = new Set((selected.phys_arbitrary ?? '').split('|').filter(Boolean))
+                            return <>
+                              {selected.height && <span>신장 {selected.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
+                              {(selected.bust || selected.waist || selected.hip) && <span>
+                                B{selected.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
+                                {' - '}W{selected.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
+                                {' - '}H{selected.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
+                                {'  '}
+                              </span>}
+                              {selected.cup && <span>{selected.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
+                            </>
+                          })()}
+                        </p>
+                        {(physScoreMap.get(selected.id) != null || selected.ratio_score != null) && (
+                          <p className="text-sm text-blue-400 shrink-0 ml-2">{(physScoreMap.get(selected.id) ?? selected.ratio_score!).toFixed(2)}점</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex justify-center">
+                    <RadarChart scores={selected.scores ?? defaultScores} size={240} />
                   </div>
                 </div>
-              )}
-
-              <div className="flex justify-center">
-                <RadarChart scores={selected.scores ?? defaultScores} size={264} />
+                {/* 우: 추가 사진 썸네일 */}
+                {(selected as any).photos?.length > 0 && (
+                  <div className="flex flex-col gap-1.5 pl-3 ml-3 border-l border-gray-700">
+                    {((selected as any).photos as { id: number; photo_path: string }[]).map((photo) => (
+                      <div
+                        key={photo.id}
+                        onMouseEnter={() => setHoverActorPhoto(photo.photo_path)}
+                        onMouseLeave={() => setHoverActorPhoto(null)}
+                      >
+                        <ImagePreview path={photo.photo_path} alt="추가 사진" className="w-20 h-20 rounded cursor-pointer object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {selected.comment && (
@@ -569,6 +597,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
                   </div>
                 )
               })()}
+
             </div>
 
             {/* 우측 - 출연작 */}
