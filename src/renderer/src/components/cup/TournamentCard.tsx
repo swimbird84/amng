@@ -35,6 +35,7 @@ export default function TournamentCard({
   const [itemCount, setItemCount] = useState(0)
   const [roundValue, setRoundValue] = useState(0)
   const [starting, setStarting] = useState(false)
+  const [blockedMsg, setBlockedMsg] = useState<string | null>(null)
   const [runProgress, setRunProgress] = useState<{ match: { round: number; match_index: number; phase: string; group_id: number | null; block_id: number | null } | null; total: number; done: number; groupMatchDone: number | null; groupMatchTotal: number | null } | null>(null)
 
   useEffect(() => {
@@ -91,10 +92,14 @@ export default function TournamentCard({
   const doStart = async (force = false) => {
     setStarting(true)
     try {
-      const result = await cupApi.start(t.id, roundValue, force) as { run: CupRun }
+      const result = await cupApi.start(t.id, roundValue, force) as { run: CupRun; blocked?: boolean; reason?: string }
+      if ((result as any).blocked) {
+        setBlockedMsg((result as any).reason)
+        return
+      }
       onPlay(result.run.id, 'match')
     } catch (e) {
-      alert((e as Error).message)
+      setBlockedMsg((e as Error).message)
     } finally {
       setStarting(false)
     }
@@ -262,6 +267,19 @@ export default function TournamentCard({
       </div>
 
       {/* 진행중 대회 모달 */}
+      {blockedMsg && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-[380px] shadow-2xl">
+            <h2 className="text-base font-bold text-white mb-3">대회를 시작할 수 없습니다</h2>
+            <p className="text-sm text-gray-300 mb-6">{blockedMsg}</p>
+            <button
+              onClick={() => setBlockedMsg(null)}
+              className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm font-semibold"
+            >확인</button>
+          </div>
+        </div>
+      )}
+
       {showInProgress && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-xl p-6 w-[380px] shadow-2xl">

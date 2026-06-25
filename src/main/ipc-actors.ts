@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from './db'
+import { deleteImagesByPattern, deleteImageFile } from './ipc-system'
 
 export function registerActorsHandlers(): void {
   const db = () => getDatabase()
@@ -436,6 +437,11 @@ export function registerActorsHandlers(): void {
       LIMIT 1
     `).get(id)
     if (blocked) return { blocked: true }
+    // 추가 사진 파일 삭제
+    const photos = db().prepare('SELECT photo_path FROM actor_photos WHERE actor_id = ?').all(id) as { photo_path: string }[]
+    for (const p of photos) deleteImageFile(p.photo_path)
+    // 메인 사진 파일 삭제
+    deleteImagesByPattern('actors', id)
     db().prepare('DELETE FROM actors WHERE id = ?').run(id)
     db().prepare(`DELETE FROM master_ranking_history WHERE type = 'actor' AND item_id = ?`).run(id)
     db().prepare(`DELETE FROM cup_entries WHERE item_id = ?`).run(id)
@@ -528,6 +534,8 @@ export function registerActorsHandlers(): void {
   })
 
   ipcMain.handle('actor-photos:delete', (_e, photoId: number) => {
+    const photo = db().prepare('SELECT photo_path FROM actor_photos WHERE id = ?').get(photoId) as { photo_path: string } | undefined
+    if (photo) deleteImageFile(photo.photo_path)
     db().prepare('DELETE FROM actor_photos WHERE id = ?').run(photoId)
     return true
   })

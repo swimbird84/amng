@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from './db'
+import { deleteImagesByPattern } from './ipc-system'
 
 export function registerWorksHandlers(): void {
   const db = () => getDatabase()
@@ -364,6 +365,7 @@ export function registerWorksHandlers(): void {
       LIMIT 1
     `).get(id)
     if (blocked) return { blocked: true }
+    deleteImagesByPattern('works', id)
     db().prepare('DELETE FROM works WHERE id = ?').run(id)
     db().prepare(`DELETE FROM master_ranking_history WHERE type = 'work' AND item_id = ?`).run(id)
     db().prepare(`DELETE FROM cup_entries WHERE item_id = ?`).run(id)

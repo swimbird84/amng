@@ -1245,7 +1245,7 @@ export function registerCupHandlers(): void {
         WHERE r.status = 'in_progress' AND t.is_master = 1 AND t.type = ? AND t.id != ?
         LIMIT 1
       `).get(tournament.type, tournamentId) as { name: string } | undefined
-      if (otherActive) throw new Error(`다른 마스터 대회 "${otherActive.name}"가 진행 중입니다. 완료 후 시작해주세요.`)
+      if (otherActive) return { blocked: true, reason: `다른 ${tournament.type === 'actor' ? '배우' : '작품'} 마스터 대회 "${otherActive.name}"이(가) 진행 중입니다. 완료 후 시작해주세요.` }
     }
     const existingRun = db().prepare(`SELECT id FROM cup_runs WHERE tournament_id = ? AND status = 'in_progress' LIMIT 1`).get(tournamentId) as { id: number } | undefined
     if (existingRun) {
