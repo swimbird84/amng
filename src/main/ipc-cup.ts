@@ -1157,7 +1157,7 @@ export function registerCupHandlers(): void {
       ? db().prepare(`SELECT id, name, photo_path FROM actors WHERE id IN (${placeholders})`).all(...ids) as any
       : db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id IN (${placeholders})`).all(...ids) as any
     const infoMap = new Map(infoRows.map(r => [r.id, r]))
-    return rows.map(r => ({ ...r, losses: r.total - r.wins - r.draws, ...(infoMap.get(r.opp_id) ?? {}) }))
+    return rows.filter(r => r.opp_id != null && infoMap.has(r.opp_id)).map(r => ({ ...r, losses: r.total - r.wins - r.draws, ...infoMap.get(r.opp_id)! }))
   })
 
   ipcMain.handle('master-ranking:division-history', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
@@ -1238,6 +1238,15 @@ export function registerCupHandlers(): void {
       id: number; type: 'actor' | 'work'; format: string; is_master: number; filter_json: string | null
     } | undefined
     if (!tournament) throw new Error('대회를 찾을 수 없습니다')
+    if (tournament.is_master) {
+      const otherActive = db().prepare(`
+        SELECT t.name FROM cup_runs r
+        JOIN cup_tournaments t ON t.id = r.tournament_id
+        WHERE r.status = 'in_progress' AND t.is_master = 1 AND t.type = ? AND t.id != ?
+        LIMIT 1
+      `).get(tournament.type, tournamentId) as { name: string } | undefined
+      if (otherActive) throw new Error(`다른 마스터 대회 "${otherActive.name}"가 진행 중입니다. 완료 후 시작해주세요.`)
+    }
     const existingRun = db().prepare(`SELECT id FROM cup_runs WHERE tournament_id = ? AND status = 'in_progress' LIMIT 1`).get(tournamentId) as { id: number } | undefined
     if (existingRun) {
       if (!force) throw new Error('이미 진행 중인 대회가 있습니다')

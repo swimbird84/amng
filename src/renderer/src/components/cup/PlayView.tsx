@@ -473,10 +473,15 @@ export default function PlayView({
                     <div className="grid grid-cols-4 gap-3">
                       {[...standings.groupStandings].sort((a, b) => {
                         const activeGroupId = (currentMatch !== 'done' && currentMatch != null && (currentMatch.phase === 'group' || currentMatch.phase === 'tiebreak')) ? currentMatch.group_id : null
-                        if (activeGroupId !== null) {
-                          if (a.group_id === activeGroupId) return -1
-                          if (b.group_id === activeGroupId) return 1
-                        }
+                        const aActive = activeGroupId !== null && a.group_id === activeGroupId
+                        const bActive = activeGroupId !== null && b.group_id === activeGroupId
+                        if (aActive && !bActive) return -1
+                        if (!aActive && bActive) return 1
+                        const gDone = (g: typeof a) => g.matches && g.matches.length > 0 && g.matches.every(m => m.winner_id !== null || m.is_draw) && (!g.tiebreakMatches || g.tiebreakMatches.length === 0 || g.tiebreakMatches.every(m => m.winner_id !== null || m.is_draw))
+                        const aDone = gDone(a), bDone = gDone(b)
+                        if (aDone && !bDone) return -1
+                        if (!aDone && bDone) return 1
+                        if (aDone && bDone) return b.group_id - a.group_id
                         return a.group_id - b.group_id
                       }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms }) => {
                         const groupDone = gms && gms.length > 0 && gms.every(m => m.winner_id !== null || m.is_draw) && (!tbms || tbms.length === 0 || tbms.every(m => m.winner_id !== null || m.is_draw))
@@ -692,10 +697,15 @@ export default function PlayView({
                       <h3 className="text-xs font-semibold text-purple-400 mb-2 uppercase tracking-wide">블록 {block.label}</h3>
                       <div className="grid grid-cols-4 gap-3">
                         {[...block.groups].sort((a, b) => {
-                          if (activeGroupId !== null) {
-                            if (a.group_id === activeGroupId) return -1
-                            if (b.group_id === activeGroupId) return 1
-                          }
+                          const aActive = activeGroupId !== null && a.group_id === activeGroupId
+                          const bActive = activeGroupId !== null && b.group_id === activeGroupId
+                          if (aActive && !bActive) return -1
+                          if (!aActive && bActive) return 1
+                          const gDone = (g: typeof a) => g.matches && g.matches.length > 0 && g.matches.every(m => m.winner_id !== null || m.is_draw) && (!g.tiebreakMatches || g.tiebreakMatches.length === 0 || g.tiebreakMatches.every(m => m.winner_id !== null || m.is_draw))
+                          const aDone = gDone(a), bDone = gDone(b)
+                          if (aDone && !bDone) return -1
+                          if (!aDone && bDone) return 1
+                          if (aDone && bDone) return b.group_id - a.group_id
                           return a.group_id - b.group_id
                         }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms, qualifiers: gqs }) => {
                           const groupDone = gms && gms.length > 0 && gms.every(m => m.winner_id !== null || m.is_draw) && (!tbms || tbms.length === 0 || tbms.every(m => m.winner_id !== null || m.is_draw))

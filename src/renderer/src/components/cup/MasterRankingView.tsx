@@ -49,7 +49,7 @@ export default function MasterRankingView({
   const [divHistData, setDivHistData] = useState<DivHistEntry[] | null>(null)
   const [h2hLoading, setH2hLoading] = useState(false)
   const [divHistLoading, setDivHistLoading] = useState(false)
-  const [h2hSort, setH2hSort] = useState<{ col: 'name' | 'total' | 'wins' | 'losses' | 'rate' | 'div'; dir: 'asc' | 'desc' }>({ col: 'total', dir: 'desc' })
+  const [h2hSort, setH2hSort] = useState<{ col: 'name' | 'total' | 'wins' | 'draws' | 'losses' | 'rate' | 'div'; dir: 'asc' | 'desc' }>({ col: 'total', dir: 'desc' })
   const [h2hDivFilter, setH2hDivFilter] = useState<number | null>(null)
   const [h2hDivDropdown, setH2hDivDropdown] = useState(false)
 
@@ -746,6 +746,7 @@ export default function MasterRankingView({
                   }
                   if (h2hSort.col === 'total') return (a.total - b.total) * dir
                   if (h2hSort.col === 'wins') return (a.wins - b.wins) * dir
+                  if (h2hSort.col === 'draws') return (a.draws - b.draws) * dir
                   if (h2hSort.col === 'losses') return (a.losses - b.losses) * dir
                   if (h2hSort.col === 'rate') {
                     const ra = a.total > 0 ? a.wins / a.total : -1
@@ -768,8 +769,9 @@ export default function MasterRankingView({
                       <col />
                       <col style={{ width: '2.8rem' }} />
                       <col style={{ width: '2.8rem' }} />
+                      <col style={{ width: '2.2rem' }} />
                       <col style={{ width: '2.8rem' }} />
-                      <col style={{ width: '5rem' }} />
+                      <col style={{ width: '4.5rem' }} />
                     </colgroup>
                     <thead className="sticky top-0 bg-gray-800 z-10">
                       <tr className="border-b border-gray-700 text-gray-400">
@@ -816,6 +818,9 @@ export default function MasterRankingView({
                         <th className="px-1 py-2 text-right cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('wins')}>
                           <span className="flex items-center justify-end gap-0.5">승 <SortIcon col="wins" /></span>
                         </th>
+                        <th className="px-1 py-2 text-right cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('draws')}>
+                          <span className="flex items-center justify-end gap-0.5">무 <SortIcon col="draws" /></span>
+                        </th>
                         <th className="px-1 py-2 text-right cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('losses')}>
                           <span className="flex items-center justify-end gap-0.5">패 <SortIcon col="losses" /></span>
                         </th>
@@ -846,16 +851,19 @@ export default function MasterRankingView({
                             <td className="px-2 py-1 text-white truncate max-w-0">{oppName}</td>
                             <td className="px-1 py-1 text-right text-gray-300">{row.total}</td>
                             <td className="px-1 py-1 text-right text-green-400">{row.wins}</td>
+                            <td className="px-1 py-1 text-right text-yellow-400">{row.draws}</td>
                             <td className="px-1 py-1 text-right text-red-400">{row.losses}</td>
                             <td className="px-2 py-1 text-right">
-                              <span className={`font-medium ${getWinRateColor(winRate, row.total)}`}>
-                                {winRate.toFixed(1)}%
-                              </span>
-                              {getWinRateLabel(winRate, row.total) && (
-                                <span className={`ml-1 text-[9px] ${getWinRateColor(winRate, row.total)}`}>
-                                  {getWinRateLabel(winRate, row.total)}
+                              <div className="flex flex-col items-end">
+                                <span className={`font-medium ${getWinRateColor(winRate, row.total)}`}>
+                                  {winRate.toFixed(1)}%
                                 </span>
-                              )}
+                                {getWinRateLabel(winRate, row.total) && (
+                                  <span className={`text-[9px] leading-tight ${getWinRateColor(winRate, row.total)}`}>
+                                    {getWinRateLabel(winRate, row.total)}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         )

@@ -30,6 +30,7 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
   const [workSortDir, setWorkSortDir] = useState<'asc' | 'desc'>('desc')
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [hoverCover, setHoverCover] = useState<string | null>(null)
+  const [hoverActorPhoto, setHoverActorPhoto] = useState<string | null>(null)
 
 
   useEffect(() => {
@@ -88,36 +89,50 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
               </div>
             </div>
 
-            {/* 신체 */}
-            {(actor.height || actor.bust || actor.waist || actor.hip || actor.cup) && (
-              <div>
-                <p className="text-xs text-gray-500 mb-1">신체</p>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-300">
-                    {(() => {
-                      const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
-                      return <>
-                        {actor.height && <span>신장 {actor.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
-                        {(actor.bust || actor.waist || actor.hip) && <span>
-                          B{actor.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
-                          {' - '}W{actor.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
-                          {' - '}H{actor.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
-                          {'  '}
-                        </span>}
-                        {actor.cup && <span>{actor.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
-                      </>
-                    })()}
-                  </p>
-                  {actor.ratio_score != null && (
-                    <p className="text-sm text-blue-400 shrink-0 ml-2">{actor.ratio_score.toFixed(2)}점</p>
-                  )}
+            {/* 신체 + 레이더 차트 + 추가 사진 */}
+            <div className="flex gap-0">
+              <div className="flex-1 min-w-0">
+                {(actor.height || actor.bust || actor.waist || actor.hip || actor.cup) && (
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-300">
+                        {(() => {
+                          const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
+                          return <>
+                            {actor.height && <span>신장 {actor.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
+                            {(actor.bust || actor.waist || actor.hip) && <span>
+                              B{actor.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
+                              {' - '}W{actor.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
+                              {' - '}H{actor.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
+                              {'  '}
+                            </span>}
+                            {actor.cup && <span>{actor.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
+                          </>
+                        })()}
+                      </p>
+                      {actor.ratio_score != null && (
+                        <p className="text-sm text-blue-400 shrink-0 ml-2">{actor.ratio_score.toFixed(2)}점</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-center">
+                  <RadarChart scores={actor.scores ?? defaultScores} size={240} />
                 </div>
               </div>
-            )}
-
-            {/* 레이더 차트 */}
-            <div className="flex justify-center">
-              <RadarChart scores={actor.scores ?? defaultScores} size={264} />
+              {(actor as any).photos?.length > 0 && (
+                <div className="flex flex-col gap-1.5 pl-3 ml-3 border-l border-gray-700">
+                  {((actor as any).photos as { id: number; photo_path: string }[]).map((photo) => (
+                    <div
+                      key={photo.id}
+                      onMouseEnter={() => setHoverActorPhoto(photo.photo_path)}
+                      onMouseLeave={() => setHoverActorPhoto(null)}
+                    >
+                      <ImagePreview path={photo.photo_path} alt="추가 사진" className="w-20 h-20 rounded cursor-pointer object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 코멘트 */}
@@ -270,6 +285,14 @@ export default function ActorViewModal({ actorId, onClose, onViewWork, onEdit, z
           style={{ right: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh' }}
         >
           <ImagePreview path={hoverCover} alt="표지 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
+        </div>
+      )}
+      {hoverActorPhoto && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{ left: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh' }}
+        >
+          <ImagePreview path={hoverActorPhoto} alt="추가 사진 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
         </div>
       )}
       {tooltip && <CardTooltip tooltip={tooltip} />}
