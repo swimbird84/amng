@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { cupApi, masterRankingApi, dashboardApi, actorsApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
-import type { MasterRankRow, FormatStat, H2HRow, DivHistEntry, RateTooltip } from './cupTypes'
-import { RANK_MEDAL, MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
+import type { MasterRankRow, FormatStat, H2HRow, RateTooltip } from './cupTypes'
+import { MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
 import RankingSettingsModal from './RankingSettingsModal'
 import ActorForm from '../ActorForm'
 import { pushEscHandler, popEscHandler } from '../../escManager'
@@ -40,15 +40,15 @@ export default function MasterRankingView({
   const formatStatsCache = useRef<Map<number, FormatStat[]>>(new Map())
   const [imgOverlay, setImgOverlay] = useState<{ path: string } | null>(null)
   const [nameTooltip, setNameTooltip] = useState<TooltipState | null>(null)
-  const [trendModal, setTrendModal] = useState<{ itemId: number; lbl: string; img: string | null } | null>(null)
-  const [trendHistory, setTrendHistory] = useState<{ rank: number; recorded_at: string }[] | null>(null)
-  const rankHistCache = useRef<Map<number, { rank: number; recorded_at: string }[]>>(new Map())
-  const [analysisModal, setAnalysisModal] = useState<{ itemId: number; lbl: string; img: string | null } | null>(null)
-  const [analysisTab, setAnalysisTab] = useState<'h2h' | 'divhist'>('h2h')
+  // 통합 개별 모달 (추이 + 상대전적)
+  const [detailModal, setDetailModal] = useState<{ itemId: number; lbl: string; img: string | null } | null>(null)
+  const [detailTab, setDetailTab] = useState<'trend' | 'h2h'>('trend')
+  const [trendHistory, setTrendHistory] = useState<{ rank: number; recorded_at: string; tournament_name: string }[] | null>(null)
+  const [trendLimit, setTrendLimit] = useState<number>(10)
+  const trendLimitApi = trendLimit >= 9999 ? 0 : trendLimit
+  const rankHistCache = useRef<Map<string, { rank: number; recorded_at: string; tournament_name: string }[]>>(new Map())
   const [h2hData, setH2hData] = useState<H2HRow[] | null>(null)
-  const [divHistData, setDivHistData] = useState<DivHistEntry[] | null>(null)
   const [h2hLoading, setH2hLoading] = useState(false)
-  const [divHistLoading, setDivHistLoading] = useState(false)
   const [h2hSort, setH2hSort] = useState<{ col: 'name' | 'total' | 'wins' | 'draws' | 'losses' | 'rate' | 'div'; dir: 'asc' | 'desc' }>({ col: 'total', dir: 'desc' })
   const [h2hDivFilter, setH2hDivFilter] = useState<number | null>(null)
   const [h2hDivDropdown, setH2hDivDropdown] = useState(false)
@@ -66,8 +66,7 @@ export default function MasterRankingView({
     series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[]; globalRanks: (number | null)[]; displayRanks: (number | null)[] }[]
   } | null>(null)
   const [rankChartHover, setRankChartHover] = useState<number | null>(null)
-  const [rankChartTrend, setRankChartTrend] = useState<{ itemId: number; name: string; img: string | null } | null>(null)
-  const [rankChartTrendData, setRankChartTrendData] = useState<{ rank: number; recorded_at: string }[] | null>(null)
+  const [rankChartTooltip, setRankChartTooltip] = useState<TooltipState | null>(null)
 
   const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc') => {
     setLoading(true)
@@ -128,18 +127,21 @@ export default function MasterRankingView({
     dashboardApi.rankChangeChart(type, rankChartLimit, cfg.rankFrom, cfg.rankTo).then(setRankChartData)
   }, [rankChartModal, type, rankChartLimit, rankChartDiv])
 
+  // 통합 모달 추이 데이터 로드
   useEffect(() => {
-    if (!rankChartTrend) return
-    const handler = () => { setRankChartTrend(null); setRankChartTrendData(null) }
-    pushEscHandler(handler)
-    return () => popEscHandler(handler)
-  }, [rankChartTrend])
-
-  useEffect(() => {
-    if (!rankChartTrend) return
-    setRankChartTrendData(null)
-    masterRankingApi.rankHistory(type, rankChartTrend.itemId).then(setRankChartTrendData)
-  }, [rankChartTrend, type])
+    if (!detailModal) return
+    if (detailTab !== 'trend') return
+    const cacheKey = `${detailModal.itemId}_${trendLimitApi}`
+    if (rankHistCache.current.has(cacheKey)) {
+      setTrendHistory(rankHistCache.current.get(cacheKey)!)
+    } else {
+      setTrendHistory(null)
+      masterRankingApi.rankHistory(type, detailModal.itemId, trendLimitApi).then(data => {
+        rankHistCache.current.set(cacheKey, data)
+        setTrendHistory(data)
+      })
+    }
+  }, [detailModal, detailTab, trendLimit, type])
 
   const imgPath = (row: MasterRankRow) => row.photo_path ?? row.cover_path ?? null
   const label = (row: MasterRankRow) => row.name ?? row.title ?? row.product_number ?? `#${row.id}`
@@ -156,7 +158,7 @@ export default function MasterRankingView({
 
   const handleSort = (col: string) => {
     if (sortBy === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
-    else { setSortBy(col); setSortDir('desc') }
+    else { setSortBy(col); setSortDir(col === 'score_rank' ? 'asc' : 'desc') }
   }
 
   const SortTh = ({ col, label, subLabel, subLabelClass, className }: { col: string; label: string; subLabel?: React.ReactNode; subLabelClass?: string; className?: string }) => {
@@ -168,55 +170,30 @@ export default function MasterRankingView({
       >
         <div className="flex items-center justify-end gap-1">
           <span>{label}{subLabel && <><br/><span className={subLabelClass ?? 'text-gray-600 font-normal'}>{subLabel}</span></>}</span>
-          <span className="text-[10px]">{active ? (sortDir === 'desc' ? '▼' : '▲') : <span className="text-gray-700">▼</span>}</span>
+          <span className="text-[10px]">{active ? ((sortDir === 'desc') !== (col === 'score_rank') ? '▼' : '▲') : <span className="text-gray-700">▼</span>}</span>
         </div>
       </th>
     )
   }
 
-  const openTrendModal = async (row: MasterRankRow) => {
-    const lbl = label(row)
-    const img = imgPath(row)
-    setTrendModal({ itemId: row.id, lbl, img })
-    if (rankHistCache.current.has(row.id)) {
-      setTrendHistory(rankHistCache.current.get(row.id)!)
-    } else {
-      setTrendHistory(null)
-      const h = await masterRankingApi.rankHistory(type, row.id)
-      rankHistCache.current.set(row.id, h)
-      setTrendHistory(h)
-    }
-  }
-
-  const openAnalysisModal = async (row: MasterRankRow) => {
-    const lbl = label(row)
-    const img = imgPath(row)
-    setAnalysisModal({ itemId: row.id, lbl, img })
-    setAnalysisTab('h2h')
-    setH2hData(null)
+  const openDetailModal = (itemId: number, lbl: string, img: string | null, tab: 'trend' | 'h2h' = 'trend') => {
+    setDetailModal({ itemId, lbl, img })
+    setDetailTab(tab)
+    setTrendHistory(null)
     setDivHistData(null)
-    setH2hLoading(true)
-    try {
-      const data = await cupApi.headToHead(type, row.id)
-      setH2hData(data)
-    } catch (err) {
-      console.error('[h2h] error:', err)
-      setH2hData([])
-    } finally {
-      setH2hLoading(false)
+    setH2hData(null)
+    setTrendLimit(0)
+    if (tab === 'h2h') {
+      setH2hLoading(true)
+      cupApi.headToHead(type, itemId).then(setH2hData).catch(() => setH2hData([])).finally(() => setH2hLoading(false))
     }
   }
 
-  const switchAnalysisTab = async (tab: 'h2h' | 'divhist') => {
-    setAnalysisTab(tab)
-    if (tab === 'divhist' && divHistData === null && analysisModal) {
-      setDivHistLoading(true)
-      try {
-        const data = await masterRankingApi.divisionHistory(type, analysisModal.itemId)
-        setDivHistData(data)
-      } finally {
-        setDivHistLoading(false)
-      }
+  const switchDetailTab = (tab: 'trend' | 'h2h') => {
+    setDetailTab(tab)
+    if (tab === 'h2h' && h2hData === null && detailModal) {
+      setH2hLoading(true)
+      cupApi.headToHead(type, detailModal.itemId).then(setH2hData).catch(() => setH2hData([])).finally(() => setH2hLoading(false))
     }
   }
 
@@ -400,7 +377,6 @@ export default function MasterRankingView({
                 {rows.map((row, idx) => {
                   const img = imgPath(row)
                   const lbl = label(row)
-                  const medal = RANK_MEDAL[row.rank]
                   const division = getDivision(row.rank, (row as any).master_run_count ?? 0)
                   const prevRank = rankTrends.get(row.id)
                   const winRate = row.total_cups > 0 ? row.cup_wins / row.total_cups * 100 : null
@@ -423,10 +399,7 @@ export default function MasterRankingView({
                       <td className="px-2 py-2 text-center text-gray-600 text-xs">{page * pageSize + idx + 1}</td>
                       {/* 순위 */}
                       <td className="px-2 py-2 text-center">
-                        {medal
-                          ? <span className="text-base">{medal}</span>
-                          : <span className="text-gray-300 text-xs font-medium">{row.rank}</span>
-                        }
+                        <span className={`text-xs font-medium ${row.rank <= 3 ? 'text-yellow-400' : 'text-gray-300'}`}>{row.rank}</span>
                       </td>
                       {/* 리그 */}
                       <td className="px-2 py-2 text-center">
@@ -456,11 +429,6 @@ export default function MasterRankingView({
                               <p className="text-gray-500 text-xs truncate">{row.product_number}</p>
                             )}
                           </div>
-                          <button
-                            onClick={e => { e.stopPropagation(); openAnalysisModal(row) }}
-                            className="text-gray-600 hover:text-blue-400 text-xs transition shrink-0 mt-0.5 cursor-pointer"
-                            title="분석"
-                          >📈</button>
                         </div>
                       </td>
                       {/* 마스터 점수 */}
@@ -542,7 +510,7 @@ export default function MasterRankingView({
                       {/* 추이 */}
                       <td
                         className="px-3 py-2 text-center cursor-pointer hover:bg-gray-700/50 transition"
-                        onClick={e => { e.stopPropagation(); openTrendModal(row) }}
+                        onClick={e => { e.stopPropagation(); openDetailModal(row.id, lbl, imgPath(row), 'trend') }}
                       >
                         {trendBadge}
                       </td>
@@ -613,92 +581,138 @@ export default function MasterRankingView({
       })()}
 
       {/* 순위 추이 모달 */}
-      {trendModal && (() => {
-        const history = trendHistory ?? []
-        const W = 420, H = 180, PX = 36, PY = 16
-        const ranks = history.map(h => h.rank)
-        const minR = ranks.length ? Math.min(...ranks) : 1
-        const maxR = ranks.length ? Math.max(...ranks) : 1
-        const range = maxR - minR || 1
-        const pts = history.map((h, i) => {
-          const x = PX + (history.length > 1 ? i / (history.length - 1) : 0.5) * (W - PX * 2)
-          const y = PY + ((h.rank - minR) / range) * (H - PY * 2)
-          return { x, y, rank: h.rank }
-        })
-        const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-        const last = ranks[ranks.length - 1] ?? 0
-        const prev = ranks[ranks.length - 2] ?? last
-        const color = last < prev ? '#4ade80' : last > prev ? '#f87171' : '#9ca3af'
-        return (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setTrendModal(null)}>
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700" style={{ width: W + 80 }} onClick={e => e.stopPropagation()}>
-              <div className="flex items-center gap-3 mb-4">
-                {trendModal.img && (
+      {/* 통합 개별 모달 (추이 + 상대전적) */}
+      {detailModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]" onClick={() => { setDetailModal(null); setH2hDivDropdown(false) }}>
+          <div className="bg-gray-800 rounded-lg w-[95vw] h-[95vh] flex flex-col relative" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setDetailModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
+            {/* 헤더 + 탭 */}
+            <div className="shrink-0 px-6 pt-5 pb-0 border-b border-gray-700">
+              <div className="flex items-center gap-3 mb-3">
+                {detailModal.img && (
                   <div className="w-10 h-10 rounded overflow-hidden shrink-0">
-                    <ImagePreview path={trendModal.img} alt={trendModal.lbl} className="w-full h-full object-cover" objectPosition="center 10%" />
+                    <ImagePreview path={detailModal.img} alt={detailModal.lbl} className="w-full h-full object-cover" objectPosition="center 10%" />
                   </div>
                 )}
-                <p className="text-white font-bold flex-1 truncate">{trendModal.lbl} 마스터 순위 추이</p>
-                <button onClick={() => setTrendModal(null)} className="text-gray-400 hover:text-white text-sm ml-2 shrink-0">✕</button>
+                <p className="text-white font-bold text-lg">{detailModal.lbl}</p>
               </div>
-              {trendHistory === null ? (
-                <p className="text-gray-500 text-sm text-center py-8">로딩 중...</p>
-              ) : history.length < 2 ? (
-                <p className="text-gray-500 text-sm text-center py-8">추이 데이터가 부족합니다.</p>
-              ) : (
-                <svg width={W} height={H} className="overflow-visible">
-                  {Array.from(new Set([minR, maxR])).map(r => {
-                    const y = PY + ((r - minR) / range) * (H - PY * 2)
-                    return (
-                      <g key={r}>
-                        <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="#374151" strokeDasharray="3,3" />
-                        <text x={PX - 6} y={y + 4} fill="#9ca3af" fontSize="11" textAnchor="end">{r}위</text>
-                      </g>
-                    )
-                  })}
-                  <polyline points={polyPts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-                  {pts.map((p, i) => (
-                    <g key={i}>
-                      <circle cx={p.x} cy={p.y} r="4" fill={color} />
-                      <text x={p.x} y={p.y - 8} fill="#e5e7eb" fontSize="11" textAnchor="middle">{p.rank}위</text>
-                    </g>
+              <div className="flex items-center">
+                <div className="flex">
+                  {(['trend', 'h2h'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => switchDetailTab(tab)}
+                      className={`px-5 py-2.5 text-sm font-medium transition border-b-2 ${detailTab === tab ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-gray-200'}`}
+                    >
+                      {tab === 'trend' ? '추이' : '상대 전적'}
+                    </button>
                   ))}
-                </svg>
-              )}
-              <p className="text-gray-500 text-xs mt-3 text-right">최근 {history.length}회 기록</p>
-            </div>
-          </div>
-        )
-      })()}
-      {/* 분석 모달 */}
-      {analysisModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => { setAnalysisModal(null); setH2hDivDropdown(false) }}>
-          <div className="bg-gray-800 rounded-xl border border-gray-700 shadow-2xl flex flex-col" style={{ width: 560, maxHeight: '80vh' }} onClick={e => e.stopPropagation()}>
-            {/* 헤더 */}
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-700 shrink-0">
-              {analysisModal.img && (
-                <div className="w-9 h-9 rounded overflow-hidden shrink-0">
-                  <ImagePreview path={analysisModal.img} alt={analysisModal.lbl} className="w-full h-full object-cover" objectPosition="center 10%" />
                 </div>
-              )}
-              <p className="text-white font-bold flex-1 truncate">{analysisModal.lbl}</p>
-              <button onClick={() => setAnalysisModal(null)} className="text-gray-400 hover:text-white text-sm transition shrink-0">✕</button>
-            </div>
-            {/* 탭 */}
-            <div className="flex border-b border-gray-700 shrink-0">
-              {(['h2h', 'divhist'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => switchAnalysisTab(tab)}
-                  className={`px-5 py-2.5 text-sm font-medium transition border-b-2 ${analysisTab === tab ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-gray-200'}`}
-                >
-                  {tab === 'h2h' ? '상대 전적' : '리그 이력'}
-                </button>
-              ))}
+                {detailTab === 'trend' && (
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className="text-xs text-gray-500">최근</span>
+                    <select
+                      value={trendLimit}
+                      onChange={e => setTrendLimit(Number(e.target.value))}
+                      className="bg-gray-700 text-white text-xs rounded px-2 py-1 border border-gray-600"
+                    >
+                      <option value={5}>5회</option>
+                      <option value={10}>10회</option>
+                      <option value={20}>20회</option>
+                      <option value={9999}>전체</option>
+                    </select>
+                  </div>
+                )}
+              </div>
             </div>
             {/* 탭 내용 */}
-            <div className="flex-1 overflow-y-auto">
-              {analysisTab === 'h2h' && (() => {
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {/* 추이 탭 */}
+              {detailTab === 'trend' && (() => {
+                if (trendHistory === null) return <p className="text-gray-500 text-sm text-center py-16">로딩 중...</p>
+                const history = trendHistory
+                if (history.length < 2) return <p className="text-gray-500 text-sm text-center py-16">추이 데이터가 부족합니다.</p>
+                const VW = 1000, VH = 700
+                const PADDING = { top: 45, right: 40, bottom: 60, left: 50 }
+                const ranks = history.map(h => h.rank)
+                const minR = Math.min(...ranks)
+                const maxR = Math.max(...ranks)
+                const range = maxR - minR || 1
+                const mainBottom = VH - PADDING.bottom
+                const getX = (i: number) => PADDING.left + i / Math.max(history.length - 1, 1) * (VW - PADDING.left - PADDING.right)
+                const getY = (rank: number) => PADDING.top + ((rank - minR) / range) * (mainBottom - PADDING.top)
+                // Y축 눈금
+                const yTicks: number[] = [minR]
+                if (range > 0) {
+                  const step = Math.max(1, Math.ceil(range / 8))
+                  for (let r = minR + step; r < maxR; r += step) yTicks.push(r)
+                  if (yTicks[yTicks.length - 1] !== maxR) yTicks.push(maxR)
+                }
+                const pts = history.map((h, i) => {
+                  const div = getDivision(h.rank, 1)
+                  const prevDiv = i > 0 ? getDivision(history[i - 1].rank, 1) : div
+                  return { x: getX(i), y: getY(h.rank), rank: h.rank, div, prevDiv, name: h.tournament_name }
+                })
+                const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+                const DIV_DOT_COLOR: Record<number, string> = {
+                  1: '#facc15', 2: '#d1d5db', 3: '#fbbf24',
+                  4: '#67e8f9', 5: '#c084fc', 6: '#9ca3af', 0: '#6b7280',
+                }
+                return (
+                  <div className="w-full h-full">
+                    <svg
+                      className="w-full h-full"
+                      viewBox={`0 0 ${VW} ${VH}`}
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      {/* Y축 눈금 */}
+                      {yTicks.map(r => {
+                        const y = getY(r)
+                        return (
+                          <g key={r}>
+                            <line x1={PADDING.left} y1={y} x2={VW - PADDING.right} y2={y} stroke="#374151" strokeDasharray="3,3" />
+                            <text x={PADDING.left - 8} y={y + 4} fill="#9ca3af" fontSize="11" textAnchor="end">{r}위</text>
+                          </g>
+                        )
+                      })}
+                      {/* X축 라벨 + 그리드 */}
+                      {pts.map((p, i) => {
+                        const lbl = p.name.length > 10 ? p.name.slice(0, 10) + '...' : p.name
+                        return (
+                          <g key={`x-${i}`}>
+                            <line x1={p.x} y1={PADDING.top} x2={p.x} y2={mainBottom} stroke="#374151" strokeWidth={0.5} />
+                            <text x={p.x} y={VH - 2} textAnchor="middle" fill="#9CA3AF" fontSize={9}>{lbl}</text>
+                          </g>
+                        )
+                      })}
+                      {/* 라인 */}
+                      <path d={pathD} fill="none" stroke="#4b5563" strokeWidth="2" strokeLinejoin="round" />
+                      {/* 도트 + 라벨 */}
+                      {pts.map((p, i) => {
+                        const dotColor = DIV_DOT_COLOR[p.div] ?? '#9ca3af'
+                        const promoted = i > 0 && p.div < p.prevDiv
+                        const relegated = i > 0 && p.div > p.prevDiv
+                        return (
+                          <g key={i}>
+                            <circle cx={p.x} cy={p.y} r={5} fill={dotColor} stroke="#1f2937" strokeWidth="1.5" />
+                            {/* 순위 */}
+                            <text x={p.x} y={p.y - 12} fill="#e5e7eb" fontSize="11" textAnchor="middle" fontWeight="bold">{p.rank}</text>
+                            {/* 리그 이동 라벨 */}
+                            {promoted && (
+                              <text x={p.x} y={p.y - 24} fill="#4ade80" fontSize="10" textAnchor="middle" fontWeight="bold">{p.div}부승격</text>
+                            )}
+                            {relegated && (
+                              <text x={p.x} y={p.y - 24} fill="#f87171" fontSize="10" textAnchor="middle" fontWeight="bold">{p.div}부강등</text>
+                            )}
+                          </g>
+                        )
+                      })}
+                    </svg>
+                  </div>
+                )
+              })()}
+              {/* 상대전적 탭 */}
+              {detailTab === 'h2h' && (() => {
                 if (h2hLoading) return <div className="p-4"><p className="text-gray-500 text-sm text-center py-8">로딩 중...</p></div>
                 if (!h2hData || h2hData.length === 0) return <div className="p-4"><p className="text-gray-500 text-sm text-center py-8">상대 전적 데이터가 없습니다.</p></div>
 
@@ -872,61 +886,6 @@ export default function MasterRankingView({
                   </table>
                 )
               })()}
-              {analysisTab === 'divhist' && (() => {
-                if (divHistLoading) return <div className="p-4"><p className="text-gray-500 text-sm text-center py-8">로딩 중...</p></div>
-                if (!divHistData || divHistData.length === 0) return <div className="p-4"><p className="text-gray-500 text-sm text-center py-8">리그 이력 데이터가 없습니다.</p></div>
-                const W = 480, H = 200, PX = 40, PY = 20
-                const maxDiv = 6
-                const pts = divHistData.map((h, i) => {
-                  const divRank = getDivision(h.rank, divHistData.length)
-                  const x = PX + (divHistData.length > 1 ? i / (divHistData.length - 1) : 0.5) * (W - PX * 2)
-                  const y = PY + ((divRank - 1) / (maxDiv - 1)) * (H - PY * 2)
-                  return { x, y, div: divRank, rank: h.rank, pts: h.total_points, date: h.recorded_at }
-                })
-                const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-                const first = pts[0]?.div ?? 1
-                const last = pts[pts.length - 1]?.div ?? 1
-                const lineColor = last < first ? '#4ade80' : last > first ? '#f87171' : '#60a5fa'
-                return (
-                  <div className="p-4">
-                    <p className="text-gray-400 text-xs mb-3 text-center">1부(최상위) → 6부(최하위) 기준 리그 이력 ({divHistData.length}회)</p>
-                    <svg width={W} height={H} className="overflow-visible">
-                      {[1,2,3,4,5,6].map(d => {
-                        const y = PY + ((d - 1) / (maxDiv - 1)) * (H - PY * 2)
-                        return (
-                          <g key={d}>
-                            <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="#374151" strokeDasharray="3,3" />
-                            <text x={PX - 6} y={y + 4} fill="#9ca3af" fontSize="10" textAnchor="end">{d}부</text>
-                          </g>
-                        )
-                      })}
-                      <polyline points={polyPts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" />
-                      {pts.map((p, i) => {
-                        const prev = pts[i - 1]?.div
-                        const promoted = prev !== undefined && p.div < prev
-                        const relegated = prev !== undefined && p.div > prev
-                        return (
-                          <g key={i}>
-                            <circle cx={p.x} cy={p.y} r={promoted || relegated ? 5 : 3}
-                              fill={promoted ? '#4ade80' : relegated ? '#f87171' : lineColor}
-                              stroke={promoted || relegated ? '#1f2937' : 'none'} strokeWidth="1.5"
-                            />
-                            {(promoted || relegated) && (
-                              <text x={p.x} y={p.y - 10} fill={promoted ? '#4ade80' : '#f87171'} fontSize="10" textAnchor="middle">
-                                {promoted ? '▲' : '▼'}
-                              </text>
-                            )}
-                          </g>
-                        )
-                      })}
-                    </svg>
-                    <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 justify-center">
-                      <span><span className="text-green-400">▲</span> 승격</span>
-                      <span><span className="text-red-400">▼</span> 강등</span>
-                    </div>
-                  </div>
-                )
-              })()}
             </div>
           </div>
         </div>
@@ -1068,14 +1027,18 @@ export default function MasterRankingView({
                           key={s.id}
                           opacity={opacity}
                           onMouseEnter={() => setRankChartHover(s.id)}
-                          onClick={() => setRankChartTrend({ itemId: s.id, name: s.name, img: s.photo_path })}
+                          onClick={() => openDetailModal(s.id, s.name, s.photo_path, 'trend')}
                           className="cursor-pointer"
                         >
                           <path d={pathD} fill="none" stroke={color} strokeWidth={strokeW} strokeLinejoin="round" />
                           {allPts.map((p, pi) => (
                             <circle key={pi} cx={p.x} cy={p.y} r={isHovered ? 4 : 2.5} fill={p.outside ? 'none' : color} stroke={p.outside ? color : 'none'} strokeWidth={p.outside ? 1.5 : 0} />
                           ))}
-                          <text x={lastPt.x + 8} y={lastPt.y + 4} fill={color} fontSize={isHovered ? 11 : 9} fontWeight={isHovered ? 'bold' : 'normal'}>{s.name}</text>
+                          <text
+                            x={lastPt.x + 8} y={lastPt.y + 4} fill={color} fontSize={isHovered ? 11 : 9} fontWeight={isHovered ? 'bold' : 'normal'}
+                            onMouseMove={e => setRankChartTooltip({ type, id: s.id, x: e.clientX, y: e.clientY, showCover: true })}
+                            onMouseLeave={() => setRankChartTooltip(null)}
+                          >{s.name}</text>
                           {isHovered && allPts.map((p, pi) => (
                             <text key={`t-${pi}`} x={p.x} y={p.y - 8} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">
                               {p.outside ? `${p.divLabel}${p.transLabel}` : p.displayRank}
@@ -1092,68 +1055,7 @@ export default function MasterRankingView({
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 랭킹차트 내 개별 순위추이 모달 */}
-      {rankChartTrend && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={() => { setRankChartTrend(null); setRankChartTrendData(null) }}>
-          <div className="bg-gray-800 rounded-lg w-[500px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 shrink-0">
-              <div className="flex items-center gap-2">
-                {rankChartTrend.img && <ImagePreview path={rankChartTrend.img} alt="" className="w-8 h-8 rounded" objectPosition="center 10%" />}
-                <span className="text-white font-bold text-sm">{rankChartTrend.name}</span>
-                <span className="text-gray-400 text-xs">글로벌 순위 추이</span>
-              </div>
-              <button onClick={() => { setRankChartTrend(null); setRankChartTrendData(null) }} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
-            </div>
-            <div className="p-4">
-              {rankChartTrendData ? (
-                rankChartTrendData.length > 0 ? (() => {
-                  const W = 460, H = 200, PX = 40, PY = 20
-                  const maxR = Math.max(...rankChartTrendData.map(h => h.rank), 1)
-                  const pts = rankChartTrendData.map((h, i) => ({
-                    x: PX + (rankChartTrendData.length > 1 ? i / (rankChartTrendData.length - 1) : 0.5) * (W - PX * 2),
-                    y: PY + ((h.rank - 1) / Math.max(maxR - 1, 1)) * (H - PY * 2),
-                    rank: h.rank,
-                    date: h.recorded_at,
-                    div: getDivision(h.rank, 1),
-                  }))
-                  const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-                  return (
-                    <div>
-                      <svg width={W} height={H} className="overflow-visible">
-                        {[1, Math.ceil(maxR / 4), Math.ceil(maxR / 2), Math.ceil(maxR * 3 / 4), maxR].filter((v, i, a) => a.indexOf(v) === i).map(r => {
-                          const y = PY + ((r - 1) / Math.max(maxR - 1, 1)) * (H - PY * 2)
-                          return (
-                            <g key={r}>
-                              <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="#374151" strokeDasharray="3,3" />
-                              <text x={PX - 6} y={y + 4} fill="#9ca3af" fontSize="10" textAnchor="end">{r}</text>
-                            </g>
-                          )
-                        })}
-                        <polyline points={polyPts} fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinejoin="round" />
-                        {pts.map((p, i) => {
-                          const divColor = DIV_COLOR[p.div]?.includes('yellow') ? '#facc15' : DIV_COLOR[p.div]?.includes('blue') ? '#60a5fa' : '#9ca3af'
-                          return (
-                            <g key={i}>
-                              <circle cx={p.x} cy={p.y} r={4} fill={divColor} />
-                              <text x={p.x} y={p.y - 8} textAnchor="middle" fill="white" fontSize="9" fontWeight="bold">{p.rank}</text>
-                            </g>
-                          )
-                        })}
-                      </svg>
-                      <div className="flex items-center justify-between text-xs text-gray-500 mt-1 px-2">
-                        <span>{rankChartTrendData[0]?.recorded_at?.slice(0, 10)}</span>
-                        <span>{rankChartTrendData.length}회</span>
-                        <span>{rankChartTrendData[rankChartTrendData.length - 1]?.recorded_at?.slice(0, 10)}</span>
-                      </div>
-                    </div>
-                  )
-                })() : <p className="text-gray-500 text-sm text-center py-4">순위 이력이 없습니다</p>
-              ) : <p className="text-gray-500 text-sm text-center py-4">로딩 중...</p>}
-            </div>
+            {rankChartTooltip && <CardTooltip tooltip={rankChartTooltip} />}
           </div>
         </div>
       )}

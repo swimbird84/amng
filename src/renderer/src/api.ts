@@ -217,8 +217,8 @@ export const masterRankingApi = {
     api.invoke('master-ranking:rank-trends', type) as Promise<{ item_id: number; prev_rank: number | null }[]>,
   itemFormatStats: (type: 'actor' | 'work', itemId: number) =>
     api.invoke('master-ranking:item-format-stats', { type, itemId }) as Promise<{ format: 'worldcup' | 'tournament' | 'league'; total_cups: number; cup_wins: number; total_matches: number; match_wins: number }[]>,
-  rankHistory: (type: 'actor' | 'work', itemId: number) =>
-    api.invoke('master-ranking:rank-history', { type, itemId }) as Promise<{ rank: number; recorded_at: string }[]>,
+  rankHistory: (type: 'actor' | 'work', itemId: number, limit?: number) =>
+    api.invoke('master-ranking:rank-history', { type, itemId, limit: limit ?? 0 }) as Promise<{ rank: number; recorded_at: string; tournament_name: string }[]>,
   divisionHistory: (type: 'actor' | 'work', itemId: number) =>
     api.invoke('master-ranking:division-history', { type, itemId }) as Promise<{ recorded_at: string; rank: number; total_points: number }[]>,
   itemStats: (type: 'actor' | 'work', itemId: number) =>

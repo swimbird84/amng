@@ -32,6 +32,7 @@ export default function MatchCard({
   const [scoreExcluded, setScoreExcluded] = useState(false)
   const [workRating, setWorkRating] = useState<number>(item.rating ?? 0)
   const [deletePending, setDeletePending] = useState(false)
+  const [isFavorite, setIsFavorite] = useState(false)
   const demote = useScoreDemote()
 
   const handleScoreChange = async (key: keyof ActorScores, value: number) => {
@@ -70,6 +71,7 @@ export default function MatchCard({
     setLocalComment(item.comment ?? '')
     setMemoText(item.comment ?? '')
     setWorkRating(item.rating ?? 0)
+    setIsFavorite(!!(item.is_favorite))
   }, [item.id])
 
   useEffect(() => {
@@ -99,16 +101,18 @@ export default function MatchCard({
   const handleOpenMemo = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (type === 'actor') {
-      const actor = await actorsApi.get(item.id) as { comment?: string | null; scores?: ActorScores; score_excluded?: number; delete_pending?: number }
+      const actor = await actorsApi.get(item.id) as { comment?: string | null; scores?: ActorScores; score_excluded?: number; delete_pending?: number; is_favorite?: number }
       setMemoText(actor.comment ?? '')
       setScores(actor.scores ?? { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 })
       setScoreExcluded(!!(actor.score_excluded))
       setDeletePending(!!(actor.delete_pending))
+      setIsFavorite(!!(actor.is_favorite))
     } else {
-      const work = await worksApi.get(item.id) as { comment?: string | null; rating?: number; delete_pending?: number }
+      const work = await worksApi.get(item.id) as { comment?: string | null; rating?: number; delete_pending?: number; is_favorite?: number }
       setMemoText(work.comment ?? '')
       setWorkRating(work.rating ?? item.rating ?? 0)
       setDeletePending(!!(work.delete_pending))
+      setIsFavorite(!!(work.is_favorite))
     }
     setShowMemo(true)
   }
@@ -118,9 +122,9 @@ export default function MatchCard({
     setSaving(true)
     try {
       if (type === 'actor') {
-        await actorsApi.update(item.id, { comment: memoText, scores, score_excluded: scoreExcluded ? 1 : 0, delete_pending: deletePending ? 1 : 0 })
+        await actorsApi.update(item.id, { comment: memoText, scores, score_excluded: scoreExcluded ? 1 : 0, delete_pending: deletePending ? 1 : 0, is_favorite: isFavorite ? 1 : 0 })
       } else {
-        await worksApi.update(item.id, { comment: memoText, rating: workRating, delete_pending: deletePending ? 1 : 0 })
+        await worksApi.update(item.id, { comment: memoText, rating: workRating, delete_pending: deletePending ? 1 : 0, is_favorite: isFavorite ? 1 : 0 })
       }
       setLocalComment(memoText)
       setShowMemo(false)
@@ -147,7 +151,7 @@ export default function MatchCard({
 
       {/* 정보 섹션 */}
       <div
-        className={`p-3 bg-gray-800 border-t border-gray-700 cursor-default overflow-hidden${type === 'work' ? ' h-[168px]' : ''}`}
+        className={`p-3 bg-gray-800 border-t border-gray-700 cursor-default overflow-hidden${type === 'work' ? ' h-[216px]' : ''}`}
         onMouseMove={e => setTooltip({ type, id: item.id, x: e.clientX, y: e.clientY })}
         onMouseLeave={() => setTooltip(null)}
       >
@@ -196,9 +200,30 @@ export default function MatchCard({
         ) : (
           <div className="flex items-start gap-2">
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-gray-400 truncate">{item.product_number ?? ''}</p>
+              <div className="flex items-center gap-1.5 text-sm text-gray-400 truncate">
+                <span className="truncate">{item.product_number ?? ''}</span>
+                {item.release_date && <span className="shrink-0">{item.release_date}</span>}
+                {workRating > 0 && <span className="shrink-0"><Rating value={workRating} readonly small /></span>}
+                {isFavorite && <span className="shrink-0 text-pink-500 text-xs">♥</span>}
+              </div>
+              {(item.actors?.length ?? 0) > 0 && (() => {
+                const repIds = new Set(item.rep_actors?.map(a => a.id) ?? [])
+                const reps = item.actors!.filter(a => repIds.has(a.id))
+                const others = item.actors!.filter(a => !repIds.has(a.id))
+                const sorted = [...reps, ...others]
+                return (
+                  <p className="text-sm text-white truncate">
+                    {sorted.map((a, i) => (
+                      <span key={a.id} className={repIds.has(a.id) ? 'text-white' : 'text-gray-400'}>
+                        {i > 0 && ', '}
+                        {a.name}
+                      </span>
+                    ))}
+                  </p>
+                )
+              })()}
               <p
-                className="text-base font-bold text-white mt-0.5 line-clamp-4 cursor-pointer hover:underline"
+                className="text-base font-bold text-white mt-0.5 line-clamp-6 cursor-pointer hover:underline"
                 onClick={onNavigate}
               >{item.title ?? item.product_number ?? '...'}</p>
             </div>
@@ -281,15 +306,21 @@ export default function MatchCard({
               placeholder="코멘트를 입력하세요..."
               autoFocus
             />
-            <label className="flex items-center gap-1.5 mt-2 cursor-pointer select-none w-fit">
-              <input
-                type="checkbox"
-                checked={deletePending}
-                onChange={e => setDeletePending(e.target.checked)}
-                className="accent-red-500"
-              />
-              <span className="text-xs text-red-400">삭제예정</span>
-            </label>
+            <div className="flex items-center gap-4 mt-2">
+              <label className="flex items-center gap-1.5 cursor-pointer select-none w-fit" onClick={() => setIsFavorite(!isFavorite)}>
+                <span className={`text-sm ${isFavorite ? 'text-pink-500' : 'text-gray-600'}`}>♥</span>
+                <span className="text-xs text-gray-400">즐겨찾기</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none w-fit">
+                <input
+                  type="checkbox"
+                  checked={deletePending}
+                  onChange={e => setDeletePending(e.target.checked)}
+                  className="accent-red-500"
+                />
+                <span className="text-xs text-red-400">삭제예정</span>
+              </label>
+            </div>
             <div className="flex gap-2 mt-3">
               <button
                 onClick={handleSaveMemo}

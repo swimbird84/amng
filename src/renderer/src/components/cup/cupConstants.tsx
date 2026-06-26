@@ -91,6 +91,19 @@ export function itemLabel(item: ItemInfo): string {
   return item.name ?? item.title ?? item.product_number ?? `#${item.id}`
 }
 
+export function itemShortLabel(item: ItemInfo): string {
+  if (item.name) return item.name
+  const pn = item.product_number ?? ''
+  const title = item.title ?? ''
+  const truncTitle = title.length > 35 ? title.slice(0, 35) + '…' : title
+  if (pn && truncTitle) return `${pn} ${truncTitle}`
+  return pn || truncTitle || `#${item.id}`
+}
+
+export function itemPnLabel(item: ItemInfo): string {
+  return item.name ?? item.product_number ?? `#${item.id}`
+}
+
 export function itemImagePath(item: ItemInfo): string | null | undefined {
   return item.photo_path ?? item.cover_path
 }

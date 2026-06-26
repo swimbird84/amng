@@ -52,8 +52,12 @@ export type ItemInfo = {
   product_number?: string | null
   cover_path?: string | null
   rating?: number | null
+  release_date?: string | null
+  is_favorite?: number | null
   comment?: string | null
   files?: { id: number; file_path: string; type: string }[]
+  actors?: { id: number; name: string }[]
+  rep_actors?: { id: number; name: string }[]
 }
 
 export type StandingsRow = { item_id: number; pts: number; w: number; d: number; l: number }

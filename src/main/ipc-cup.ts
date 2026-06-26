@@ -1048,24 +1048,25 @@ export function registerCupHandlers(): void {
     }))
   })
 
-  ipcMain.handle('master-ranking:rank-history', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
-    const { type, itemId } = params
+  ipcMain.handle('master-ranking:rank-history', (_e, params: { type: 'actor' | 'work'; itemId: number; limit?: number }) => {
+    const { type, itemId, limit = 0 } = params
+    const limitClause = limit > 0 ? `LIMIT ${limit}` : ''
     const runs = db().prepare(`
-      SELECT r.id, r.completed_at FROM cup_runs r
+      SELECT r.id, r.completed_at, t.name AS tournament_name FROM cup_runs r
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
       WHERE r.status = 'completed' AND t.type = ?
-      ORDER BY r.completed_at DESC LIMIT 15
-    `).all(type) as { id: number; completed_at: string }[]
+      ORDER BY r.completed_at DESC ${limitClause}
+    `).all(type) as { id: number; completed_at: string; tournament_name: string }[]
     if (runs.length === 0) return []
     runs.reverse()
     const rl = getRecentRunLimit(db(), type)
     const atTimeSql = buildPointsAtTimeSql(type, rl)
-    const result: { rank: number; recorded_at: string }[] = []
+    const result: { rank: number; recorded_at: string; tournament_name: string }[] = []
     for (const run of runs) {
       const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
       const itemPts = allPts.find(r => r.item_id === itemId)?.total ?? 0
       const rank = allPts.filter(r => r.total > itemPts).length + 1
-      result.push({ rank, recorded_at: run.completed_at })
+      result.push({ rank, recorded_at: run.completed_at, tournament_name: run.tournament_name })
     }
     return result
   })

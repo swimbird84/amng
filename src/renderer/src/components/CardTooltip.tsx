@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import type { Actor, Work } from '../types'
+import ImagePreview from './ImagePreview'
 import { actorsApi, worksApi } from '../api'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData, type PhysicalStats } from './PhysicalCorrectionModal'
 
@@ -56,7 +57,7 @@ function ratingStars(rating: number): string {
   return '★'.repeat(full) + (half ? '☆' : '')
 }
 
-function WorkContent({ work }: { work: Work }) {
+function WorkContent({ work, showCover }: { work: Work; showCover?: boolean }) {
   const repActors = work.rep_actors ?? []
   const repIds = new Set(repActors.map((a) => a.id))
   const otherActors = (work.actors ?? [])
@@ -83,11 +84,12 @@ function WorkContent({ work }: { work: Work }) {
       {hasComment && <p className="whitespace-pre-wrap leading-relaxed text-gray-300">{work.title}</p>}
       {hasActors && <p className="font-bold text-gray-300 leading-relaxed">{allActors.map((a) => a.name).join(', ')}</p>}
       {work.comment && <p className="whitespace-pre-wrap leading-relaxed text-gray-400 text-[12px]">{work.comment}</p>}
+      {showCover && work.cover_path && <ImagePreview path={work.cover_path} alt="" className="w-full rounded mt-1" />}
     </div>
   )
 }
 
-function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | null }) {
+function ActorContent({ actor, physScore, showCover }: { actor: Actor; physScore: number | null; showCover?: boolean }) {
   const s = actor.scores
   const hasBody = !!(actor.height || actor.bust || actor.waist || actor.hip || actor.cup)
   const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
@@ -154,6 +156,7 @@ function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | 
           <p className="text-[12px] text-gray-300 whitespace-pre-wrap leading-relaxed">{actor.comment}</p>
         </div>
       )}
+      {showCover && actor.photo_path && <ImagePreview path={actor.photo_path} alt="" className="w-full rounded mt-1" />}
     </div>
   )
 }
@@ -164,6 +167,7 @@ export interface TooltipState {
   id: number
   x: number
   y: number
+  showCover?: boolean
 }
 
 interface Props {
@@ -223,9 +227,9 @@ export default function CardTooltip({ tooltip }: Props) {
       {loading ? (
         <p className="text-gray-500 text-[10px]">로딩중...</p>
       ) : tooltip.type === 'work' ? (
-        <WorkContent work={work!} />
+        <WorkContent work={work!} showCover={tooltip.showCover} />
       ) : (
-        <ActorContent actor={actor!} physScore={physScore} />
+        <ActorContent actor={actor!} physScore={physScore} showCover={tooltip.showCover} />
       )}
     </div>
   )

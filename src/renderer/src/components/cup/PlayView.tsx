@@ -3,7 +3,7 @@ import { cupApi, actorsApi, worksApi, masterRankingApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { CupTournament, CupRun, CupMatch, ItemInfo, StandingsRow } from './cupTypes'
-import { FORMAT_LABEL, roundLabel, blockRoundLabel, finalRoundLabel, itemLabel, itemImagePath, getDivision, DIV_BOUNDARIES, DIV_LABEL, DIV_COLOR, DIV_TEXT_COLOR } from './cupConstants'
+import { FORMAT_LABEL, roundLabel, blockRoundLabel, finalRoundLabel, itemLabel, itemShortLabel, itemPnLabel, itemImagePath, getDivision, DIV_BOUNDARIES, DIV_LABEL, DIV_COLOR, DIV_TEXT_COLOR } from './cupConstants'
 import MatchCard from './MatchCard'
 
 export default function PlayView({
@@ -51,6 +51,7 @@ export default function PlayView({
   const [hoveredCard, setHoveredCard] = useState<'item1' | 'item2' | 'draw' | null>(null)
   const [commentDraft, setCommentDraft] = useState('')
   const [commentSaved, setCommentSaved] = useState(false)
+  const [standingsTooltip, setStandingsTooltip] = useState<TooltipState | null>(null)
   const itemFetchQueue = useRef(new Set<number>())
 
   const fetchItemInfo = useCallback(async (id: number, type: 'actor' | 'work') => {
@@ -410,7 +411,20 @@ export default function PlayView({
         )}
 
         {tab === 'standings' && (
-          <div className="p-4 space-y-4">
+          <div
+            className="p-4 space-y-4"
+            onMouseMove={e => {
+              const el = (e.target as HTMLElement).closest('[data-tip-id]') as HTMLElement | null
+              if (el) {
+                const id = Number(el.dataset.tipId)
+                const type = (el.dataset.tipType ?? 'work') as 'actor' | 'work'
+                setStandingsTooltip(prev => prev?.id === id ? { ...prev, x: e.clientX, y: e.clientY } : { type, id, x: e.clientX, y: e.clientY, showCover: true })
+              } else {
+                setStandingsTooltip(null)
+              }
+            }}
+            onMouseLeave={() => setStandingsTooltip(null)}
+          >
             {!standings && <p className="text-gray-500 text-center py-8">로딩 중...</p>}
 
             {/* ── 리그전 현황 ── */}
@@ -444,7 +458,7 @@ export default function PlayView({
                                   <span className={`flex-1 flex items-center justify-end gap-1 ${m.winner_id === m.item1_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
                                     {ptsLabel(m.item1_id)}
                                     <span className={`truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                      {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                      {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemShortLabel(i1)}</span> : `#${m.item1_id}`}
                                     </span>
                                     {divBadge(m.item1_id)}
                                   </span>
@@ -452,7 +466,7 @@ export default function PlayView({
                                   <span className={`flex-1 flex items-center gap-1 ${m.winner_id === m.item2_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
                                     {divBadge(m.item2_id ?? 0)}
                                     <span className={`truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                      {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                      {i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemShortLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
                                     </span>
                                     {ptsLabel(m.item2_id ?? 0)}
                                   </span>
@@ -518,7 +532,7 @@ export default function PlayView({
                                       </td>
                                     ) : null}
                                     <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
-                                      {item ? itemLabel(item) : `#${row.item_id}`}
+                                      {item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${row.item_id}`}
                                       {idx < 2 && <span className="ml-1 text-green-400 text-xs">↑</span>}
                                     </td>
                                     <td className="px-1 py-1.5 text-center text-green-400">{row.w}</td>
@@ -540,13 +554,13 @@ export default function PlayView({
                                 return (
                                   <div key={m.id} className={`px-2 py-1 flex items-center gap-1 text-xs ${done ? '' : 'opacity-40'}`}>
                                     <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
-                                      {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                      {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}
                                     </span>
                                     <span className="text-gray-600 w-4 text-center shrink-0">
                                       {m.winner_id ? (m.winner_id === m.item1_id ? '>' : '<') : 'vs'}
                                     </span>
                                     <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
-                                      {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                      {i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
                                     </span>
                                   </div>
                                 )
@@ -567,13 +581,13 @@ export default function PlayView({
                                   return (
                                     <div key={m.id} className={`px-2 py-1 flex items-center gap-1 text-xs ${done ? '' : 'opacity-40'}`}>
                                       <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
-                                        {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                        {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}
                                       </span>
                                       <span className="text-gray-600 w-4 text-center shrink-0">
                                         {m.winner_id ? (m.winner_id === m.item1_id ? '>' : '<') : 'vs'}
                                       </span>
                                       <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
-                                        {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                        {i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
                                       </span>
                                     </div>
                                   )
@@ -617,7 +631,7 @@ export default function PlayView({
                             <span className={`flex-1 flex items-center justify-end gap-1 ${m.winner_id === m.item1_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
                               {ptsLabel(m.item1_id)}
                               <span className={`truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemShortLabel(i1)}</span> : `#${m.item1_id}`}
                               </span>
                               {divBadge(m.item1_id)}
                             </span>
@@ -625,7 +639,7 @@ export default function PlayView({
                             <span className={`flex-1 flex items-center gap-1 ${m.winner_id === m.item2_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
                               {divBadge(m.item2_id ?? 0)}
                               <span className={`truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                {i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemShortLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
                               </span>
                               {ptsLabel(m.item2_id ?? 0)}
                             </span>
@@ -742,7 +756,7 @@ export default function PlayView({
                                           </td>
                                         ) : null}
                                         <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
-                                          {item ? itemLabel(item) : `#${row.item_id}`}
+                                          {item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${row.item_id}`}
                                           {(gqs ? gqs.includes(row.item_id) : idx < 2) && <span className="ml-1 text-purple-400 text-xs">↑</span>}
                                         </td>
                                         <td className="px-1 py-1.5 text-center text-green-400">{row.w}</td>
@@ -763,13 +777,13 @@ export default function PlayView({
                                     return (
                                       <div key={m.id} className={`px-2 py-1 flex items-center gap-1 text-xs ${done ? '' : 'opacity-40'}`}>
                                         <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
-                                          {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                          {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}
                                         </span>
                                         <span className="text-gray-600 w-4 text-center shrink-0">
                                           {m.winner_id ? (m.winner_id === m.item1_id ? '>' : '<') : 'vs'}
                                         </span>
                                         <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
-                                          {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                          {i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
                                         </span>
                                       </div>
                                     )
@@ -789,13 +803,13 @@ export default function PlayView({
                                       return (
                                         <div key={m.id} className={`px-2 py-1 flex items-center gap-1 text-xs ${done ? '' : 'opacity-40'}`}>
                                           <span className={`flex-1 text-right truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
-                                            {i1 ? itemLabel(i1) : `#${m.item1_id}`}
+                                            {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}
                                           </span>
                                           <span className="text-gray-600 w-4 text-center shrink-0">
                                             {m.winner_id ? (m.winner_id === m.item1_id ? '>' : '<') : 'vs'}
                                           </span>
                                           <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
-                                            {i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}
+                                            {i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
                                           </span>
                                         </div>
                                       )
@@ -852,20 +866,20 @@ export default function PlayView({
                                           {o1 ? (
                                             <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item1_id ? 'opacity-40 line-through' : ''}`}>
                                               <span className={`w-[105px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>
-                                              <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
+                                              <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}</span>
                                             </span>
                                           ) : (
-                                            <span className={`truncate block ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
+                                            <span className={`truncate block ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}</span>
                                           )}
                                         </div>
                                         <div className={`text-xs px-2 py-0.5 rounded-b border-l-2 border-t border-gray-700/30 ${m.winner_id === m.item2_id ? 'border-yellow-400 bg-yellow-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
                                           {o2 ? (
                                             <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item2_id ? 'opacity-40 line-through' : ''}`}>
                                               <span className={`w-[105px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>
-                                              <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : `#${m.item2_id}`}</span>
+                                              <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : `#${m.item2_id}`}</span>
                                             </span>
                                           ) : (
-                                            <span className={`truncate block ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}</span>
+                                            <span className={`truncate block ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}</span>
                                           )}
                                         </div>
                                       </div>
@@ -925,9 +939,9 @@ export default function PlayView({
                                     {o ? (
                                       <span className="flex items-center gap-1">
                                         <span className={`w-[105px] shrink-0 font-bold text-[10px] truncate ${o.color}`}>{o.text}</span>
-                                        <span className="w-[120px] shrink-0 truncate text-yellow-200">{item ? itemLabel(item) : `#${champion}`}</span>
+                                        <span className="w-[120px] shrink-0 truncate text-yellow-200">{item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${champion}`}</span>
                                       </span>
-                                    ) : <span className="text-yellow-200">{item ? itemLabel(item) : `#${champion}`}</span>}
+                                    ) : <span className="text-yellow-200">{item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${champion}`}</span>}
                                   </div>
                                 </div>
                               </div>
@@ -1017,7 +1031,7 @@ export default function PlayView({
                                               {s1.item_id !== null ? (
                                                 <span className="flex items-center gap-1">
                                                   {o1 && <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>}
-                                                  <span className="w-[120px] shrink-0 truncate text-purple-200">{it1 ? itemLabel(it1) : `#${s1.item_id}`}</span>
+                                                  <span className="w-[120px] shrink-0 truncate text-purple-200">{it1 ? <span data-tip-id={it1.id} data-tip-type={tournament?.type}>{itemPnLabel(it1)}</span> : `#${s1.item_id}`}</span>
                                                 </span>
                                               ) : `${s1.group_id}조 ${s1.rank}위`}
                                             </div>
@@ -1025,7 +1039,7 @@ export default function PlayView({
                                               {s2.item_id !== null ? (
                                                 <span className="flex items-center gap-1">
                                                   {o2 && <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>}
-                                                  <span className="w-[120px] shrink-0 truncate text-purple-200">{it2 ? itemLabel(it2) : `#${s2.item_id}`}</span>
+                                                  <span className="w-[120px] shrink-0 truncate text-purple-200">{it2 ? <span data-tip-id={it2.id} data-tip-type={tournament?.type}>{itemPnLabel(it2)}</span> : `#${s2.item_id}`}</span>
                                                 </span>
                                               ) : `${s2.group_id}조 ${s2.rank}위`}
                                             </div>
@@ -1066,20 +1080,20 @@ export default function PlayView({
                                               {o1 ? (
                                                 <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item1_id ? 'opacity-40 line-through' : ''}`}>
                                                   <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o1.color}`}>{o1.text}</span>
-                                                  <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
+                                                  <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}</span>
                                                 </span>
                                               ) : (
-                                                <span className={`truncate block ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i1 ? itemLabel(i1) : `#${m.item1_id}`}</span>
+                                                <span className={`truncate block ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}</span>
                                               )}
                                             </div>
                                             <div className={`text-xs px-2 py-0.5 rounded-b border-l-2 border-t border-gray-700/30 ${m.winner_id === m.item2_id ? 'border-purple-400 bg-purple-900/20' : m.winner_id !== null ? 'border-gray-700' : 'border-gray-600'}`}>
                                               {o2 ? (
                                                 <span className={`flex items-center gap-1 ${m.winner_id !== null && m.winner_id !== m.item2_id ? 'opacity-40 line-through' : ''}`}>
                                                   <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o2.color}`}>{o2.text}</span>
-                                                  <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : `#${m.item2_id}`}</span>
+                                                  <span className={`w-[120px] shrink-0 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-300'}`}>{i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : `#${m.item2_id}`}</span>
                                                 </span>
                                               ) : (
-                                                <span className={`truncate block ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i2 ? itemLabel(i2) : m.item2_id ? `#${m.item2_id}` : '-'}</span>
+                                                <span className={`truncate block ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}</span>
                                               )}
                                             </div>
                                           </div>
@@ -1143,9 +1157,9 @@ export default function PlayView({
                                               {o ? (
                                                 <span className="flex items-center gap-1">
                                                   <span className={`w-[68px] shrink-0 font-bold text-[10px] truncate ${o.color}`}>{o.text}</span>
-                                                  <span className="w-[120px] shrink-0 truncate">{item ? itemLabel(item) : `#${fid}`}</span>
+                                                  <span className="w-[120px] shrink-0 truncate">{item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${fid}`}</span>
                                                 </span>
-                                              ) : (item ? itemLabel(item) : `#${fid}`)}
+                                              ) : (item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${fid}`)}
                                             </div>
                                           </div>
                                         )
@@ -1166,6 +1180,7 @@ export default function PlayView({
                 </div>
               )
             })()}
+            {standingsTooltip && <CardTooltip tooltip={standingsTooltip} />}
           </div>
         )}
 
