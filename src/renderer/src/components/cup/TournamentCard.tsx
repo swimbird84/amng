@@ -207,11 +207,11 @@ export default function TournamentCard({
             {t.is_master === 1 && (
               <span className="px-1.5 py-0.5 bg-yellow-900/60 text-yellow-300 text-xs rounded font-semibold">★</span>
             )}
+            <span className={`px-1.5 py-0.5 text-xs rounded ${t.type === 'actor' ? 'bg-pink-900/60 text-pink-300' : 'bg-yellow-900/60 text-yellow-300'}`}>
+              {t.type === 'actor' ? '배우' : '작품'}
+            </span>
             <span className={`px-1.5 py-0.5 text-xs rounded ${FORMAT_COLOR[t.format] ?? 'bg-gray-700 text-gray-300'}`}>
               {FORMAT_LABEL[t.format] ?? t.format}
-            </span>
-            <span className="px-1.5 py-0.5 text-xs rounded bg-gray-700 text-gray-300">
-              {t.type === 'actor' ? '배우' : '작품'}
             </span>
           </div>
 
