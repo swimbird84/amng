@@ -651,7 +651,8 @@ export function registerCupHandlers(): void {
     if (search) { conditions.push('t.name LIKE ?'); bindings.push(`%${search}%`) }
     if (format) { conditions.push('t.format = ?'); bindings.push(format) }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
-    const orderCol = sortBy === 'name' ? 't.name' : 't.created_at'
+    const isLastPlayed = sortBy === 'last_played'
+    const orderCol = sortBy === 'name' ? 't.name' : isLastPlayed ? 'lr.last_played_at' : 't.created_at'
     const dir = sortDir === 'asc' ? 'ASC' : 'DESC'
     return db().prepare(`
       SELECT t.*,
@@ -673,7 +674,7 @@ export function registerCupHandlers(): void {
       LEFT JOIN actors a ON a.id = lc.winner_id AND t.type = 'actor'
       LEFT JOIN works w ON w.id = lc.winner_id AND t.type = 'work'
       ${where}
-      ORDER BY ${orderCol} ${dir}
+      ORDER BY ${isLastPlayed ? `${orderCol} ${dir}, lr.completed_at ${dir}, lr.started_at ${dir}` : `${orderCol} ${dir}`}
     `).all(...bindings)
   })
 
@@ -683,6 +684,9 @@ export function registerCupHandlers(): void {
     const run = db().prepare(`SELECT * FROM cup_runs WHERE tournament_id = ? ORDER BY id DESC LIMIT 1`).get(tournamentId) as Record<string, unknown> | undefined
     if (!run) return { tournament, run: null, currentMatch: null, totalMatches: 0, completedMatches: 0 }
     const runId = run.id as number
+    if (run.status === 'in_progress') {
+      db().prepare(`UPDATE cup_runs SET last_played_at = datetime('now') WHERE id = ?`).run(runId)
+    }
     const currentMatch = db().prepare(`
       SELECT * FROM cup_matches
       WHERE run_id = ? AND winner_id IS NULL AND is_draw = 0
@@ -1527,7 +1531,7 @@ export function registerCupHandlers(): void {
     db().transaction(() => {
       // cup_run 생성
       const runResult = db().prepare(
-        `INSERT INTO cup_runs (tournament_id, status, round_total, settings_snapshot, started_at) VALUES (?, 'in_progress', ?, ?, datetime('now'))`
+        `INSERT INTO cup_runs (tournament_id, status, round_total, settings_snapshot, started_at, last_played_at) VALUES (?, 'in_progress', ?, ?, datetime('now'), datetime('now'))`
       ).run(tournamentId, roundTotal, settingsSnapshot)
       runId = runResult.lastInsertRowid as number
 
@@ -1682,6 +1686,7 @@ export function registerCupHandlers(): void {
     const runId = match.run_id
 
     db().transaction(() => {
+      db().prepare(`UPDATE cup_runs SET last_played_at = datetime('now') WHERE id = ?`).run(runId)
       if (isDraw) {
         db().prepare(`UPDATE cup_matches SET is_draw = 1 WHERE id = ?`).run(matchId)
         for (const itemId of [match.item1_id, match.item2_id]) {

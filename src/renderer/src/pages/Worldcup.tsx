@@ -26,7 +26,7 @@ export default function Worldcup({
   const [formatFilter, setFormatFilter] = useState<'all' | 'tournament' | 'league' | 'worldcup'>(() => (localStorage.getItem('cup:formatFilter') as 'all' | 'tournament' | 'league' | 'worldcup') || 'all')
   const [masterFilter, setMasterFilter] = useState<'all' | 'master' | 'normal'>(() => (localStorage.getItem('cup:masterFilter') as 'all' | 'master' | 'normal') || 'all')
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<'created_at' | 'name'>(() => (localStorage.getItem('cup:sortBy') as 'created_at' | 'name') || 'created_at')
+  const [sortBy, setSortBy] = useState<'created_at' | 'name' | 'last_played'>(() => (localStorage.getItem('cup:sortBy') as 'created_at' | 'name' | 'last_played') || 'created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('cup:sortDir') as 'asc' | 'desc') || 'desc')
   const [showCreate, setShowCreate] = useState(false)
   const [statsModalId, setStatsModalId] = useState<number | null>(null)
@@ -127,6 +127,7 @@ export default function Worldcup({
             >
               <option value="created_at">등록순</option>
               <option value="name">대회명</option>
+              <option value="last_played">진행순</option>
             </select>
             <button
               onClick={() => { const next = sortDir === 'asc' ? 'desc' : 'asc'; setSortDir(next); localStorage.setItem('cup:sortDir', next) }}
