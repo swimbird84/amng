@@ -121,7 +121,7 @@ export default function MatchCard({
               className="shrink-0 w-7 h-7 rounded flex items-center justify-center cursor-pointer hover:border hover:border-gray-500 transition"
               title="수정"
             >
-              ✏️
+              💬
             </button>
           </div>
         ) : (
@@ -170,7 +170,7 @@ export default function MatchCard({
                 className="w-8 h-8 rounded flex items-center justify-center cursor-pointer hover:border hover:border-gray-500 transition"
                 title="수정"
               >
-                ✏️
+                💬
               </button>
             </div>
           </div>
