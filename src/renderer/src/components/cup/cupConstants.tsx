@@ -1,21 +1,5 @@
 import React, { useState } from 'react'
-import type { ActorScores } from '../../types'
 import type { ItemInfo } from './cupTypes'
-
-// ── Score Fields ──
-export const SCORE_FIELDS: { key: keyof ActorScores; label: string }[] = [
-  { key: 'face', label: '얼굴' },
-  { key: 'bust', label: '가슴' },
-  { key: 'hip', label: '엉덩이' },
-  { key: 'physical', label: '몸매' },
-  { key: 'skin', label: '피부' },
-  { key: 'acting', label: '연기력' },
-  { key: 'sexy', label: '섹기' },
-  { key: 'charm', label: '매력' },
-  { key: 'technique', label: '테크닉' },
-  { key: 'proportions', label: '비율' },
-]
-export const SCORE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
 // ── Round Options ──
 export const ROUND_OPTIONS = [

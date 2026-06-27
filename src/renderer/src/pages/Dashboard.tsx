@@ -8,6 +8,7 @@ import Rating from '../components/Rating'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
 import { hashColor } from '../utils/colorHelpers'
+import { useDataChanged } from '../dataEvents'
 
 interface Props {
   onNavigateToWork: (id: number) => void
@@ -225,6 +226,10 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [ratingModal, setRatingModal] = useState<{ bucket: number; works: Work[] } | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  useDataChanged(() => setRefreshKey(k => k + 1))
+
   const [distItem, setDistItem] = useState<DistItemKey>(() => (localStorage.getItem('dashboard:distItem') as DistItemKey) || 'avg_score')
   const [distExcludeMode, setDistExcludeMode] = useState<'include' | 'exclude'>(() => (localStorage.getItem('dashboard:distExcludeMode') as 'include' | 'exclude') || 'include')
   const [distActorPopup, setDistActorPopup] = useState<{ label: string; actors: DistBinActor[] } | null>(null)
@@ -251,7 +256,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.debutAgeDist().then((d) => setDebutAgeDist(d as (Actor & { debut_age: number; avg_score: number })[]))
     dashboardApi.ratingDist().then((d) => setRatingDist(d as { bucket: number; count: number }[]))
     dashboardApi.debutYears().then((d) => setDebutYears(d as { year: string; count: number }[]))
-  }, [])
+  }, [refreshKey])
 
   useEffect(() => {
     dashboardApi.actorScoreDist().then((d) => setScoreDist(d as (Actor & { avg_score: number; work_count: number; ratio_score?: number })[]))
@@ -265,7 +270,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           .filter(a => a.physScore >= 0)
       )
     })
-  }, [])
+  }, [refreshKey])
 
 
   const handleSelectYear = async (year: string) => {

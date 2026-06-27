@@ -5,6 +5,9 @@ import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { CupTournament, CupRun, CupMatch, ItemInfo, StandingsRow } from './cupTypes'
 import { FORMAT_LABEL, roundLabel, blockRoundLabel, finalRoundLabel, itemLabel, itemShortLabel, itemPnLabel, itemImagePath, getDivision, DIV_BOUNDARIES, DIV_LABEL, DIV_COLOR, DIV_TEXT_COLOR } from './cupConstants'
 import MatchCard from './MatchCard'
+import ActorForm from '../ActorForm'
+import WorkForm from '../WorkForm'
+import { emitDataChanged } from '../../dataEvents'
 
 export default function PlayView({
   tournamentId,
@@ -52,7 +55,35 @@ export default function PlayView({
   const [commentDraft, setCommentDraft] = useState('')
   const [commentSaved, setCommentSaved] = useState(false)
   const [standingsTooltip, setStandingsTooltip] = useState<TooltipState | null>(null)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editData, setEditData] = useState<any>(null)
   const itemFetchQueue = useRef(new Set<number>())
+
+  const refreshItemInfo = useCallback(async (id: number, type: 'actor' | 'work') => {
+    const data = type === 'actor'
+      ? await actorsApi.get(id) as ItemInfo
+      : await worksApi.get(id) as ItemInfo
+    if (data) setItems(prev => new Map(prev).set(id, data))
+  }, [])
+
+  const handleOpenEdit = useCallback(async (id: number) => {
+    const type = tournament?.type
+    if (!type) return
+    const data = type === 'actor'
+      ? await actorsApi.get(id)
+      : await worksApi.get(id)
+    setEditData(data)
+    setEditId(id)
+  }, [tournament?.type])
+
+  const handleEditSave = useCallback(async () => {
+    if (editId && tournament?.type) {
+      await refreshItemInfo(editId, tournament.type)
+      emitDataChanged(tournament.type)
+    }
+    setEditId(null)
+    setEditData(null)
+  }, [editId, tournament?.type, refreshItemInfo])
 
   const fetchItemInfo = useCallback(async (id: number, type: 'actor' | 'work') => {
     if (items.has(id) || itemFetchQueue.current.has(id)) return
@@ -364,7 +395,7 @@ export default function PlayView({
                     onMouseLeave={() => setHoveredCard(null)}
                   >
                     {item1
-                      ? <MatchCard item={item1} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item1_id, match.item2_id ?? null)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item1.id) : onNavigateToWork(item1.id)} disabled={!!picking} division={tournament.is_master ? (divisionMap[match.item1_id] ?? 0) : undefined} isMaster={!!tournament.is_master} />
+                      ? <MatchCard item={item1} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item1_id, match.item2_id ?? null)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item1.id) : onNavigateToWork(item1.id)} onEdit={() => handleOpenEdit(item1.id)} disabled={!!picking} division={tournament.is_master ? (divisionMap[match.item1_id] ?? 0) : undefined} isMaster={!!tournament.is_master} />
                       : <div className="h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
                     }
                   </div>
@@ -399,7 +430,7 @@ export default function PlayView({
                       onMouseLeave={() => setHoveredCard(null)}
                     >
                       {item2
-                        ? <MatchCard item={item2} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item2_id!, match.item1_id)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item2.id) : onNavigateToWork(item2.id)} disabled={!!picking} division={tournament.is_master ? (divisionMap[match.item2_id!] ?? 0) : undefined} isMaster={!!tournament.is_master} />
+                        ? <MatchCard item={item2} type={tournament.type} tournamentId={tournament.id} onClick={() => handlePick(match.item2_id!, match.item1_id)} onNavigate={() => tournament.type === 'actor' ? onNavigateToActor(item2.id) : onNavigateToWork(item2.id)} onEdit={() => handleOpenEdit(item2.id)} disabled={!!picking} division={tournament.is_master ? (divisionMap[match.item2_id!] ?? 0) : undefined} isMaster={!!tournament.is_master} />
                         : <div className="h-64 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500">로딩 중...</div>
                       }
                     </div>
@@ -1185,6 +1216,23 @@ export default function PlayView({
         )}
 
       </div>
+
+      {/* 수정 모달 */}
+      {editId && editData && tournament && (
+        tournament.type === 'actor' ? (
+          <ActorForm
+            actor={editData}
+            onSave={handleEditSave}
+            onCancel={() => { setEditId(null); setEditData(null) }}
+          />
+        ) : (
+          <WorkForm
+            work={editData}
+            onSave={handleEditSave}
+            onCancel={() => { setEditId(null); setEditData(null) }}
+          />
+        )
+      )}
     </div>
   )
 }

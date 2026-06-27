@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect } from 'react'
-import { pushEscHandler, popEscHandler } from './escManager'
 import { version } from '../../../package.json'
 import Works from './pages/Works'
 import Actors from './pages/Actors'
@@ -9,8 +8,8 @@ import Ranking from './pages/Ranking'
 import Tags from './pages/Tags'
 import Labels from './pages/Labels'
 import Worldcup from './pages/Worldcup'
-import ActorViewModal from './components/ActorViewModal'
-import WorkViewModal from './components/WorkViewModal'
+import ActorDetailModal from './components/ActorDetailModal'
+import WorkDetailModal from './components/WorkDetailModal'
 
 type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'labels' | 'tags' | 'worldcup'
 type ViewEntry = { type: 'actor'; id: number } | { type: 'work'; id: number }
@@ -19,8 +18,6 @@ function App() {
   const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem('app:tab') as Tab) || 'home')
   const setTabAndSave = useCallback((t: Tab) => { setTab(t); sessionStorage.setItem('app:tab', t) }, [])
   const [viewStack, setViewStack] = useState<ViewEntry[]>([])
-  const [pendingEditWork, setPendingEditWork] = useState<number | null>(null)
-  const [pendingEditActor, setPendingEditActor] = useState<number | null>(null)
 
   const handleNavigateToActor = useCallback((id: number) => {
     setViewStack((s) => [...s, { type: 'actor', id }])
@@ -30,19 +27,6 @@ function App() {
     setViewStack((s) => [...s, { type: 'work', id }])
   }, [])
 
-
-  const handleEditWork = useCallback((id: number) => {
-    setViewStack([])
-    setTabAndSave('works')
-    setPendingEditWork(id)
-  }, [])
-
-  const handleEditActor = useCallback((id: number) => {
-    setViewStack([])
-    setTabAndSave('actors')
-    setPendingEditActor(id)
-  }, [])
-
   useEffect(() => {
     const splash = document.getElementById('splash')
     if (splash) {
@@ -50,13 +34,6 @@ function App() {
       setTimeout(() => splash.remove(), 400)
     }
   }, [])
-
-  useEffect(() => {
-    if (viewStack.length === 0) return
-    const handler = () => setViewStack([])
-    pushEscHandler(handler)
-    return () => popEscHandler(handler)
-  }, [viewStack.length])
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white">
@@ -156,16 +133,12 @@ function App() {
         {tab === 'works' && (
           <Works
             onNavigateToActor={handleNavigateToActor}
-            openEditId={pendingEditWork}
-            onEditHandled={() => setPendingEditWork(null)}
           />
         )}
         {tab === 'actors' && (
           <Actors
             onNavigateToWork={handleNavigateToWork}
             onNavigateToActor={handleNavigateToActor}
-            openEditId={pendingEditActor}
-            onEditHandled={() => setPendingEditActor(null)}
           />
         )}
         {tab === 'labels' && (
@@ -175,8 +148,6 @@ function App() {
           <Tags
             onNavigateToWork={handleNavigateToWork}
             onNavigateToActor={handleNavigateToActor}
-            onEditWork={handleEditWork}
-            onEditActor={handleEditActor}
           />
         )}
         {tab === 'worldcup' && (
@@ -189,31 +160,22 @@ function App() {
 
       {tab === 'home' && <span className="fixed bottom-2 right-3 text-xs text-gray-600 pointer-events-none select-none">v{version}</span>}
 
-      {viewStack.length > 0 && (
-        <div
-          className="fixed inset-0 bg-black/60"
-          style={{ zIndex: 59 }}
-          onClick={() => setViewStack([])}
-        />
-      )}
       {viewStack.length > 0 && (() => {
         const v = viewStack[viewStack.length - 1]
         return v.type === 'actor' ? (
-          <ActorViewModal
+          <ActorDetailModal
             key={`a-${v.id}`}
             actorId={v.id}
             onClose={() => setViewStack([])}
             onViewWork={(id) => setViewStack([{ type: 'work', id }])}
-            onEdit={() => handleEditActor(v.id)}
             zIndex={60}
           />
         ) : (
-          <WorkViewModal
+          <WorkDetailModal
             key={`w-${v.id}`}
             workId={v.id}
             onClose={() => setViewStack([])}
             onViewActor={(id) => setViewStack([{ type: 'actor', id }])}
-            onEdit={() => handleEditWork(v.id)}
             zIndex={60}
           />
         )

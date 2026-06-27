@@ -3,6 +3,7 @@ import type React from 'react'
 import type { Work } from '../types'
 import { studiosApi, makersApi, worksApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
+import { useDataChanged } from '../dataEvents'
 import StudioManager from '../components/StudioManager'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
@@ -119,6 +120,8 @@ export default function Labels({ onNavigateToWork }: Props) {
   }
 
   useEffect(() => { loadAll() }, [])
+
+  useDataChanged(() => loadAll())
 
   const handleSelectStudio = async (id: number) => {
     if (selectedStudioId === id) {

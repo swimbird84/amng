@@ -3,6 +3,7 @@ import { actorsApi, masterRankingApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData, type PhysicalSettings } from '../components/PhysicalCorrectionModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
+import { useDataChanged } from '../dataEvents'
 
 type RankBy =
   | 'work_count' | 'fav_work_count' | 'avg_score' | 'physScore'
@@ -125,6 +126,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
     window.addEventListener('physicalSettingsChange', handler)
     return () => window.removeEventListener('physicalSettingsChange', handler)
   }, [loadData])
+
+  useDataChanged(() => loadData())
 
   useEffect(() => {
     if (rankBy === 'masterRanking') loadMasterRanking()

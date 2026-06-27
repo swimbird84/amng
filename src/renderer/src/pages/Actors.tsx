@@ -7,6 +7,7 @@ import ActorForm from '../components/ActorForm'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import RadarChart from '../components/RadarChart'
+import ActorDetailModal from '../components/ActorDetailModal'
 import PhysicalCorrectionModal, { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import { getAge, getDebutAge } from '../utils/dateHelpers'
@@ -14,11 +15,9 @@ import { getAge, getDebutAge } from '../utils/dateHelpers'
 interface ActorsProps {
   onNavigateToWork?: (id: number) => void
   onNavigateToActor?: (id: number) => void
-  openEditId?: number | null
-  onEditHandled?: () => void
 }
 
-export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId, onEditHandled }: ActorsProps) {
+export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsProps) {
   const [actors, setActors] = useState<Actor[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [selected, setSelected] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
@@ -168,14 +167,6 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
     pushEscHandler(handler)
     return () => popEscHandler(handler)
   }, [selected, tagCloud])
-  useEffect(() => {
-    if (!openEditId) return
-    actorsApi.get(openEditId).then((a) => {
-      setEditActor(a as Actor & { tags?: Tag[] })
-      setShowForm(true)
-      onEditHandled?.()
-    })
-  }, [openEditId])
   useEffect(() => {
     computePhysScores()
     window.addEventListener('physicalSettingsChange', computePhysScores)
@@ -420,288 +411,13 @@ export default function Actors({ onNavigateToWork, onNavigateToActor, openEditId
         </div>
       </div>
 
-      {/* 표지 호버 프리뷰 */}
-      {hoverCover && (
-        <div
-          className="fixed z-50 pointer-events-none"
-          style={{ right: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh' }}
-        >
-          <ImagePreview path={hoverCover} alt="표지 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
-        </div>
-      )}
-
-      {/* 추가 사진 호버 프리뷰 */}
-      {hoverActorPhoto && (
-        <div
-          className="fixed z-50 pointer-events-none"
-          style={{ left: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh' }}
-        >
-          <ImagePreview path={hoverActorPhoto} alt="추가 사진 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
-        </div>
-      )}
-
       {/* 상세 모달 */}
       {selected && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40" onClick={() => setSelected(null)}>
-          <div className="bg-gray-800 rounded-lg w-[1000px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => setSelected(null)}
-              className="absolute top-3 right-3 text-gray-400 hover:text-white text-xl leading-none z-10"
-            >
-              ✕
-            </button>
-
-            {/* 좌측 */}
-            <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3 min-w-0">
-              <div className="flex gap-4 items-start">
-                <ImagePreview path={selected.photo_path} alt={selected.name} className="w-28 h-28 rounded flex-shrink-0" version={refreshKey} />
-                <div className="flex-1 pt-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-white font-bold text-lg">{selected.name}</h3>
-                    {!!selected.score_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">제외</span>}
-                    {!!selected.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
-                    <button
-                      onClick={() => handleToggleFavorite(selected.id, selected.is_favorite)}
-                      className={`text-2xl leading-none ${selected.is_favorite ? 'text-red-500' : 'text-gray-500 hover:text-red-400'}`}
-                    >
-                      {selected.is_favorite ? '♥' : '♡'}
-                    </button>
-                  </div>
-                  <div className="grid gap-x-2 text-sm text-gray-400 mt-1" style={{ gridTemplateColumns: 'auto 1fr' }}>
-                    <span>생년월일</span>
-                    <span>{selected.birthday || '-'}{selected.birthday ? ` (${getAge(selected.birthday)})` : ''}</span>
-                    <span>데뷔일</span>
-                    <span>{selected.debut_date || '-'}{selected.debut_date ? ` (${getDebutAge(selected.birthday ?? null, selected.debut_date)})` : ''}</span>
-                  </div>
-                  <p className="text-yellow-400 text-sm mt-1">
-                    평점 {(selected.avg_score ?? (
-                      selected.scores
-                        ? (Object.values(selected.scores).reduce((a, b) => a + b, 0) / 13)
-                        : 0
-                    )).toFixed(2)}점
-                  </p>
-                  <div className="flex gap-2 mt-3">
-                    <button onClick={handleEdit} className="bg-gray-600 hover:bg-gray-500 text-white text-sm px-3 py-1.5 rounded flex-1">
-                      수정
-                    </button>
-                    <button onClick={handleDelete} className="bg-red-700 hover:bg-red-600 text-white text-sm px-3 py-1.5 rounded flex-1">
-                      삭제
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-0">
-                {/* 좌: 신체 + 레이더 차트 */}
-                <div className="flex-1 min-w-0">
-                  {(selected.height || selected.bust || selected.waist || selected.hip || selected.cup) && (
-                    <div className="mb-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-gray-300">
-                          {(() => {
-                            const ar = new Set((selected.phys_arbitrary ?? '').split('|').filter(Boolean))
-                            return <>
-                              {selected.height && <span>신장 {selected.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
-                              {(selected.bust || selected.waist || selected.hip) && <span>
-                                B{selected.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
-                                {' - '}W{selected.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
-                                {' - '}H{selected.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
-                                {'  '}
-                              </span>}
-                              {selected.cup && <span>{selected.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
-                            </>
-                          })()}
-                        </p>
-                        {(physScoreMap.get(selected.id) != null || selected.ratio_score != null) && (
-                          <p className="text-sm text-blue-400 shrink-0 ml-2">{(physScoreMap.get(selected.id) ?? selected.ratio_score!).toFixed(2)}점</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex justify-center">
-                    <RadarChart scores={selected.scores ?? defaultScores} size={240} />
-                  </div>
-                </div>
-                {/* 우: 추가 사진 썸네일 */}
-                {(selected as any).photos?.length > 0 && (
-                  <div className="flex flex-col gap-1.5 pl-3 ml-3 border-l border-gray-700">
-                    {((selected as any).photos as { id: number; photo_path: string }[]).map((photo) => (
-                      <div
-                        key={photo.id}
-                        onMouseEnter={() => setHoverActorPhoto(photo.photo_path)}
-                        onMouseLeave={() => setHoverActorPhoto(null)}
-                      >
-                        <ImagePreview path={photo.photo_path} alt="추가 사진" className="w-20 h-20 rounded cursor-pointer object-cover" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {selected.comment && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">코멘트</p>
-                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{selected.comment}</p>
-                </div>
-              )}
-
-              {selected.tags && selected.tags.length > 0 && (() => {
-                type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof selected.tags }
-                const catMap = new Map<number | null, Group>()
-                const groups: Group[] = []
-                const sorted = [...selected.tags!].sort((a, b) => {
-                  const ao = a.category_sort_order ?? 999999
-                  const bo = b.category_sort_order ?? 999999
-                  if (ao !== bo) return ao - bo
-                  const ar = selected.rep_tags?.some((r) => r.id === a.id) ? 0 : 1
-                  const br = selected.rep_tags?.some((r) => r.id === b.id) ? 0 : 1
-                  if (ar !== br) return ar - br
-                  return a.name.localeCompare(b.name)
-                })
-                for (const tag of sorted) {
-                  const key = tag.category_id ?? null
-                  if (!catMap.has(key)) {
-                    const g: Group = { catId: key, catName: tag.category_name ?? null, sortOrder: tag.category_sort_order ?? 999999, tags: [] }
-                    catMap.set(key, g)
-                    groups.push(g)
-                  }
-                  catMap.get(key)!.tags.push(tag)
-                }
-                return (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">태그</p>
-                    <div className="space-y-1">
-                      {groups.map((g) => (
-                        <div key={g.catId ?? 'none'}>
-                          <p className="text-xs text-gray-600 mb-0.5">{g.catName ?? '미분류'}</p>
-                          <div className="flex flex-wrap gap-1">
-                            {g.tags.map((t) => {
-                              const isRep = selected.rep_tags?.some((r) => r.id === t.id)
-                              return (
-                                <span
-                                  key={t.id}
-                                  onClick={() => handleToggleRepTag(t.id)}
-                                  title={isRep ? '대표 태그 해제' : '대표 태그로 설정'}
-                                  className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
-                                    isRep ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-blue-600 text-white hover:bg-blue-500'
-                                  }`}
-                                >
-                                  {t.name}
-                                </span>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })()}
-
-            </div>
-
-            {/* 우측 - 출연작 */}
-            <div className="w-[500px] border-l border-gray-700 flex flex-col">
-              <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3">
-                {selected.works && selected.works.length > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-xs text-gray-500">출연작 ({selected.works.length})</p>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const data = await actorsApi.workTags(selected.id)
-                            setTagCloud(data)
-                          }}
-                          className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600"
-                        >
-                          태그
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            if (workSort === 'release_date') setWorkSortDir((d) => d === 'desc' ? 'asc' : 'desc')
-                            else setWorkSort('release_date')
-                          }}
-                          className={`text-xs px-1.5 py-0.5 rounded ${workSort === 'release_date' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                        >
-                          발매일{workSort === 'release_date' ? (workSortDir === 'desc' ? '↓' : '↑') : ''}
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (workSort === 'rating') setWorkSortDir((d) => d === 'desc' ? 'asc' : 'desc')
-                            else setWorkSort('rating')
-                          }}
-                          className={`text-xs px-1.5 py-0.5 rounded ${workSort === 'rating' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                        >
-                          평점{workSort === 'rating' ? (workSortDir === 'desc' ? '↓' : '↑') : ''}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {sortedWorks.map((w) => (
-                        <div key={w.id} className="flex items-stretch gap-1.5">
-                          <div
-                            onClick={() => onNavigateToWork?.(w.id)}
-                            className="flex-1 flex gap-2 items-center bg-gray-700 rounded p-2 cursor-pointer hover:bg-gray-600"
-                          >
-                            <div
-                              onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
-                              onMouseLeave={() => setTooltip(null)}
-                            >
-                              <ImagePreview
-                                path={w.cover_path}
-                                alt={w.product_number || '-'}
-                                className="w-16 h-12 rounded flex-shrink-0 object-cover"
-                                version={refreshKey}
-                                onMouseEnter={() => setHoverCover(w.cover_path ?? null)}
-                                onMouseLeave={() => setHoverCover(null)}
-                              />
-                            </div>
-                            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                              <div className="flex items-start justify-between gap-1">
-                                <div className="flex flex-wrap gap-0.5 min-w-0">
-                                  {w.rep_tags?.map((t) => (
-                                    <span key={t.id} className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded">{t.name}</span>
-                                  ))}
-                                </div>
-                                <p className="text-sm font-bold text-white flex-shrink-0">{w.product_number || '-'}</p>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <div className="scale-75 origin-left"><Rating value={w.rating} readonly /></div>
-                                <p className="text-xs text-gray-400">{w.release_date || '-'}</p>
-                              </div>
-                            </div>
-                          </div>
-                          {w.files && w.files.length > 0 && (() => {
-                            const firstAvailable = w.files!.find((f) => fileStatuses[f.id])
-                            return (
-                              <button
-                                onClick={() => {
-                                  if (!firstAvailable) return
-                                  if (firstAvailable.type === 'url') shellApi.openExternal(firstAvailable.file_path)
-                                  else shellApi.openPath(firstAvailable.file_path)
-                                }}
-                                disabled={!firstAvailable}
-                                className={`w-7 rounded flex items-center justify-center flex-shrink-0 ${firstAvailable ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
-                              >
-                                <span className="text-white text-xs">▶</span>
-                              </button>
-                            )
-                          })()}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-gray-600 text-sm text-center mt-4">출연작 없음</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <ActorDetailModal
+          actorId={selected.id}
+          onClose={() => { setSelected(null); loadActors(); computePhysScores() }}
+          onViewWork={(id) => onNavigateToWork?.(id)}
+        />
       )}
 
       {deleteConfirm && (

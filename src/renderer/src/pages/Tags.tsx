@@ -5,17 +5,16 @@ import type { Work, Actor } from '../types'
 import { workTagsApi, actorTagsApi, workTagCategoriesApi, actorTagCategoriesApi, worksApi, actorsApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
-import WorkViewModal from '../components/WorkViewModal'
-import ActorViewModal from '../components/ActorViewModal'
+import WorkDetailModal from '../components/WorkDetailModal'
+import ActorDetailModal from '../components/ActorDetailModal'
 import TagCategoryManager from '../components/TagManager'
 import TagLinkModal from '../components/TagLinkModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
+import { useDataChanged } from '../dataEvents'
 
 interface Props {
   onNavigateToWork: (id: number) => void
   onNavigateToActor: (id: number) => void
-  onEditWork?: (id: number) => void
-  onEditActor?: (id: number) => void
 }
 
 interface TagItem {
@@ -378,11 +377,11 @@ function TagPanel({
   )
 }
 
-export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, onEditActor }: Props) {
+export default function Tags({ onNavigateToWork, onNavigateToActor }: Props) {
   const [workTags, setWorkTags] = useState<TagItem[]>([])
   const [actorTags, setActorTags] = useState<TagItem[]>([])
-  const [workTagModal, setWorkTagModal] = useState<{ tagName: string; works: Work[] } | null>(null)
-  const [actorTagModal, setActorTagModal] = useState<{ tagName: string; actors: Actor[] } | null>(null)
+  const [workTagModal, setWorkTagModal] = useState<{ tagId: number; tagName: string; works: Work[] } | null>(null)
+  const [actorTagModal, setActorTagModal] = useState<{ tagId: number; tagName: string; actors: Actor[] } | null>(null)
   const [viewWorkId, setViewWorkId] = useState<number | null>(null)
   const [viewActorId, setViewActorId] = useState<number | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
@@ -406,13 +405,25 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
 
   const handleWorkTagClick = async (tagId: number, tagName: string) => {
     const works = await worksApi.list({ tagIds: [tagId] }) as Work[]
-    setWorkTagModal({ tagName, works })
+    setWorkTagModal({ tagId, tagName, works })
   }
 
   const handleActorTagClick = async (tagId: number, tagName: string) => {
     const actors = await actorsApi.list({ tagIds: [tagId] }) as Actor[]
-    setActorTagModal({ tagName, actors })
+    setActorTagModal({ tagId, tagName, actors })
   }
+
+  useDataChanged(async (type) => {
+    loadWorkTags(); loadActorTags()
+    if (type === 'work' && workTagModal) {
+      const works = await worksApi.list({ tagIds: [workTagModal.tagId] }) as Work[]
+      setWorkTagModal({ ...workTagModal, works })
+    }
+    if (type === 'actor' && actorTagModal) {
+      const actors = await actorsApi.list({ tagIds: [actorTagModal.tagId] }) as Actor[]
+      setActorTagModal({ ...actorTagModal, actors })
+    }
+  })
 
   return (
     <>
@@ -497,28 +508,20 @@ export default function Tags({ onNavigateToWork, onNavigateToActor, onEditWork, 
 
       {tooltip && <CardTooltip tooltip={tooltip} />}
       {viewWorkId !== null && (
-        <>
-          <div className="fixed inset-0 bg-black/60" style={{ zIndex: 69 }} onClick={() => setViewWorkId(null)} />
-          <WorkViewModal
-            workId={viewWorkId}
-            onClose={() => setViewWorkId(null)}
-            onViewActor={(id) => { setViewWorkId(null); setViewActorId(id) }}
-            onEdit={onEditWork ? () => { const id = viewWorkId; setViewWorkId(null); setWorkTagModal(null); onEditWork(id) } : undefined}
-            zIndex={70}
-          />
-        </>
+        <WorkDetailModal
+          workId={viewWorkId}
+          onClose={() => setViewWorkId(null)}
+          onViewActor={(id) => { setViewWorkId(null); setViewActorId(id) }}
+          zIndex={70}
+        />
       )}
       {viewActorId !== null && (
-        <>
-          <div className="fixed inset-0 bg-black/60" style={{ zIndex: 69 }} onClick={() => setViewActorId(null)} />
-          <ActorViewModal
-            actorId={viewActorId}
-            onClose={() => setViewActorId(null)}
-            onViewWork={(id) => { setViewActorId(null); setViewWorkId(id) }}
-            onEdit={onEditActor ? () => { const id = viewActorId; setViewActorId(null); setActorTagModal(null); onEditActor(id) } : undefined}
-            zIndex={70}
-          />
-        </>
+        <ActorDetailModal
+          actorId={viewActorId}
+          onClose={() => setViewActorId(null)}
+          onViewWork={(id) => { setViewActorId(null); setViewWorkId(id) }}
+          zIndex={70}
+        />
       )}
     </>
   )

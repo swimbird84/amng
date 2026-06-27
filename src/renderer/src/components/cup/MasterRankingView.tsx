@@ -7,6 +7,7 @@ import { MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR,
 import RankingSettingsModal from './RankingSettingsModal'
 import ActorForm from '../ActorForm'
 import { pushEscHandler, popEscHandler } from '../../escManager'
+import { useDataChanged } from '../../dataEvents'
 
 export default function MasterRankingView({
   onBack,
@@ -92,6 +93,8 @@ export default function MasterRankingView({
   useEffect(() => { setPage(0); setDivFilter(null) }, [type])
   useEffect(() => { setPage(0) }, [search, divFilter, pageSize, sortBy, sortDir])
   useEffect(() => { load(type, search, page, divFilter, pageSize, sortBy, sortDir) }, [type, search, page, divFilter, pageSize, sortBy, sortDir, load])
+
+  useDataChanged(() => load(type, search, page, divFilter, pageSize, sortBy, sortDir))
   useEffect(() => { loadTrends(type) }, [type, loadTrends])
   useEffect(() => { localStorage.setItem('masterRank:type', type) }, [type])
   useEffect(() => { localStorage.setItem('masterRank:pageSize', String(pageSize)) }, [pageSize])
