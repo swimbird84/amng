@@ -36,7 +36,7 @@ export default function TournamentCard({
   const [roundValue, setRoundValue] = useState(0)
   const [starting, setStarting] = useState(false)
   const [blockedMsg, setBlockedMsg] = useState<string | null>(null)
-  const [runProgress, setRunProgress] = useState<{ match: { round: number; match_index: number; phase: string; group_id: number | null; block_id: number | null } | null; total: number; done: number; groupMatchDone: number | null; groupMatchTotal: number | null } | null>(null)
+  const [runProgress, setRunProgress] = useState<{ match: { round: number; match_index: number; phase: string; group_id: number | null; block_id: number | null } | null; total: number; done: number; groupMatchDone: number | null; groupMatchTotal: number | null; groupsDone: number | null; groupsTotal: number | null } | null>(null)
 
   useEffect(() => {
     cupApi.itemCount(t.id).then(count => {
@@ -146,15 +146,19 @@ export default function TournamentCard({
                 const gTotal = runProgress?.groupMatchTotal ?? '?'
                 const mDone = runProgress?.mainRoundDone ?? 0
                 const mTotal = runProgress?.mainRoundTotal ?? Math.ceil(m.round / 2)
-                if (m.phase === 'group') label = `${m.group_id}조 조별리그 — ${gDone + 1}/${gTotal}경기`
-                else if (m.phase === 'tiebreak') label = `${m.group_id}조 동점처리 — ${gDone + 1}/${gTotal}경기`
+                const gsDone = runProgress?.groupsDone ?? 0
+                const gsTotal = runProgress?.groupsTotal ?? '?'
+                if (m.phase === 'group') label = `${gsDone + 1}/${gsTotal}조 조별리그 — ${gDone + 1}/${gTotal}경기`
+                else if (m.phase === 'tiebreak') label = `${gsDone + 1}/${gsTotal}조 동점처리 — ${gDone + 1}/${gTotal}경기`
                 else label = `본선 ${roundLabel(m.round)} — ${mDone + 1}/${mTotal}경기`
               } else if (t.format === 'worldcup') {
                 const gDone = runProgress?.groupMatchDone ?? 0
                 const gTotal = runProgress?.groupMatchTotal ?? '?'
                 const blkLabel = m.group_id != null ? String.fromCharCode(65 + Math.floor((m.group_id - 1) / 16)) : ''
-                if (m.phase === 'group') label = `${blkLabel}블록 ${m.group_id}조 예선 — ${gDone + 1}/${gTotal}경기`
-                else if (m.phase === 'tiebreak') label = `${blkLabel}블록 ${m.group_id}조 동점처리 — ${gDone + 1}/${gTotal}경기`
+                const gsDone2 = runProgress?.groupsDone ?? 0
+                const gsTotal2 = runProgress?.groupsTotal ?? '?'
+                if (m.phase === 'group') label = `${blkLabel}블록 ${gsDone2 + 1}/${gsTotal2}조 예선 — ${gDone + 1}/${gTotal}경기`
+                else if (m.phase === 'tiebreak') label = `${blkLabel}블록 ${gsDone2 + 1}/${gsTotal2}조 동점처리 — ${gDone + 1}/${gTotal}경기`
                 else if (m.phase === 'main' && m.block_id != null) {
                   const rt = t.round_total ?? 0
                   const unit = t.type === 'actor' ? '인' : '작품'

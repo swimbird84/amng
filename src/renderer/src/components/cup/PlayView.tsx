@@ -30,7 +30,7 @@ export default function PlayView({
   const [tournament, setTournament] = useState<CupTournament | null>(null)
   const [run, setRun] = useState<CupRun | null>(null)
   const [currentMatch, setCurrentMatch] = useState<CupMatch | null | 'done'>(null)
-  const [progress, setProgress] = useState<{ total: number; done: number; groupDone: number | null; groupTotal: number | null; mainRoundDone: number | null; mainRoundTotal: number | null }>({ total: 0, done: 0, groupDone: null, groupTotal: null, mainRoundDone: null, mainRoundTotal: null })
+  const [progress, setProgress] = useState<{ total: number; done: number; groupDone: number | null; groupTotal: number | null; groupsDone: number | null; groupsTotal: number | null; mainRoundDone: number | null; mainRoundTotal: number | null }>({ total: 0, done: 0, groupDone: null, groupTotal: null, groupsDone: null, groupsTotal: null, mainRoundDone: null, mainRoundTotal: null })
   const [items, setItems] = useState<Map<number, ItemInfo>>(new Map())
   const [divisionMap, setDivisionMap] = useState<Record<number, number>>({})
   const [masterPtsMap, setMasterPtsMap] = useState<Map<number, number>>(new Map())
@@ -105,7 +105,7 @@ export default function PlayView({
     setTournament(result.tournament)
     setRun(result.run)
     if (result.divisionMap) setDivisionMap(result.divisionMap)
-    setProgress({ total: result.totalMatches, done: result.completedMatches, groupDone: (result as any).groupMatchDone ?? null, groupTotal: (result as any).groupMatchTotal ?? null, mainRoundDone: (result as any).mainRoundDone ?? null, mainRoundTotal: (result as any).mainRoundTotal ?? null })
+    setProgress({ total: result.totalMatches, done: result.completedMatches, groupDone: (result as any).groupMatchDone ?? null, groupTotal: (result as any).groupMatchTotal ?? null, groupsDone: (result as any).groupsDone ?? null, groupsTotal: (result as any).groupsTotal ?? null, mainRoundDone: (result as any).mainRoundDone ?? null, mainRoundTotal: (result as any).mainRoundTotal ?? null })
     const cm = result.currentMatch
     const runStatus = result.run?.status
     const isDone = runStatus === 'completed' || cm === null
@@ -195,17 +195,17 @@ export default function PlayView({
         if (m.phase === 'group' || m.phase === 'tiebreak') {
           if (run) {
             cupApi.runProgress(run.id).then(prog => {
-              setProgress(p => ({ ...p, groupDone: prog.groupMatchDone ?? null, groupTotal: prog.groupMatchTotal ?? null, mainRoundDone: null, mainRoundTotal: null }))
+              setProgress(p => ({ ...p, groupDone: prog.groupMatchDone ?? null, groupTotal: prog.groupMatchTotal ?? null, groupsDone: prog.groupsDone ?? null, groupsTotal: prog.groupsTotal ?? null, mainRoundDone: null, mainRoundTotal: null }))
             })
           }
         } else if (m.phase === 'main') {
           if (run) {
             cupApi.runProgress(run.id).then(prog => {
-              setProgress(p => ({ ...p, groupDone: null, groupTotal: null, mainRoundDone: prog.mainRoundDone ?? null, mainRoundTotal: prog.mainRoundTotal ?? null }))
+              setProgress(p => ({ ...p, groupDone: null, groupTotal: null, groupsDone: null, groupsTotal: null, mainRoundDone: prog.mainRoundDone ?? null, mainRoundTotal: prog.mainRoundTotal ?? null }))
             })
           }
         } else {
-          setProgress(p => ({ ...p, groupDone: null, groupTotal: null, mainRoundDone: null, mainRoundTotal: null }))
+          setProgress(p => ({ ...p, groupDone: null, groupTotal: null, groupsDone: null, groupsTotal: null, mainRoundDone: null, mainRoundTotal: null }))
         }
       }
     } catch (e) {
@@ -232,6 +232,27 @@ export default function PlayView({
   const item1 = currentMatch && currentMatch !== 'done' ? items.get((currentMatch as CupMatch).item1_id) : null
   const item2 = currentMatch && currentMatch !== 'done' ? (items.get((currentMatch as CupMatch).item2_id!) ?? null) : null
   const match = currentMatch !== 'done' && currentMatch ? currentMatch as CupMatch : null
+  const currentMatchId = match?.id ?? null
+
+  // 매치 정렬: 진행중 → 종료(역순) → 대기(정순)
+  const sortMatches = (matches: CupMatch[]) => {
+    return [...matches].sort((a, b) => {
+      const aInProgress = a.winner_id === null && a.id === currentMatchId
+      const bInProgress = b.winner_id === null && b.id === currentMatchId
+      const aDone = a.winner_id !== null
+      const bDone = b.winner_id !== null
+      // 진행중 최상단
+      if (aInProgress && !bInProgress) return -1
+      if (!aInProgress && bInProgress) return 1
+      // 종료 역순
+      if (aDone && bDone) return b.id - a.id
+      // 종료 > 대기
+      if (aDone && !bDone) return -1
+      if (!aDone && bDone) return 1
+      // 대기 정순
+      return a.id - b.id
+    })
+  }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -352,9 +373,9 @@ export default function PlayView({
                   {tournament.format === 'league' && (
                     <p className={`font-bold text-lg ${match.phase === 'main' ? 'text-yellow-400' : match.phase === 'tiebreak' ? 'text-orange-400' : 'text-green-400'}`}>
                       {match.phase === 'group'
-                        ? `${match.group_id}조 조별리그 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                        ? `${(progress.groupsDone ?? 0) + 1}/${progress.groupsTotal ?? '?'}조 조별리그 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                         : match.phase === 'tiebreak'
-                          ? `${match.group_id}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                          ? `${(progress.groupsDone ?? 0) + 1}/${progress.groupsTotal ?? '?'}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                           : `본선 ${roundLabel(match.round)} — ${(progress.mainRoundDone ?? 0) + 1}/${progress.mainRoundTotal ?? Math.ceil(match.round / 2)}경기`
                       }
                     </p>
@@ -366,9 +387,9 @@ export default function PlayView({
                     return (
                       <p className={`font-bold text-lg ${match.phase === 'group' || match.phase === 'tiebreak' ? 'text-purple-400' : 'text-yellow-400'}`}>
                         {match.phase === 'group'
-                          ? `${blkLabel}블록 ${match.group_id}조 예선 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                          ? `${blkLabel}블록 ${(progress.groupsDone ?? 0) + 1}/${progress.groupsTotal ?? '?'}조 예선 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                           : match.phase === 'tiebreak'
-                            ? `${blkLabel}블록 ${match.group_id}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                            ? `${blkLabel}블록 ${(progress.groupsDone ?? 0) + 1}/${progress.groupsTotal ?? '?'}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                             : match.block_id != null
                               ? (() => {
                                   const blk2 = String.fromCharCode(65 + match.block_id)
@@ -481,22 +502,23 @@ export default function PlayView({
                             <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
                           </div>
                           <div className="divide-y divide-gray-700/50">
-                            {(roundMatches as CupMatch[]).map(m => {
+                            {sortMatches(roundMatches as CupMatch[]).map(m => {
                               const i1 = items.get(m.item1_id)
                               const i2 = m.item2_id ? items.get(m.item2_id) : null
+                              const isInProgress = m.winner_id === null && m.id === currentMatchId
                               return (
                                 <div key={m.id} className="px-4 py-1.5 flex items-center gap-1.5 text-sm">
-                                  <span className={`flex-1 flex items-center justify-end gap-1 ${m.winner_id === m.item1_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
+                                  <span className={`flex-1 flex items-center justify-end gap-1 ${isInProgress ? '' : m.winner_id === m.item1_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
                                     {ptsLabel(m.item1_id)}
-                                    <span className={`truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                    <span className={`truncate ${isInProgress ? 'text-white font-semibold' : m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
                                       {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemShortLabel(i1)}</span> : `#${m.item1_id}`}
                                     </span>
                                     {divBadge(m.item1_id)}
                                   </span>
                                   <span className="text-gray-600 text-xs w-6 text-center shrink-0">vs</span>
-                                  <span className={`flex-1 flex items-center gap-1 ${m.winner_id === m.item2_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
+                                  <span className={`flex-1 flex items-center gap-1 ${isInProgress ? '' : m.winner_id === m.item2_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
                                     {divBadge(m.item2_id ?? 0)}
-                                    <span className={`truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                    <span className={`truncate ${isInProgress ? 'text-white font-semibold' : m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
                                       {i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemShortLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
                                     </span>
                                     {ptsLabel(m.item2_id ?? 0)}
@@ -554,9 +576,10 @@ export default function PlayView({
                               {gs.map((row, idx) => {
                                 const item = items.get(row.item_id)
                                 const div = divisionMap[row.item_id] ?? 0
+                                const groupPending = !groupDone && !groupActive
                                 return (
-                                  <tr key={row.item_id} className={`border-b border-gray-700/30 ${idx < 2 ? 'bg-green-900/10' : ''}`}>
-                                    <td className="px-3 py-1.5 text-gray-500">{idx + 1}</td>
+                                  <tr key={row.item_id} className={`border-b border-gray-700/30 ${!groupPending && idx < 2 ? 'bg-green-900/10' : ''}`}>
+                                    <td className="px-3 py-1.5 text-gray-500">{groupPending ? '-' : idx + 1}</td>
                                     {tournament.is_master ? (
                                       <td className={`px-1 py-1.5 text-center text-xs font-bold ${DIV_TEXT_COLOR[div] ?? DIV_TEXT_COLOR[0]}`}>
                                         {div === 0 ? '미' : `${div}부`}
@@ -564,7 +587,7 @@ export default function PlayView({
                                     ) : null}
                                     <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
                                       {item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${row.item_id}`}
-                                      {idx < 2 && <span className="ml-1 text-green-400 text-xs">↑</span>}
+                                      {!groupPending && idx < 2 && <span className="ml-1 text-green-400 text-xs">↑</span>}
                                     </td>
                                     <td className="px-1 py-1.5 text-center text-green-400">{row.w}</td>
                                     <td className="px-1 py-1.5 text-center text-gray-400">{row.d}</td>
@@ -654,22 +677,23 @@ export default function PlayView({
                       <span className="text-xs font-semibold text-yellow-400">{roundLabel(Number(round))}</span>
                     </div>
                     <div className="divide-y divide-gray-700/50">
-                      {(roundMatches as CupMatch[]).map(m => {
+                      {sortMatches(roundMatches as CupMatch[]).map(m => {
                         const i1 = items.get(m.item1_id)
                         const i2 = m.item2_id ? items.get(m.item2_id) : null
+                        const isInProgress = m.winner_id === null && m.id === currentMatchId
                         return (
                           <div key={m.id} className="px-4 py-1.5 flex items-center gap-1.5 text-sm">
-                            <span className={`flex-1 flex items-center justify-end gap-1 ${m.winner_id === m.item1_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
+                            <span className={`flex-1 flex items-center justify-end gap-1 ${isInProgress ? '' : m.winner_id === m.item1_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
                               {ptsLabel(m.item1_id)}
-                              <span className={`truncate ${m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                              <span className={`truncate ${isInProgress ? 'text-white font-semibold' : m.winner_id === m.item1_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
                                 {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemShortLabel(i1)}</span> : `#${m.item1_id}`}
                               </span>
                               {divBadge(m.item1_id)}
                             </span>
                             <span className="text-gray-600 text-xs w-6 text-center shrink-0">vs</span>
-                            <span className={`flex-1 flex items-center gap-1 ${m.winner_id === m.item2_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
+                            <span className={`flex-1 flex items-center gap-1 ${isInProgress ? '' : m.winner_id === m.item2_id ? '' : m.winner_id !== null ? 'opacity-40' : ''}`}>
                               {divBadge(m.item2_id ?? 0)}
-                              <span className={`truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                              <span className={`truncate ${isInProgress ? 'text-white font-semibold' : m.winner_id === m.item2_id ? 'text-white font-semibold' : m.winner_id !== null ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
                                 {i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemShortLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
                               </span>
                               {ptsLabel(m.item2_id ?? 0)}
@@ -778,9 +802,11 @@ export default function PlayView({
                                   {gs.map((row, idx) => {
                                     const item = items.get(row.item_id)
                                     const div = divisionMap[row.item_id] ?? 0
+                                    const groupPending = !groupDone && !groupActive
+                                    const isQualified = gqs ? gqs.includes(row.item_id) : idx < 2
                                     return (
-                                      <tr key={row.item_id} className={`border-b border-gray-700/30 ${(gqs ? gqs.includes(row.item_id) : idx < 2) ? 'bg-purple-900/10' : ''}`}>
-                                        <td className="px-3 py-1.5 text-gray-500">{gs.findIndex(s => s.pts === row.pts && s.w === row.w) + 1}</td>
+                                      <tr key={row.item_id} className={`border-b border-gray-700/30 ${!groupPending && isQualified ? 'bg-purple-900/10' : ''}`}>
+                                        <td className="px-3 py-1.5 text-gray-500">{groupPending ? '-' : gs.findIndex(s => s.pts === row.pts && s.w === row.w) + 1}</td>
                                         {tournament.is_master ? (
                                           <td className={`px-1 py-1.5 text-center text-xs font-bold ${DIV_TEXT_COLOR[div] ?? DIV_TEXT_COLOR[0]}`}>
                                             {div === 0 ? '미' : `${div}부`}
@@ -788,7 +814,7 @@ export default function PlayView({
                                         ) : null}
                                         <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
                                           {item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${row.item_id}`}
-                                          {(gqs ? gqs.includes(row.item_id) : idx < 2) && <span className="ml-1 text-purple-400 text-xs">↑</span>}
+                                          {!groupPending && isQualified && <span className="ml-1 text-purple-400 text-xs">↑</span>}
                                         </td>
                                         <td className="px-1 py-1.5 text-center text-green-400">{row.w}</td>
                                         <td className="px-1 py-1.5 text-center text-gray-400">{row.d}</td>

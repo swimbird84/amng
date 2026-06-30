@@ -57,7 +57,7 @@ function ratingStars(rating: number): string {
   return '★'.repeat(full) + (half ? '☆' : '')
 }
 
-function WorkContent({ work, showCover }: { work: Work; showCover?: boolean }) {
+function WorkContent({ work }: { work: Work }) {
   const repActors = work.rep_actors ?? []
   const repIds = new Set(repActors.map((a) => a.id))
   const otherActors = (work.actors ?? [])
@@ -84,12 +84,11 @@ function WorkContent({ work, showCover }: { work: Work; showCover?: boolean }) {
       {hasComment && <p className="whitespace-pre-wrap leading-relaxed text-gray-300">{work.title}</p>}
       {hasActors && <p className="font-bold text-gray-300 leading-relaxed">{allActors.map((a) => a.name).join(', ')}</p>}
       {work.comment && <p className="whitespace-pre-wrap leading-relaxed text-gray-400 text-[12px]">{work.comment}</p>}
-      {showCover && work.cover_path && <ImagePreview path={work.cover_path} alt="" className="w-full rounded mt-1" />}
     </div>
   )
 }
 
-function ActorContent({ actor, physScore, showCover }: { actor: Actor; physScore: number | null; showCover?: boolean }) {
+function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | null }) {
   const s = actor.scores
   const hasBody = !!(actor.height || actor.bust || actor.waist || actor.hip || actor.cup)
   const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
@@ -156,7 +155,6 @@ function ActorContent({ actor, physScore, showCover }: { actor: Actor; physScore
           <p className="text-[12px] text-gray-300 whitespace-pre-wrap leading-relaxed">{actor.comment}</p>
         </div>
       )}
-      {showCover && actor.photo_path && <ImagePreview path={actor.photo_path} alt="" className="w-full rounded mt-1" />}
     </div>
   )
 }
@@ -176,6 +174,8 @@ interface Props {
 
 export default function CardTooltip({ tooltip }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const textRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLDivElement>(null)
   const [work, setWork] = useState<Work | null>(null)
   const [actor, setActor] = useState<Actor | null>(null)
   const [physScore, setPhysScore] = useState<number | null>(null)
@@ -205,6 +205,20 @@ export default function CardTooltip({ tooltip }: Props) {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    // set image dimensions directly via DOM (no state → no flicker)
+    if (textRef.current && imgRef.current) {
+      if (tooltip.type === 'actor') {
+        // 배우: 가로 배열, 1:1 정사각형 (height 기준)
+        const h = textRef.current.offsetHeight
+        imgRef.current.style.height = `${h}px`
+        imgRef.current.style.width = `${h}px`
+      } else {
+        // 작품: 세로 배열, 3:2 비율 (width 기준)
+        const w = textRef.current.offsetWidth
+        imgRef.current.style.width = `${w}px`
+        imgRef.current.style.height = `${Math.round(w * 2 / 3)}px`
+      }
+    }
     const w = el.offsetWidth || 300
     const h = el.offsetHeight || 20
     let left = tooltip.x + 14
@@ -217,19 +231,29 @@ export default function CardTooltip({ tooltip }: Props) {
   })
 
   const loading = tooltip.type === 'work' ? !work : !actor
+  const coverPath = tooltip.showCover
+    ? (tooltip.type === 'work' ? work?.cover_path : actor?.photo_path)
+    : null
 
   return (
     <div
       ref={ref}
-      className="fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 w-[300px]"
+      className={`fixed pointer-events-none z-[200] bg-gray-900 border border-gray-700 rounded shadow-xl text-xs text-gray-300 p-2 ${coverPath ? (tooltip.type === 'actor' ? 'flex flex-row items-stretch gap-2' : 'flex flex-col gap-2 w-[300px]') : 'w-[300px]'}`}
       style={{ left: tooltip.x + 14, top: tooltip.y + 14, opacity: 0 }}
     >
-      {loading ? (
-        <p className="text-gray-500 text-[10px]">로딩중...</p>
-      ) : tooltip.type === 'work' ? (
-        <WorkContent work={work!} showCover={tooltip.showCover} />
-      ) : (
-        <ActorContent actor={actor!} physScore={physScore} showCover={tooltip.showCover} />
+      <div ref={textRef} className={coverPath ? (tooltip.type === 'actor' ? 'w-[300px] shrink-0' : 'w-full') : ''}>
+        {loading ? (
+          <p className="text-gray-500 text-[10px]">로딩중...</p>
+        ) : tooltip.type === 'work' ? (
+          <WorkContent work={work!} />
+        ) : (
+          <ActorContent actor={actor!} physScore={physScore} />
+        )}
+      </div>
+      {coverPath && (
+        <div ref={imgRef} className={`overflow-hidden rounded ${tooltip.type === 'actor' ? 'shrink-0' : 'w-full shrink-0'}`}>
+          <ImagePreview path={coverPath} alt="" className="h-full w-full object-cover" />
+        </div>
       )}
     </div>
   )

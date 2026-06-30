@@ -2024,11 +2024,21 @@ export function registerCupHandlers(): void {
     const { cnt: done } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId) as { cnt: number }
     let groupMatchDone: number | null = null
     let groupMatchTotal: number | null = null
+    let groupsDone: number | null = null
+    let groupsTotal: number | null = null
     if (match?.phase === 'group' || match?.phase === 'tiebreak') {
       const { cnt: gt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ?`).get(runId, match.phase, match.group_id) as { cnt: number }
       const { cnt: gd } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, match.phase, match.group_id) as { cnt: number }
       groupMatchDone = gd
       groupMatchTotal = gt
+      const { cnt: gsTotal } = db().prepare(`SELECT COUNT(DISTINCT group_id) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'group'`).get(runId) as { cnt: number }
+      const doneGroups = db().prepare(`
+        SELECT group_id FROM cup_matches WHERE run_id = ? AND phase IN ('group', 'tiebreak')
+        GROUP BY group_id
+        HAVING COUNT(*) = SUM(CASE WHEN winner_id IS NOT NULL OR is_draw = 1 THEN 1 ELSE 0 END)
+      `).all(runId) as { group_id: number }[]
+      groupsDone = doneGroups.length
+      groupsTotal = gsTotal
     }
     let mainRoundDone: number | null = null
     let mainRoundTotal: number | null = null
@@ -2038,7 +2048,7 @@ export function registerCupHandlers(): void {
       mainRoundDone = md
       mainRoundTotal = mt
     }
-    return { match: match ?? null, total, done, groupMatchDone, groupMatchTotal, mainRoundDone, mainRoundTotal }
+    return { match: match ?? null, total, done, groupMatchDone, groupMatchTotal, groupsDone, groupsTotal, mainRoundDone, mainRoundTotal }
   })
 
   ipcMain.handle('cup:tournament-stats', (_e, tournamentId: number) => {

@@ -6,6 +6,7 @@ import Rating from './Rating'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
 import DateInput from './DateInput'
+import CardTooltip, { type TooltipState } from './CardTooltip'
 
 interface Props {
   work?: Work & { actors?: Actor[]; tags?: Tag[] }
@@ -39,6 +40,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [allStudios, setAllStudios] = useState<(Studio & { maker_name?: string | null })[]>([])
   const [allMakers, setAllMakers] = useState<Maker[]>([])
   const [studioId, setStudioId] = useState<number | null>(work?.studio_id ?? null)
+  const [actorTooltip, setActorTooltip] = useState<TooltipState | null>(null)
   const [actorOpen, setActorOpen] = useState(false)
   const [newActor, setNewActor] = useState('')
   const [urlInputOpen, setUrlInputOpen] = useState(false)
@@ -704,6 +706,9 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                     <span
                       key={a.id}
                       onClick={() => toggleRepActor(a.id)}
+                      onMouseEnter={(e) => setActorTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY, showCover: true })}
+                      onMouseMove={(e) => setActorTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                      onMouseLeave={() => setActorTooltip(null)}
                       title={isRep ? '대표 배우 해제' : '대표 배우로 설정'}
                       className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
                         isRep ? 'bg-fuchsia-700 text-fuchsia-200' : 'bg-purple-900/60 text-purple-300'
@@ -803,6 +808,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
           </div>
         </div>
       </div>
+      {actorTooltip && <CardTooltip tooltip={actorTooltip} />}
     </div>
   )
 }

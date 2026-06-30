@@ -150,7 +150,7 @@ export default function MatchCard({
                 )
               })()}
               <p
-                className="text-base font-bold text-white mt-0.5 line-clamp-6 cursor-pointer hover:underline"
+                className="text-base font-bold text-white mt-0.5 line-clamp-8 cursor-pointer hover:underline"
                 onClick={onNavigate}
               >{item.title ?? item.product_number ?? '...'}</p>
             </div>
