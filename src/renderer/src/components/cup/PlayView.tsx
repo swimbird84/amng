@@ -76,15 +76,6 @@ export default function PlayView({
     setEditId(id)
   }, [tournament?.type])
 
-  const handleEditSave = useCallback(async () => {
-    if (editId && tournament?.type) {
-      await refreshItemInfo(editId, tournament.type)
-      emitDataChanged(tournament.type)
-    }
-    setEditId(null)
-    setEditData(null)
-  }, [editId, tournament?.type, refreshItemInfo])
-
   const fetchItemInfo = useCallback(async (id: number, type: 'actor' | 'work') => {
     if (items.has(id) || itemFetchQueue.current.has(id)) return
     itemFetchQueue.current.add(id)
@@ -156,6 +147,16 @@ export default function PlayView({
       for (const id of ids) fetchItemInfo(id, tournament.type)
     }
   }, [run?.id, tournament, fetchItemInfo])
+
+  const handleEditSave = useCallback(async () => {
+    if (editId && tournament?.type) {
+      await refreshItemInfo(editId, tournament.type)
+      emitDataChanged(tournament.type)
+    }
+    setEditId(null)
+    setEditData(null)
+    if (tab === 'standings') loadStandings()
+  }, [editId, tournament?.type, refreshItemInfo, tab, loadStandings])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { if (tab === 'standings') loadStandings() }, [tab, loadStandings])
@@ -464,7 +465,7 @@ export default function PlayView({
 
         {tab === 'standings' && (
           <div
-            className="p-4 space-y-4"
+            className="p-4 space-y-4 [&_[data-tip-id]]:cursor-pointer [&_[data-tip-id]:hover]:underline"
             onMouseMove={e => {
               const el = (e.target as HTMLElement).closest('[data-tip-id]') as HTMLElement | null
               if (el) {
@@ -474,6 +475,13 @@ export default function PlayView({
               } else {
                 setStandingsTooltip(null)
               }
+            }}
+            onClick={e => {
+              const el = (e.target as HTMLElement).closest('[data-tip-id]') as HTMLElement | null
+              if (!el || !tournament) return
+              const id = Number(el.dataset.tipId)
+              if (tournament.type === 'actor') onNavigateToActor(id)
+              else onNavigateToWork(id)
             }}
             onMouseLeave={() => setStandingsTooltip(null)}
           >

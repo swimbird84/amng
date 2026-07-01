@@ -76,7 +76,11 @@ function WorkContent({ work }: { work: Work }) {
       )}
       {(work.release_date || work.rating != null) && (
         <div className="flex items-center justify-between">
-          <span className="text-gray-400">{work.release_date || '-'}</span>
+          <span className="text-gray-400">
+            {work.release_date || '-'}
+            {!!work.is_favorite && <span className="ml-1 text-pink-500">♥</span>}
+            {!!work.delete_pending && <span className="ml-1 text-red-500">삭제예정</span>}
+          </span>
           <span className="text-yellow-400">{ratingStars(work.rating ?? 0)}</span>
         </div>
       )}
@@ -109,6 +113,8 @@ function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | 
     <div className="space-y-1 leading-relaxed">
       <p className="font-bold text-white text-[13px]">
         {actor.name}{' '}
+        {!!actor.is_favorite && <span className="text-pink-500 font-normal">♥</span>}{' '}
+        {!!actor.delete_pending && <span className="text-red-500 font-normal text-[11px]">삭제예정</span>}{' '}
         <span className="text-gray-400 font-normal">(총작품 : {actor.work_count ?? 0}편)</span>
       </p>
       <div>
