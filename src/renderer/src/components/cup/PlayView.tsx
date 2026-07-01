@@ -302,7 +302,7 @@ export default function PlayView({
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'match' && (
-          <div className="flex flex-col items-center justify-center min-h-full py-8 px-4">
+          <div className="flex flex-col items-center justify-center min-h-full pt-4 pb-8 px-4">
             {!tournament && <p className="text-gray-500">로딩 중...</p>}
 
             {tournament && currentMatch === 'done' && (

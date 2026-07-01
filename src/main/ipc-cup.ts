@@ -702,11 +702,21 @@ export function registerCupHandlers(): void {
     const cm = currentMatch as { phase: string; group_id: number | null; round: number } | null | undefined
     let groupMatchDone: number | null = null
     let groupMatchTotal: number | null = null
+    let groupsDone: number | null = null
+    let groupsTotal: number | null = null
     if (cm?.phase === 'group' || cm?.phase === 'tiebreak') {
       const { cnt: gt } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ?`).get(runId, cm.phase, cm.group_id) as { cnt: number }
       const { cnt: gd } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, cm.phase, cm.group_id) as { cnt: number }
       groupMatchDone = gd
       groupMatchTotal = gt
+      const { cnt: gsTotal } = db().prepare(`SELECT COUNT(DISTINCT group_id) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'group'`).get(runId) as { cnt: number }
+      const doneGroups = db().prepare(`
+        SELECT group_id FROM cup_matches WHERE run_id = ? AND phase IN ('group', 'tiebreak')
+        GROUP BY group_id
+        HAVING COUNT(*) = SUM(CASE WHEN winner_id IS NOT NULL OR is_draw = 1 THEN 1 ELSE 0 END)
+      `).all(runId) as { group_id: number }[]
+      groupsDone = doneGroups.length
+      groupsTotal = gsTotal
     }
     let mainRoundDone: number | null = null
     let mainRoundTotal: number | null = null
@@ -722,7 +732,7 @@ export function registerCupHandlers(): void {
       const entries = db().prepare(`SELECT item_id, division FROM cup_entries WHERE run_id = ?`).all(runId) as { item_id: number; division: number | null }[]
       for (const e of entries) divisionMap[e.item_id] = e.division ?? 0
     }
-    return { tournament, run, currentMatch, totalMatches, completedMatches, groupMatchDone, groupMatchTotal, mainRoundDone, mainRoundTotal, divisionMap }
+    return { tournament, run, currentMatch, totalMatches, completedMatches, groupMatchDone, groupMatchTotal, groupsDone, groupsTotal, mainRoundDone, mainRoundTotal, divisionMap }
   })
 
   ipcMain.handle('cup:create', (_e, params: {

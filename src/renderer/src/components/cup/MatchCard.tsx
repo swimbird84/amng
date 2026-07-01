@@ -78,7 +78,7 @@ export default function MatchCard({
 
       {/* 정보 섹션 */}
       <div
-        className={`p-3 bg-gray-800 border-t border-gray-700 cursor-default overflow-hidden${type === 'work' ? ' h-[216px]' : ''}`}
+        className={`p-3 bg-gray-800 border-t border-gray-700 cursor-default overflow-hidden${type === 'work' ? ' h-[236px]' : ''}`}
         onMouseMove={e => setTooltip({ type, id: item.id, x: e.clientX, y: e.clientY })}
         onMouseLeave={() => setTooltip(null)}
       >
@@ -153,6 +153,7 @@ export default function MatchCard({
                 className="text-base font-bold text-white mt-0.5 line-clamp-8 cursor-pointer hover:underline"
                 onClick={onNavigate}
               >{item.title ?? item.product_number ?? '...'}</p>
+              {item.comment && <p className="text-sm text-gray-400 line-clamp-2">{item.comment}</p>}
             </div>
             <div className="flex flex-col gap-1 shrink-0">
               {firstFile && (
