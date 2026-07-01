@@ -277,7 +277,8 @@ export default function PlayView({
       <div className="shrink-0 border-b border-gray-700/50">
         <div className="p-4 pb-3">
           <div className="flex items-center gap-3">
-            {/* 대회명 */}
+            {/* 뒤로가기 + 대회명 */}
+            <button onClick={onBack} className="text-gray-400 hover:text-white text-sm shrink-0">←</button>
             {tournament && (
                 <div className="flex items-center gap-1.5 shrink-0">
                   {tournament.is_master === 1 && <span className="text-yellow-400 text-xs font-semibold">★</span>}
