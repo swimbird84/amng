@@ -2166,4 +2166,119 @@ export function registerCupHandlers(): void {
     return { total_runs: runStats.total_runs, run_wins: runStats.run_wins, total_matches: matchStats.total_matches, match_wins: matchStats.match_wins, win_rate, match_win_rate, rank }
   })
 
+  // 작품 마스터랭킹 배우 분포
+  ipcMain.handle('master-ranking:work-actor-distribution', (_e) => {
+    const type = 'work' as const
+    const rl = getRecentRunLimit(db(), type)
+    const ptsCte = buildPointsCte(type, rl)
+    // 작품별 랭크 계산
+    const rankedWorks = db().prepare(`
+      WITH ranked AS (
+        SELECT
+          RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
+          w.id,
+          COALESCE(pts.total_points, 0) AS total_points,
+          COALESCE(mrc.master_run_count, 0) AS master_run_count
+        FROM works w
+        LEFT JOIN ${ptsCte} ON pts.item_id = w.id
+        LEFT JOIN (
+          SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
+          FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
+          GROUP BY e.item_id
+        ) mrc ON mrc.item_id = w.id
+      )
+      SELECT rank, id, total_points, master_run_count FROM ranked
+      WHERE master_run_count > 0
+    `).all() as { rank: number; id: number; total_points: number; master_run_count: number }[]
+
+    if (rankedWorks.length === 0) return { divisions: [], allActors: [] }
+
+    // work_id -> rank 매핑
+    const workRankMap = new Map<number, number>()
+    for (const w of rankedWorks) workRankMap.set(w.id, w.rank)
+    const workIds = rankedWorks.map(w => w.id)
+
+    // 작품-배우 연결 (랭킹에 있는 작품만)
+    const waRows = db().prepare(`
+      SELECT wa.work_id, wa.actor_id, a.name, a.photo_path
+      FROM work_actors wa
+      JOIN actors a ON a.id = wa.actor_id
+      WHERE wa.work_id IN (${workIds.map(() => '?').join(',')})
+    `).all(...workIds) as { work_id: number; actor_id: number; name: string; photo_path: string | null }[]
+
+    // 배우별 마스터랭킹 순위 (있으면)
+    const actorRl = getRecentRunLimit(db(), 'actor')
+    const actorPtsCte = buildPointsCte('actor', actorRl)
+    const actorRanks = db().prepare(`
+      SELECT a.id,
+        RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS actor_rank
+      FROM actors a
+      LEFT JOIN ${actorPtsCte} ON pts.item_id = a.id
+    `).all() as { id: number; actor_rank: number }[]
+    const actorRankMap = new Map<number, number>()
+    for (const ar of actorRanks) actorRankMap.set(ar.id, ar.actor_rank)
+
+    // 부 경계
+    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const getDiv = (rank: number) => {
+      for (let d = 0; d < divBoundaries.length; d++) {
+        if (rank <= divBoundaries[d]) return d + 1
+      }
+      return 6
+    }
+
+    // 부별 + 전체 배우 집계
+    type ActorAgg = { id: number; name: string; photo_path: string | null; work_count: number; ranks: number[]; actor_rank: number | null }
+    const divMap = new Map<number, Map<number, ActorAgg>>()
+    const allMap = new Map<number, ActorAgg>()
+
+    for (const wa of waRows) {
+      const rank = workRankMap.get(wa.work_id)
+      if (rank === undefined) continue
+      const div = getDiv(rank)
+
+      // 부별
+      if (!divMap.has(div)) divMap.set(div, new Map())
+      const dMap = divMap.get(div)!
+      if (!dMap.has(wa.actor_id)) {
+        dMap.set(wa.actor_id, { id: wa.actor_id, name: wa.name, photo_path: wa.photo_path, work_count: 0, ranks: [], actor_rank: actorRankMap.get(wa.actor_id) ?? null })
+      }
+      const dAgg = dMap.get(wa.actor_id)!
+      dAgg.work_count++
+      dAgg.ranks.push(rank)
+
+      // 전체
+      if (!allMap.has(wa.actor_id)) {
+        allMap.set(wa.actor_id, { id: wa.actor_id, name: wa.name, photo_path: wa.photo_path, work_count: 0, ranks: [], actor_rank: actorRankMap.get(wa.actor_id) ?? null })
+      }
+      const aAgg = allMap.get(wa.actor_id)!
+      aAgg.work_count++
+      aAgg.ranks.push(rank)
+    }
+
+    const toResult = (agg: ActorAgg) => ({
+      id: agg.id,
+      name: agg.name,
+      photo_path: agg.photo_path,
+      work_count: agg.work_count,
+      avg_rank: Math.round(agg.ranks.reduce((a, b) => a + b, 0) / agg.ranks.length * 10) / 10,
+      best_rank: Math.min(...agg.ranks),
+      worst_rank: Math.max(...agg.ranks),
+      actor_rank: agg.actor_rank,
+    })
+
+    const divisions = [...divMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([division, actors]) => ({
+        division,
+        actors: [...actors.values()].map(toResult).sort((a, b) => b.work_count - a.work_count || a.avg_rank - b.avg_rank),
+      }))
+
+    const allActors = [...allMap.values()].map(toResult).sort((a, b) => b.work_count - a.work_count || a.avg_rank - b.avg_rank)
+
+    return { divisions, allActors }
+  })
+
 }

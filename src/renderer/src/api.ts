@@ -223,4 +223,9 @@ export const masterRankingApi = {
     api.invoke('master-ranking:division-history', { type, itemId }) as Promise<{ recorded_at: string; rank: number; total_points: number }[]>,
   itemStats: (type: 'actor' | 'work', itemId: number) =>
     api.invoke('master-ranking:item-stats', { type, itemId }) as Promise<{ rank: number; total_points: number; total_cups: number; cup_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number }>,
+  workActorDistribution: () =>
+    api.invoke('master-ranking:work-actor-distribution') as Promise<{
+      divisions: { division: number; actors: { id: number; name: string; photo_path: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number; actor_rank: number | null }[] }[]
+      allActors: { id: number; name: string; photo_path: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number; actor_rank: number | null }[]
+    }>,
 }
