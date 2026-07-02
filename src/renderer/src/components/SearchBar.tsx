@@ -6,7 +6,7 @@ import { type WorkSearchParams, type ActorSearchParams, type TagMode, DEFAULT_WO
 export { DEFAULT_WORK_SEARCH, DEFAULT_ACTOR_SEARCH }
 export type { WorkSearchParams, ActorSearchParams, TagMode }
 
-import { DatePickerInput, StarSelect, NumInput, CupInput, subtractDate } from './search/SearchInputs'
+import { DatePickerInput, StarSelect, StarDisplay, NumInput, CupInput, subtractDate } from './search/SearchInputs'
 
 // ── props ─────────────────────────────────────────────────────────────────────
 

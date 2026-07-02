@@ -344,7 +344,6 @@ export default function MasterRankingView({
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5rem' }} />
-                <col style={{ width: '5.5rem' }} />
               </colgroup>
               <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr className="border-b border-gray-700 text-gray-400 text-xs">

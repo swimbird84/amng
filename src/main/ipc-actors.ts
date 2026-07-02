@@ -185,8 +185,11 @@ export function registerActorsHandlers(): void {
       sql += ` ORDER BY (SELECT MAX(w.release_date) FROM works w JOIN work_actors wa ON wa.work_id = w.id WHERE wa.actor_id = a.id) IS NULL ASC, (SELECT MAX(w.release_date) FROM works w JOIN work_actors wa ON wa.work_id = w.id WHERE wa.actor_id = a.id) ${sortDir}`
     } else if (params?.sortBy === 'work_created_at') {
       sql += ` ORDER BY (SELECT MAX(w.created_at) FROM works w JOIN work_actors wa ON wa.work_id = w.id WHERE wa.actor_id = a.id) IS NULL ASC, (SELECT MAX(w.created_at) FROM works w JOIN work_actors wa ON wa.work_id = w.id WHERE wa.actor_id = a.id) ${sortDir}`
+    } else if (params?.sortBy === 'name') {
+      const invertedDir = sortDir === 'ASC' ? 'DESC' : 'ASC'
+      sql += ` ORDER BY a.name ${invertedDir}`
     } else {
-      const validActorSortCols = ['name', 'birthday', 'created_at', 'debut_date']
+      const validActorSortCols = ['birthday', 'created_at', 'debut_date']
       const sortCol = validActorSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
       sql += ` ORDER BY a.${sortCol} IS NULL ASC, a.${sortCol} ${sortDir}`
     }

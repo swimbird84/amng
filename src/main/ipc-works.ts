@@ -17,7 +17,7 @@ export function registerWorksHandlers(): void {
     ratingTo?: number
     actorId?: number
     studioId?: number
-    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title'
+    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
     titleSearch?: string
@@ -33,7 +33,7 @@ export function registerWorksHandlers(): void {
     offset?: number
   }) => {
     let sql = `
-      SELECT DISTINCT w.*, s.name AS studio_name, s.color AS studio_color, m.name AS studio_maker_name, m.color AS studio_maker_color FROM works w
+      SELECT w.*, s.name AS studio_name, s.color AS studio_color, m.name AS studio_maker_name, m.color AS studio_maker_color FROM works w
       LEFT JOIN studios s ON s.id = w.studio_id
       LEFT JOIN makers m ON m.id = s.maker_id
     `
@@ -132,12 +132,26 @@ export function registerWorksHandlers(): void {
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
+    sql += ' GROUP BY w.id'
 
     const sortDir = params?.sortDir === 'asc' ? 'ASC' : 'DESC'
+    const invertedDir = sortDir === 'ASC' ? 'DESC' : 'ASC'
     if (params?.sortBy === 'title') {
-      sql += ` ORDER BY w.title IS NULL ASC, w.title ${sortDir}`
+      sql += ` ORDER BY w.title IS NULL ${invertedDir === 'ASC' ? 'ASC' : 'DESC'}, w.title ${invertedDir}`
+    } else if (params?.sortBy === 'actor') {
+      sql += ` ORDER BY (
+        SELECT a.name FROM work_actors wa3
+        JOIN actors a ON a.id = wa3.actor_id
+        LEFT JOIN actor_scores sc ON sc.actor_id = a.id
+        WHERE wa3.work_id = w.id AND wa3.is_rep = 1
+        ORDER BY (COALESCE(sc.face,0)+COALESCE(sc.bust,0)+COALESCE(sc.hip,0)+COALESCE(sc.physical,0)+COALESCE(sc.skin,0)+COALESCE(sc.acting,0)+COALESCE(sc.sexy,0)+COALESCE(sc.charm,0)+COALESCE(sc.technique,0)+COALESCE(sc.proportions,0)) DESC, a.name ASC LIMIT 1
+      ) ${invertedDir}, w.release_date ${invertedDir}, w.product_number ${invertedDir}`
+    } else if (params?.sortBy === 'studio') {
+      sql += ` ORDER BY m.name IS NULL ${invertedDir === 'ASC' ? 'ASC' : 'DESC'}, m.name ${invertedDir}, s.name IS NULL ${invertedDir === 'ASC' ? 'ASC' : 'DESC'}, s.name ${invertedDir}, w.release_date ${invertedDir}, w.product_number ${invertedDir}`
+    } else if (params?.sortBy === 'product_number') {
+      sql += ` ORDER BY w.product_number ${invertedDir}`
     } else {
-      const validWorkSortCols = ['product_number', 'rating', 'release_date', 'created_at']
+      const validWorkSortCols = ['rating', 'release_date', 'created_at']
       const sortCol = validWorkSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
       sql += ` ORDER BY w.${sortCol} ${sortDir}`
     }

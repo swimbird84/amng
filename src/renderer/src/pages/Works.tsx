@@ -33,8 +33,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
       return DEFAULT_WORK_SEARCH
     }
   })
-  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title'>(
-    (localStorage.getItem('works:sortBy') as 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title') || 'release_date'
+  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio'>(
+    (localStorage.getItem('works:sortBy') as 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio') || 'release_date'
   )
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('works:sortDir') as 'asc' | 'desc') || 'desc'
@@ -337,6 +337,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 <option value="rating">별점</option>
                 <option value="release_date">발매일</option>
                 <option value="title">타이틀</option>
+                <option value="actor">배우</option>
+                <option value="studio">레이블</option>
               </select>
               <button
                 onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('works:sortDir', next); return next })}
