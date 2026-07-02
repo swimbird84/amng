@@ -928,16 +928,36 @@ export function registerCupHandlers(): void {
         )
         SELECT ranked.rank, ranked.id, ranked.name, ranked.photo_path, ranked.total_points, ranked.master_run_count,
           ranked.avg_score, ranked.score_rank,
-          COALESCE(cs2.total_cups, 0) AS total_cups,
-          COALESCE(cs2.cup_wins, 0) AS cup_wins,
-          COALESCE(cs2.total_matches, 0) AS total_matches,
-          COALESCE(cs2.match_wins, 0) AS match_wins,
+          COALESCE(cs_cup.total_cups, 0) AS total_cups,
+          COALESCE(cs_cup.cup_wins, 0) AS cup_wins,
+          COALESCE(cs_match.total_matches, 0) AS total_matches,
+          COALESCE(cs_match.match_wins, 0) AS match_wins,
           (SELECT mh.points FROM master_ranking_history mh
            JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
            WHERE mh.type = 'actor' AND mh.item_id = ranked.id
            ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
         FROM ranked
-        LEFT JOIN cup_stats cs2 ON cs2.type = 'actor' AND cs2.item_id = ranked.id
+        LEFT JOIN (
+          SELECT e.item_id,
+            COUNT(DISTINCT e.run_id) AS total_cups,
+            SUM(CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END) AS cup_wins
+          FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'actor'
+          GROUP BY e.item_id
+        ) cs_cup ON cs_cup.item_id = ranked.id
+        LEFT JOIN (
+          SELECT sub.item_id, SUM(sub.is_played) AS total_matches, SUM(sub.is_win) AS match_wins
+          FROM (
+            SELECT CASE WHEN m.item1_id = e2.item_id THEN e2.item_id ELSE e2.item_id END AS item_id,
+              CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
+              CASE WHEN m.winner_id = e2.item_id THEN 1 ELSE 0 END AS is_win
+            FROM cup_entries e2
+            JOIN cup_runs r ON r.id = e2.run_id AND r.status = 'completed'
+            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'actor'
+            JOIN cup_matches m ON m.run_id = r.id AND (m.item1_id = e2.item_id OR m.item2_id = e2.item_id)
+          ) sub GROUP BY sub.item_id
+        ) cs_match ON cs_match.item_id = ranked.id
         WHERE 1=1${divWhere}${searchWhere}
       `
       const rows = db().prepare(cte + ` ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...searchBindings, limit, offset)
@@ -962,16 +982,36 @@ export function registerCupHandlers(): void {
           ) mrc ON mrc.item_id = w.id
         )
         SELECT ranked.rank, ranked.id, ranked.title, ranked.product_number, ranked.cover_path, ranked.total_points, ranked.master_run_count,
-          COALESCE(cs2.total_cups, 0) AS total_cups,
-          COALESCE(cs2.cup_wins, 0) AS cup_wins,
-          COALESCE(cs2.total_matches, 0) AS total_matches,
-          COALESCE(cs2.match_wins, 0) AS match_wins,
+          COALESCE(cs_cup.total_cups, 0) AS total_cups,
+          COALESCE(cs_cup.cup_wins, 0) AS cup_wins,
+          COALESCE(cs_match.total_matches, 0) AS total_matches,
+          COALESCE(cs_match.match_wins, 0) AS match_wins,
           (SELECT mh.points FROM master_ranking_history mh
            JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
            WHERE mh.type = 'work' AND mh.item_id = ranked.id
            ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
         FROM ranked
-        LEFT JOIN cup_stats cs2 ON cs2.type = 'work' AND cs2.item_id = ranked.id
+        LEFT JOIN (
+          SELECT e.item_id,
+            COUNT(DISTINCT e.run_id) AS total_cups,
+            SUM(CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END) AS cup_wins
+          FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
+          GROUP BY e.item_id
+        ) cs_cup ON cs_cup.item_id = ranked.id
+        LEFT JOIN (
+          SELECT sub.item_id, SUM(sub.is_played) AS total_matches, SUM(sub.is_win) AS match_wins
+          FROM (
+            SELECT CASE WHEN m.item1_id = e2.item_id THEN e2.item_id ELSE e2.item_id END AS item_id,
+              CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
+              CASE WHEN m.winner_id = e2.item_id THEN 1 ELSE 0 END AS is_win
+            FROM cup_entries e2
+            JOIN cup_runs r ON r.id = e2.run_id AND r.status = 'completed'
+            JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
+            JOIN cup_matches m ON m.run_id = r.id AND (m.item1_id = e2.item_id OR m.item2_id = e2.item_id)
+          ) sub GROUP BY sub.item_id
+        ) cs_match ON cs_match.item_id = ranked.id
         WHERE 1=1${divWhere}${searchWhere}
       `
       const rows = db().prepare(cte + ` ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...searchBindings, limit, offset)
@@ -989,7 +1029,6 @@ export function registerCupHandlers(): void {
     const rankRow = db().prepare(`
       SELECT COUNT(*) + 1 AS rank FROM ${ptsCte} WHERE pts.total_points > ?
     `).get(totalPoints) as { rank: number }
-    const statsRow = db().prepare(`SELECT total_cups, cup_wins, total_matches, match_wins FROM cup_stats WHERE type = ? AND item_id = ?`).get(type, itemId) as { total_cups: number; cup_wins: number; total_matches: number; match_wins: number } | undefined
     const masterCupsRow = db().prepare(`
       SELECT COUNT(DISTINCT r.id) AS master_run_count,
         SUM(CASE WHEN r.winner_id = ? THEN 1 ELSE 0 END) AS master_cup_wins
@@ -1098,7 +1137,7 @@ export function registerCupHandlers(): void {
           SUM(CASE WHEN r.winner_id = ? THEN 1 ELSE 0 END) AS cup_wins
         FROM cup_entries e
         JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
-        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.type = ?
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
         WHERE e.item_id = ?
         GROUP BY t.format
       ),
@@ -1108,7 +1147,7 @@ export function registerCupHandlers(): void {
           CASE WHEN m.winner_id = ? THEN 1 ELSE 0 END AS is_win
         FROM cup_matches m
         JOIN cup_runs r ON r.id = m.run_id AND r.status = 'completed'
-        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.type = ?
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
         WHERE m.item1_id = ? OR (m.item2_id IS NOT NULL AND m.item2_id = ?)
       ),
       match_stats AS (
