@@ -6,6 +6,7 @@ import type { MasterRankRow, FormatStat, H2HRow, RateTooltip } from './cupTypes'
 import { MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
 import RankingSettingsModal from './RankingSettingsModal'
 import WorkActorDistModal from './WorkActorDistModal'
+import WorkLabelDistModal from './WorkLabelDistModal'
 import ActorForm from '../ActorForm'
 import { pushEscHandler, popEscHandler } from '../../escManager'
 import { useDataChanged } from '../../dataEvents'
@@ -63,6 +64,7 @@ export default function MasterRankingView({
 
   // 랭킹 차트
   const [showActorDist, setShowActorDist] = useState(false)
+  const [showLabelDist, setShowLabelDist] = useState(false)
   const [rankChartModal, setRankChartModal] = useState(false)
   const [rankChartDiv, setRankChartDiv] = useState(0)
   const [rankChartLimit, setRankChartLimit] = useState(() => Number(localStorage.getItem('cup:rankChartLimit')) || 10)
@@ -277,12 +279,20 @@ export default function MasterRankingView({
             ))}
             <div className="flex-1" />
             {type === 'work' && (
-              <button
-                onClick={() => setShowActorDist(true)}
-                className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
-              >
-                배우 분포
-              </button>
+              <>
+                <button
+                  onClick={() => setShowActorDist(true)}
+                  className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
+                >
+                  배우분포
+                </button>
+                <button
+                  onClick={() => setShowLabelDist(true)}
+                  className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
+                >
+                  레이블분포
+                </button>
+              </>
             )}
             <button
               onClick={() => setRankChartModal(true)}
@@ -299,6 +309,10 @@ export default function MasterRankingView({
           onClose={() => setShowActorDist(false)}
           onNavigateToActor={(id) => { setShowActorDist(false); onNavigateToActor(id) }}
         />
+      )}
+
+      {showLabelDist && (
+        <WorkLabelDistModal onClose={() => setShowLabelDist(false)} />
       )}
 
       {showSettings && <RankingSettingsModal onClose={() => {

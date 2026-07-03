@@ -2320,4 +2320,100 @@ export function registerCupHandlers(): void {
     return { divisions, allActors }
   })
 
+  // 작품 마스터랭킹 레이블 분포
+  ipcMain.handle('master-ranking:work-label-distribution', (_e) => {
+    const type = 'work' as const
+    const rl = getRecentRunLimit(db(), type)
+    const ptsCte = buildPointsCte(type, rl)
+    const rankedWorks = db().prepare(`
+      WITH ranked AS (
+        SELECT
+          RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
+          w.id, w.studio_id,
+          COALESCE(pts.total_points, 0) AS total_points,
+          COALESCE(mrc.master_run_count, 0) AS master_run_count
+        FROM works w
+        LEFT JOIN ${ptsCte} ON pts.item_id = w.id
+        LEFT JOIN (
+          SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
+          FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
+          GROUP BY e.item_id
+        ) mrc ON mrc.item_id = w.id
+      )
+      SELECT rank, id, studio_id, total_points, master_run_count FROM ranked
+      WHERE master_run_count > 0 AND studio_id IS NOT NULL
+    `).all() as { rank: number; id: number; studio_id: number; total_points: number; master_run_count: number }[]
+
+    if (rankedWorks.length === 0) return { divisions: [], allLabels: [] }
+
+    // studio 정보 로드
+    const studioRows = db().prepare(`
+      SELECT s.id, s.name, s.color, s.maker_id, m.name AS maker_name, m.color AS maker_color
+      FROM studios s
+      LEFT JOIN makers m ON m.id = s.maker_id
+    `).all() as { id: number; name: string; color: string | null; maker_id: number | null; maker_name: string | null; maker_color: string | null }[]
+    const studioMap = new Map(studioRows.map(s => [s.id, s]))
+
+    // 부 경계
+    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const getDiv = (rank: number) => {
+      for (let d = 0; d < divBoundaries.length; d++) {
+        if (rank <= divBoundaries[d]) return d + 1
+      }
+      return 6
+    }
+
+    type LabelAgg = { id: number; name: string; color: string | null; maker_name: string | null; maker_color: string | null; work_count: number; ranks: number[] }
+    const divMap = new Map<number, Map<number, LabelAgg>>()
+    const allMap = new Map<number, LabelAgg>()
+
+    for (const w of rankedWorks) {
+      const studio = studioMap.get(w.studio_id)
+      if (!studio) continue
+      const div = getDiv(w.rank)
+
+      const makeLabelAgg = (): LabelAgg => ({
+        id: studio.id, name: studio.name, color: studio.color,
+        maker_name: studio.maker_name, maker_color: studio.maker_color,
+        work_count: 0, ranks: [],
+      })
+
+      // 부별
+      if (!divMap.has(div)) divMap.set(div, new Map())
+      const dMap = divMap.get(div)!
+      if (!dMap.has(studio.id)) dMap.set(studio.id, makeLabelAgg())
+      const dAgg = dMap.get(studio.id)!
+      dAgg.work_count++
+      dAgg.ranks.push(w.rank)
+
+      // 전체
+      if (!allMap.has(studio.id)) allMap.set(studio.id, makeLabelAgg())
+      const aAgg = allMap.get(studio.id)!
+      aAgg.work_count++
+      aAgg.ranks.push(w.rank)
+    }
+
+    const toResult = (agg: LabelAgg) => ({
+      id: agg.id, name: agg.name, color: agg.color,
+      maker_name: agg.maker_name, maker_color: agg.maker_color,
+      work_count: agg.work_count,
+      avg_rank: Math.round(agg.ranks.reduce((a, b) => a + b, 0) / agg.ranks.length * 10) / 10,
+      best_rank: Math.min(...agg.ranks),
+      worst_rank: Math.max(...agg.ranks),
+    })
+
+    const divisions = [...divMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([division, labels]) => ({
+        division,
+        labels: [...labels.values()].map(toResult).sort((a, b) => b.work_count - a.work_count || a.avg_rank - b.avg_rank),
+      }))
+
+    const allLabels = [...allMap.values()].map(toResult).sort((a, b) => b.work_count - a.work_count || a.avg_rank - b.avg_rank)
+
+    return { divisions, allLabels }
+  })
+
 }

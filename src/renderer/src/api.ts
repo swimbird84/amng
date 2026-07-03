@@ -228,4 +228,9 @@ export const masterRankingApi = {
       divisions: { division: number; actors: { id: number; name: string; photo_path: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number; actor_rank: number | null }[] }[]
       allActors: { id: number; name: string; photo_path: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number; actor_rank: number | null }[]
     }>,
+  workLabelDistribution: () =>
+    api.invoke('master-ranking:work-label-distribution') as Promise<{
+      divisions: { division: number; labels: { id: number; name: string; color: string | null; maker_name: string | null; maker_color: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number }[] }[]
+      allLabels: { id: number; name: string; color: string | null; maker_name: string | null; maker_color: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number }[]
+    }>,
 }
