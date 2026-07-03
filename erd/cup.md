@@ -2,7 +2,7 @@
 
 ```mermaid
 erDiagram
-    cup_tournaments {
+    cup_tournaments["cup_tournaments - 대회 템플릿"] {
         int id PK "대회 ID"
         text type "유형 (actor|work)"
         text name "대회명"
@@ -12,7 +12,7 @@ erDiagram
         text filter_json "참가자 필터 조건 (JSON)"
         text created_at "등록일시"
     }
-    cup_runs {
+    cup_runs["cup_runs - 대회 실행 회차"] {
         int id PK "실행 ID"
         int tournament_id FK "대회 ID"
         text status "상태 (in_progress|completed)"
@@ -23,13 +23,13 @@ erDiagram
         text completed_at "완료일시"
         text last_played_at "마지막 매치 일시"
     }
-    cup_entries {
+    cup_entries["cup_entries - 참가자 명단"] {
         int id PK "엔트리 ID"
         int run_id FK "실행 ID"
         int item_id "참가자 ID (actor/work)"
         int division "참가 시점 부 번호"
     }
-    cup_matches {
+    cup_matches["cup_matches - 매치 기록"] {
         int id PK "매치 ID"
         int run_id FK "실행 ID"
         text phase "단계 (group|main|tiebreak)"
@@ -43,7 +43,7 @@ erDiagram
         int is_draw "무승부 여부 (0/1)"
         int block_id "월드컵 블록 번호"
     }
-    cup_stats {
+    cup_stats["cup_stats - 통합 전적"] {
         int id PK "통계 ID"
         text type "유형 (actor|work)"
         int item_id "대상 ID"
@@ -52,8 +52,8 @@ erDiagram
         int total_matches "총 매치 수 (마스터+일반)"
         int match_wins "매치 승리 수 (마스터+일반)"
     }
-    cup_match_points {
-        int id PK "포인트 ID (미사용)"
+    cup_match_points["cup_match_points - 매치별 포인트 (미사용)"] {
+        int id PK "포인트 ID"
         int run_id FK "실행 ID"
         int match_id FK "매치 ID"
         int item_id "대상 ID"
@@ -61,7 +61,7 @@ erDiagram
         real bonus_points "보너스 포인트"
         real total_points "합계 포인트"
     }
-    master_ranking_history {
+    master_ranking_history["master_ranking_history - 랭킹 포인트 이력"] {
         int id PK "이력 ID"
         int run_id FK "실행 ID"
         text type "유형 (actor|work)"
@@ -69,12 +69,12 @@ erDiagram
         real points "획득 포인트"
         text recorded_at "기록일시"
     }
-    ranking_settings {
+    ranking_settings["ranking_settings - 랭킹 설정"] {
         int id PK "설정 ID"
         text type UK "유형 (actor|work)"
         text settings_json "승점/가중치/보너스 설정 (JSON)"
     }
-    cup_rank_snapshots {
+    cup_rank_snapshots["cup_rank_snapshots - 순위 스냅샷"] {
         int id PK "스냅샷 ID"
         int tournament_id FK "대회 ID"
         int item_id "대상 ID"
@@ -82,11 +82,11 @@ erDiagram
         text recorded_at "기록일시"
     }
 
-    cup_tournaments ||--o{ cup_runs : "has_runs"
-    cup_tournaments ||--o{ cup_rank_snapshots : "snapshots"
-    cup_runs ||--o{ cup_entries : "participants"
-    cup_runs ||--o{ cup_matches : "matches"
-    cup_runs ||--o{ cup_match_points : "points"
-    cup_runs ||--o{ master_ranking_history : "ranking"
-    cup_matches ||--o{ cup_match_points : "scored"
+    cup_tournaments ||--o{ cup_runs : "회차 실행"
+    cup_tournaments ||--o{ cup_rank_snapshots : "순위 기록"
+    cup_runs ||--o{ cup_entries : "참가 명단"
+    cup_runs ||--o{ cup_matches : "매치 기록"
+    cup_runs ||--o{ cup_match_points : "매치별 포인트"
+    cup_runs ||--o{ master_ranking_history : "포인트 이력"
+    cup_matches ||--o{ cup_match_points : "포인트 산출"
 ```

@@ -2,7 +2,7 @@
 
 ```mermaid
 erDiagram
-    works {
+    works["works - 작품"] {
         int id PK "작품 ID"
         text file_path "원본 파일 경로 (레거시, work_files로 이전)"
         text cover_path "커버 이미지 경로"
@@ -16,7 +16,7 @@ erDiagram
         int delete_pending "삭제예정 여부 (0/1)"
         text created_at "등록일시"
     }
-    actors {
+    actors["actors - 배우"] {
         int id PK "배우 ID"
         text photo_path "프로필 사진 경로"
         text name "이름"
@@ -35,19 +35,19 @@ erDiagram
         int delete_pending "삭제예정 여부 (0/1)"
         text created_at "등록일시"
     }
-    work_actors {
+    work_actors["work_actors - 출연 연결"] {
         int work_id PK,FK "작품 ID"
         int actor_id PK,FK "배우 ID"
         int is_rep "대표 배우 여부 (0/1)"
     }
-    work_files {
+    work_files["work_files - 재생 파일"] {
         int id PK "파일 ID"
         int work_id FK "작품 ID"
         text file_path "재생 파일 경로 또는 URL"
         text type "유형 (local|url)"
         int sort_order "정렬 순서"
     }
-    actor_scores {
+    actor_scores["actor_scores - 배우 평점"] {
         int actor_id PK,FK "배우 ID"
         int face "얼굴 (0~10)"
         int bust "가슴 (0~10)"
@@ -60,16 +60,16 @@ erDiagram
         int technique "테크닉 (0~10)"
         int proportions "비율 (0~10)"
     }
-    actor_photos {
+    actor_photos["actor_photos - 추가 사진"] {
         int id PK "사진 ID"
         int actor_id FK "배우 ID"
         text photo_path "추가 사진 경로"
         int sort_order "정렬 순서"
     }
 
-    works ||--o{ work_actors : "has"
-    actors ||--o{ work_actors : "appears_in"
-    works ||--o{ work_files : "has"
-    actors ||--|| actor_scores : "has"
-    actors ||--o{ actor_photos : "has"
+    works ||--o{ work_actors : "출연 배우"
+    actors ||--o{ work_actors : "출연 작품"
+    works ||--o{ work_files : "재생 경로"
+    actors ||--|| actor_scores : "평점"
+    actors ||--o{ actor_photos : "추가 사진"
 ```
