@@ -87,7 +87,7 @@ export default function MatchCard({
           <p className="text-[0.85rem] text-gray-400 mb-1.5 text-center whitespace-nowrap flex items-center justify-center gap-1.5 flex-wrap">
             {division !== undefined && (
               <span className={`text-xs px-1.5 py-0.5 rounded border font-bold shrink-0 ${DIV_COLOR[division] ?? DIV_COLOR[0]}`}>
-                {division === 0 ? '미지정' : `${division}부`}
+                {division === 0 ? '미분류' : `${division}부`}
               </span>
             )}
             {isMaster && stats.total_points !== undefined && (
@@ -103,7 +103,7 @@ export default function MatchCard({
           <p className="text-[0.85rem] text-gray-600 mb-1.5 text-center flex items-center justify-center gap-1.5">
             {division !== undefined && (
               <span className={`text-xs px-1.5 py-0.5 rounded border font-bold shrink-0 ${DIV_COLOR[division] ?? DIV_COLOR[0]}`}>
-                {division === 0 ? '미지정' : `${division}부`}
+                {division === 0 ? '미분류' : `${division}부`}
               </span>
             )}
             <span>-</span>

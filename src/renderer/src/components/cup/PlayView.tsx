@@ -745,7 +745,7 @@ export default function PlayView({
               const originLabel = (itemId: number, showBlock = false) => {
                 const origin = itemOriginMap.get(itemId)
                 const div = divisionMap[itemId] ?? 0
-                const divText = div === 0 ? '미지정' : `${div}부`
+                const divText = div === 0 ? '미분류' : `${div}부`
                 if (!origin) return null
                 const blockText = showBlock && origin.block_label ? `/${origin.block_label}블록` : ''
                 return { text: `${divText}/${origin.group_id}조/${origin.rank}위${blockText}`, color: DIV_TEXT[div] ?? 'text-gray-500' }
