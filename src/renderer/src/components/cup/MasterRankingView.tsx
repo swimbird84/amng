@@ -368,6 +368,7 @@ export default function MasterRankingView({
                 <col style={{ width: '3.5rem' }} />
                 <col style={{ width: '4rem' }} />
                 <col />
+                {type === 'work' && <col style={{ width: '6rem' }} />}
                 {type === 'actor' && <col style={{ width: '3rem' }} />}
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
@@ -383,6 +384,7 @@ export default function MasterRankingView({
                   <th className="px-2 py-2.5 text-center text-gray-400">리그</th>
                   <th className="px-2 py-2.5 text-left text-gray-400">썸네일</th>
                   <th className="px-3 py-2.5 text-left text-gray-400">이름</th>
+                  {type === 'work' && <th className="px-2 py-2.5 text-left text-gray-400">레이블</th>}
                   {type === 'actor' && <th className="px-2 py-2.5 text-center text-gray-400 text-xs"><div className="leading-tight">상대<br />전적</div></th>}
                   <SortTh col="total_points" label="마스터" subLabel="포인트" subLabelClass="font-normal" />
                   {type === 'actor' && <SortTh col="score_rank" label="평점" />}
@@ -452,6 +454,35 @@ export default function MasterRankingView({
                           </div>
                         </div>
                       </td>
+                      {/* 레이블 (작품만) */}
+                      {type === 'work' && (() => {
+                        const studioName = (row as any).studio_name as string | null
+                        const studioColor = (row as any).studio_color as string | null
+                        const makerName = (row as any).maker_name as string | null
+                        const makerColor = (row as any).maker_color as string | null
+                        const showMaker = makerName && makerName !== studioName
+                        return (
+                          <td className="px-2 py-1 text-left">
+                            {studioName ? (
+                              <div className="leading-tight">
+                                {showMaker && (
+                                  <div className="text-[10px] truncate" style={makerColor ? { color: makerColor } : undefined}>
+                                    {makerName}
+                                  </div>
+                                )}
+                                <span
+                                  className="inline-block px-1 py-0.5 rounded text-[10px] font-medium border truncate max-w-full"
+                                  style={studioColor ? { borderColor: studioColor, color: studioColor, backgroundColor: `${studioColor}15` } : undefined}
+                                >
+                                  {studioName}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-600 text-xs">-</span>
+                            )}
+                          </td>
+                        )
+                      })()}
                       {/* 상대전적 (배우만) */}
                       {type === 'actor' && (
                         <td className="px-2 py-2 text-center">

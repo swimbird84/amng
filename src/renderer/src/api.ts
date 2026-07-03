@@ -233,4 +233,9 @@ export const masterRankingApi = {
       divisions: { division: number; labels: { id: number; name: string; color: string | null; maker_name: string | null; maker_color: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number }[] }[]
       allLabels: { id: number; name: string; color: string | null; maker_name: string | null; maker_color: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number }[]
     }>,
+  workMakerDistribution: () =>
+    api.invoke('master-ranking:work-maker-distribution') as Promise<{
+      divisions: { division: number; makers: { id: number; name: string; color: string | null; work_count: number; label_count: number; avg_rank: number; best_rank: number; worst_rank: number }[] }[]
+      allMakers: { id: number; name: string; color: string | null; work_count: number; label_count: number; avg_rank: number; best_rank: number; worst_rank: number }[]
+    }>,
 }

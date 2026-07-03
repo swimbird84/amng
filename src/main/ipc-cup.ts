@@ -920,7 +920,7 @@ export function registerCupHandlers(): void {
           LEFT JOIN (
             SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
             FROM cup_entries e
-            JOIN cup_runs r ON r.id = e.run_id
+            JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'actor'
             GROUP BY e.item_id
           ) mrc ON mrc.item_id = a.id
@@ -968,7 +968,7 @@ export function registerCupHandlers(): void {
         WITH ranked AS (
           SELECT
             RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
-            w.id, w.title, w.product_number, w.cover_path,
+            w.id, w.title, w.product_number, w.cover_path, w.studio_id,
             COALESCE(pts.total_points, 0) AS total_points,
             COALESCE(mrc.master_run_count, 0) AS master_run_count
           FROM works w
@@ -976,12 +976,13 @@ export function registerCupHandlers(): void {
           LEFT JOIN (
             SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
             FROM cup_entries e
-            JOIN cup_runs r ON r.id = e.run_id
+            JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
             GROUP BY e.item_id
           ) mrc ON mrc.item_id = w.id
         )
-        SELECT ranked.rank, ranked.id, ranked.title, ranked.product_number, ranked.cover_path, ranked.total_points, ranked.master_run_count,
+        SELECT ranked.rank, ranked.id, ranked.title, ranked.product_number, ranked.cover_path, ranked.studio_id, ranked.total_points, ranked.master_run_count,
+          s.name AS studio_name, s.color AS studio_color, mk.name AS maker_name, mk.color AS maker_color,
           COALESCE(cs_cup.total_cups, 0) AS total_cups,
           COALESCE(cs_cup.cup_wins, 0) AS cup_wins,
           COALESCE(cs_match.total_matches, 0) AS total_matches,
@@ -991,6 +992,8 @@ export function registerCupHandlers(): void {
            WHERE mh.type = 'work' AND mh.item_id = ranked.id
            ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
         FROM ranked
+        LEFT JOIN studios s ON s.id = ranked.studio_id
+        LEFT JOIN makers mk ON mk.id = s.maker_id
         LEFT JOIN (
           SELECT e.item_id,
             COUNT(DISTINCT e.run_id) AS total_cups,
@@ -1253,7 +1256,7 @@ export function registerCupHandlers(): void {
       mrc AS (
         SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
         FROM cup_entries e
-        JOIN cup_runs r ON r.id = e.run_id
+        JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
         GROUP BY e.item_id
       )
@@ -2414,6 +2417,100 @@ export function registerCupHandlers(): void {
     const allLabels = [...allMap.values()].map(toResult).sort((a, b) => b.work_count - a.work_count || a.avg_rank - b.avg_rank)
 
     return { divisions, allLabels }
+  })
+
+  // 작품 마스터랭킹 제작사 분포
+  ipcMain.handle('master-ranking:work-maker-distribution', (_e) => {
+    const type = 'work' as const
+    const rl = getRecentRunLimit(db(), type)
+    const ptsCte = buildPointsCte(type, rl)
+    const rankedWorks = db().prepare(`
+      WITH ranked AS (
+        SELECT
+          RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
+          w.id, w.studio_id,
+          COALESCE(pts.total_points, 0) AS total_points,
+          COALESCE(mrc.master_run_count, 0) AS master_run_count
+        FROM works w
+        LEFT JOIN ${ptsCte} ON pts.item_id = w.id
+        LEFT JOIN (
+          SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
+          FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
+          GROUP BY e.item_id
+        ) mrc ON mrc.item_id = w.id
+      )
+      SELECT ranked.rank, ranked.id, ranked.studio_id, ranked.total_points, ranked.master_run_count FROM ranked
+      WHERE master_run_count > 0 AND studio_id IS NOT NULL
+    `).all() as { rank: number; id: number; studio_id: number; total_points: number; master_run_count: number }[]
+
+    if (rankedWorks.length === 0) return { divisions: [], allMakers: [] }
+
+    // studio → maker 매핑
+    const studioRows = db().prepare(`
+      SELECT s.id AS studio_id, s.maker_id, m.id AS maker_id2, m.name, m.color
+      FROM studios s
+      LEFT JOIN makers m ON m.id = s.maker_id
+    `).all() as { studio_id: number; maker_id: number | null; maker_id2: number | null; name: string | null; color: string | null }[]
+    const studioToMaker = new Map(studioRows.map(s => [s.studio_id, s.maker_id ? { id: s.maker_id, name: s.name!, color: s.color } : null]))
+
+    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const getDiv = (rank: number) => {
+      for (let d = 0; d < divBoundaries.length; d++) {
+        if (rank <= divBoundaries[d]) return d + 1
+      }
+      return 6
+    }
+
+    type MakerAgg = { id: number; name: string; color: string | null; work_count: number; ranks: number[]; label_count: Set<number> }
+    const divMap = new Map<number, Map<number, MakerAgg>>()
+    const allMap = new Map<number, MakerAgg>()
+
+    for (const w of rankedWorks) {
+      const maker = studioToMaker.get(w.studio_id)
+      if (!maker) continue
+      const div = getDiv(w.rank)
+
+      const makeMakerAgg = (): MakerAgg => ({
+        id: maker.id, name: maker.name, color: maker.color,
+        work_count: 0, ranks: [], label_count: new Set(),
+      })
+
+      if (!divMap.has(div)) divMap.set(div, new Map())
+      const dMap = divMap.get(div)!
+      if (!dMap.has(maker.id)) dMap.set(maker.id, makeMakerAgg())
+      const dAgg = dMap.get(maker.id)!
+      dAgg.work_count++
+      dAgg.ranks.push(w.rank)
+      dAgg.label_count.add(w.studio_id)
+
+      if (!allMap.has(maker.id)) allMap.set(maker.id, makeMakerAgg())
+      const aAgg = allMap.get(maker.id)!
+      aAgg.work_count++
+      aAgg.ranks.push(w.rank)
+      aAgg.label_count.add(w.studio_id)
+    }
+
+    const toResult = (agg: MakerAgg) => ({
+      id: agg.id, name: agg.name, color: agg.color,
+      work_count: agg.work_count,
+      label_count: agg.label_count.size,
+      avg_rank: Math.round(agg.ranks.reduce((a, b) => a + b, 0) / agg.ranks.length * 10) / 10,
+      best_rank: Math.min(...agg.ranks),
+      worst_rank: Math.max(...agg.ranks),
+    })
+
+    const divisions = [...divMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([division, makers]) => ({
+        division,
+        makers: [...makers.values()].map(toResult).sort((a, b) => b.work_count - a.work_count || a.avg_rank - b.avg_rank),
+      }))
+
+    const allMakers = [...allMap.values()].map(toResult).sort((a, b) => b.work_count - a.work_count || a.avg_rank - b.avg_rank)
+
+    return { divisions, allMakers }
   })
 
 }
