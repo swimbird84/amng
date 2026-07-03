@@ -866,7 +866,8 @@ export function registerCupHandlers(): void {
         const gms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ? ORDER BY match_index`).all(runId, group_id) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
         const tbms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'tiebreak' AND group_id = ? ORDER BY round, match_index`).all(runId, group_id) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
         const standings = computeGroupStandings(gms, getBasePoints(db(), row.type))
-        return { group_id, standings, matches: gms, tiebreakMatches: tbms }
+        const qualifiers = getGroupQualifiers(db(), runId, group_id, 'league', row.type)
+        return { group_id, standings, matches: gms, tiebreakMatches: tbms, qualifiers }
       })
       const mainMatches = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'main' ORDER BY round DESC, match_index`).all(runId)
       return { type: 'league', groupStandings, mainMatches, divisionMap: getDivisionMap() }

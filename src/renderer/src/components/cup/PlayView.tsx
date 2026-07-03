@@ -559,7 +559,7 @@ export default function PlayView({
                         if (!aDone && bDone) return 1
                         if (aDone && bDone) return b.group_id - a.group_id
                         return a.group_id - b.group_id
-                      }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms }) => {
+                      }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms, qualifiers: gqs }) => {
                         const groupDone = gms && gms.length > 0 && gms.every(m => m.winner_id !== null || m.is_draw) && (!tbms || tbms.length === 0 || tbms.every(m => m.winner_id !== null || m.is_draw))
                         const groupActive = !groupDone && (currentMatch !== 'done') && currentMatch != null && currentMatch.group_id === group_id && (currentMatch.phase === 'group' || currentMatch.phase === 'tiebreak')
                         return (
@@ -586,8 +586,9 @@ export default function PlayView({
                                 const item = items.get(row.item_id)
                                 const div = divisionMap[row.item_id] ?? 0
                                 const groupPending = !groupDone && !groupActive
+                                const isQualified = gqs ? gqs.includes(row.item_id) : idx < 2
                                 return (
-                                  <tr key={row.item_id} className={`border-b border-gray-700/30 ${!groupPending && idx < 2 ? 'bg-green-900/10' : ''}`}>
+                                  <tr key={row.item_id} className={`border-b border-gray-700/30 ${!groupPending && isQualified ? 'bg-green-900/10' : ''}`}>
                                     <td className="px-3 py-1.5 text-gray-500">{groupPending ? '-' : idx + 1}</td>
                                     {tournament.is_master ? (
                                       <td className={`px-1 py-1.5 text-center text-xs font-bold ${DIV_TEXT_COLOR[div] ?? DIV_TEXT_COLOR[0]}`}>
@@ -596,7 +597,7 @@ export default function PlayView({
                                     ) : null}
                                     <td className="px-3 py-1.5 text-white truncate max-w-[80px]">
                                       {item ? <span data-tip-id={item.id} data-tip-type={tournament?.type}>{itemPnLabel(item)}</span> : `#${row.item_id}`}
-                                      {!groupPending && idx < 2 && <span className="ml-1 text-green-400 text-xs">↑</span>}
+                                      {!groupPending && isQualified && <span className="ml-1 text-green-400 text-xs">↑</span>}
                                     </td>
                                     <td className="px-1 py-1.5 text-center text-green-400">{row.w}</td>
                                     <td className="px-1 py-1.5 text-center text-gray-400">{row.d}</td>
