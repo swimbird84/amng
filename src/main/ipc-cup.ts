@@ -1036,7 +1036,7 @@ export function registerCupHandlers(): void {
       SELECT COUNT(DISTINCT r.id) AS master_run_count,
         SUM(CASE WHEN r.winner_id = ? THEN 1 ELSE 0 END) AS master_cup_wins
       FROM cup_entries e
-      JOIN cup_runs r ON r.id = e.run_id
+      JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
       WHERE e.item_id = ?
     `).get(itemId, itemId) as { master_run_count: number; master_cup_wins: number } | undefined
@@ -1044,7 +1044,7 @@ export function registerCupHandlers(): void {
       SELECT COUNT(*) AS total_matches,
         SUM(CASE WHEN m.winner_id = ? THEN 1 ELSE 0 END) AS match_wins
       FROM cup_matches m
-      JOIN cup_runs r ON r.id = m.run_id
+      JOIN cup_runs r ON r.id = m.run_id AND r.status = 'completed'
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
       WHERE (m.item1_id = ? OR m.item2_id = ?) AND m.winner_id IS NOT NULL
     `).get(itemId, itemId, itemId) as { total_matches: number; match_wins: number } | undefined
