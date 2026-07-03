@@ -530,17 +530,29 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
     const rl = getRecentRunLimit(database, t.type as 'actor' | 'work')
     const ranked = database.prepare(`
       WITH pts AS (
-        SELECT item_id, total_points FROM ${buildPointsCte(t.type as 'actor' | 'work', rl, 'rpt', false)}
+        SELECT item_id, total_points FROM ${buildPointsCte(t.type as 'actor' | 'work', rl, 'rpt', true)}
+      ),
+      mrc AS (
+        SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
+        FROM cup_entries e
+        JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+        JOIN cup_tournaments t2 ON t2.id = r.tournament_id AND t2.is_master = 1 AND t2.type = '${t.type}'
+        GROUP BY e.item_id
       )
-      SELECT RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank, ${itemCol} AS id
-      FROM ${fromClause} LEFT JOIN pts ON pts.item_id = ${itemCol}
-    `).all() as { rank: number; id: number }[]
+      SELECT RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank, ${itemCol} AS id,
+        COALESCE(mrc.master_run_count, 0) AS master_run_count
+      FROM ${fromClause}
+      LEFT JOIN pts ON pts.item_id = ${itemCol}
+      LEFT JOIN mrc ON mrc.item_id = ${itemCol}
+    `).all() as { rank: number; id: number; master_run_count: number }[]
     const divBoundaries = [32, 96, 224, 480, 992, 2016]
     const divisionMap = new Map<number, number>()
     for (const row of ranked) {
       let div = 0
-      for (let d = 0; d < divBoundaries.length; d++) {
-        if (row.rank <= divBoundaries[d]) { div = d + 1; break }
+      if (row.master_run_count > 0) {
+        for (let d = 0; d < divBoundaries.length; d++) {
+          if (row.rank <= divBoundaries[d]) { div = d + 1; break }
+        }
       }
       divisionMap.set(row.id, div)
     }
