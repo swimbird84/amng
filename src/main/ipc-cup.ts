@@ -285,7 +285,7 @@ function startFinalRound(database: DB, runId: number, blockCount: number): void 
 }
 
 // ========== 마스터 랭킹 승점 계산 헬퍼 ==========
-function calcAndStoreRunPoints(
+export function calcAndStoreRunPoints(
   database: ReturnType<typeof getDatabase>,
   runId: number,
   type: 'actor' | 'work',
@@ -457,7 +457,7 @@ function calcAndStoreRunPoints(
 }
 
 // ========== 순위 스냅샷 저장 헬퍼 ==========
-function saveRankSnapshot(
+export function saveRankSnapshot(
   database: ReturnType<typeof getDatabase>,
   runId: number
 ): void {
@@ -1187,6 +1187,19 @@ export function registerCupHandlers(): void {
     const inProgress = db().prepare(`SELECT 1 FROM cup_runs WHERE status = 'in_progress' LIMIT 1`).get()
     if (inProgress) throw new Error('진행 중인 대회가 있어 리셋할 수 없습니다')
     db().prepare(`DELETE FROM master_ranking_history WHERE type = ?`).run(type)
+    return { ok: true }
+  })
+
+  ipcMain.handle('master-ranking:recalcRun', (_e, runId: number) => {
+    const row = db().prepare(`
+      SELECT r.id, t.type, t.is_master, r.settings_snapshot
+      FROM cup_runs r JOIN cup_tournaments t ON t.id = r.tournament_id
+      WHERE r.id = ? AND r.status = 'completed'
+    `).get(runId) as { id: number; type: 'actor' | 'work'; is_master: number; settings_snapshot: string | null } | undefined
+    if (!row) throw new Error(`완료된 run을 찾을 수 없습니다: ${runId}`)
+    db().prepare(`DELETE FROM master_ranking_history WHERE run_id = ?`).run(runId)
+    calcAndStoreRunPoints(db(), runId, row.type, row.is_master === 1, row.settings_snapshot)
+    saveRankSnapshot(db(), runId)
     return { ok: true }
   })
 

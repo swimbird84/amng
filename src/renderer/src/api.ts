@@ -214,6 +214,8 @@ export const masterRankingApi = {
     api.invoke('master-ranking:list', params) as Promise<{ rows: unknown[]; total: number }>,
   reset: (type: 'actor' | 'work') =>
     api.invoke('master-ranking:reset', type),
+  recalcRun: (runId: number) =>
+    api.invoke('master-ranking:recalcRun', runId) as Promise<{ ok: boolean }>,
   rankTrends: (type: 'actor' | 'work') =>
     api.invoke('master-ranking:rank-trends', type) as Promise<{ item_id: number; prev_rank: number | null }[]>,
   itemFormatStats: (type: 'actor' | 'work', itemId: number) =>
