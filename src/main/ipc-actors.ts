@@ -436,6 +436,7 @@ export function registerActorsHandlers(): void {
     const blocked = db().prepare(`
       SELECT 1 FROM cup_entries e
       JOIN cup_runs r ON r.id = e.run_id
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.type = 'actor'
       WHERE r.status = 'in_progress' AND e.item_id = ?
       LIMIT 1
     `).get(id)
