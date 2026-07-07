@@ -118,6 +118,7 @@ export const scanApi = {
 
 // 작품 파일
 export const workFilesApi = {
+  listByWorkIds: (workIds: number[]) => api.invoke('work-files:listByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string }[]>,
   add: (workId: number, filePath: string) => api.invoke('work-files:add', workId, filePath),
   delete: (fileId: number) => api.invoke('work-files:delete', fileId),
 }
