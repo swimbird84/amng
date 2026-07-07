@@ -130,9 +130,9 @@ export default function TournamentCard({
 
   return (
     <>
-      <div className="relative cursor-pointer rounded-lg border border-gray-700 ring-2 ring-transparent hover:border-gray-500 flex flex-col">
+      <div className="relative rounded-lg border border-gray-700 ring-2 ring-transparent hover:border-gray-500 flex flex-col [&_button]:cursor-pointer [&_select]:cursor-pointer">
         {/* 썸네일 */}
-        <div className="relative rounded-t-lg overflow-hidden">
+        <div className="relative rounded-t-lg overflow-hidden cursor-pointer" onClick={handleStartClick}>
           <ImagePreview path={t.winner_photo ?? null} alt={t.name} className="w-full h-40" objectPosition="center 10%" />
           {/* 진행 상황 칩 */}
           {runStatus === 'in_progress' && (() => {

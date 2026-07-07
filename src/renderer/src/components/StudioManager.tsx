@@ -83,6 +83,8 @@ export default function StudioManager({ onClose }: Props) {
   const [collapsedMakerIds, setCollapsedMakerIds] = useState<Set<string>>(new Set())
   const [makerKeyword, setMakerKeyword] = useState('')
   const [labelKeyword, setLabelKeyword] = useState('')
+  const [codeKeyword, setCodeKeyword] = useState('')
+  const [allCodes, setAllCodes] = useState<StudioCode[]>([])
 
   const toggleCollapse = (makerId: string) => {
     setCollapsedMakerIds(prev => {
@@ -93,12 +95,14 @@ export default function StudioManager({ onClose }: Props) {
   }
 
   const load = async () => {
-    const [s, m] = await Promise.all([
+    const [s, m, c] = await Promise.all([
       studiosApi.list(true) as Promise<StudioWithCount[]>,
       makersApi.list() as Promise<MakerRow[]>,
+      studioCodesApi.listAll(),
     ])
     setStudios(s)
     setMakers(m)
+    setAllCodes(c)
   }
 
   useEffect(() => { load() }, [])
@@ -207,18 +211,27 @@ export default function StudioManager({ onClose }: Props) {
     return groups
   }, [studios, makers, sortBy, sortDir])
 
+  const codeMatchStudioIds = useMemo(() => {
+    if (!codeKeyword) return null
+    const kw = codeKeyword.toLowerCase()
+    const ids = new Set(allCodes.filter(c => c.code.toLowerCase().includes(kw)).map(c => c.studio_id))
+    return ids
+  }, [allCodes, codeKeyword])
+
   const filteredGroups = useMemo(() => {
-    if (!makerKeyword && !labelKeyword) return makerGroups
+    if (!makerKeyword && !labelKeyword && !codeKeyword) return makerGroups
     return makerGroups
       .filter(g => !makerKeyword || g.makerName.toLowerCase().includes(makerKeyword.toLowerCase()))
       .map(g => ({
         ...g,
-        studios: labelKeyword
-          ? g.studios.filter(s => s.name.toLowerCase().includes(labelKeyword.toLowerCase()))
-          : g.studios,
+        studios: g.studios.filter(s => {
+          if (labelKeyword && !s.name.toLowerCase().includes(labelKeyword.toLowerCase())) return false
+          if (codeMatchStudioIds && !codeMatchStudioIds.has(s.id)) return false
+          return true
+        }),
       }))
       .filter(g => g.studios.length > 0)
-  }, [makerGroups, makerKeyword, labelKeyword])
+  }, [makerGroups, makerKeyword, labelKeyword, codeKeyword, codeMatchStudioIds])
 
   const handleSort = (s: SortBy) => {
     const defaultDir = s === 'name' ? 'asc' : 'desc'
@@ -420,9 +433,12 @@ export default function StudioManager({ onClose }: Props) {
         )}
       </div>
 
-      {expandedId === studio.id && (
+      {(expandedId === studio.id || (codeKeyword && codeMatchStudioIds?.has(studio.id))) && (
         <div className="ml-8 mb-1 space-y-0.5">
-          {(codesMap[studio.id] ?? []).map((sc) => (
+          {(codeKeyword && codeMatchStudioIds?.has(studio.id)
+            ? allCodes.filter(c => c.studio_id === studio.id)
+            : codesMap[studio.id] ?? []
+          ).map((sc) => (
             <div key={sc.id} className="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-700/40">
               <span className="text-gray-400 text-xs">└</span>
               {editingCodeId === sc.id ? (
@@ -493,23 +509,30 @@ export default function StudioManager({ onClose }: Props) {
             )
           })}
         </div>
-        <div className="flex gap-1 mb-3">
+        <div className="flex gap-1 mb-3 min-w-0">
             <input
               type="text"
               value={makerKeyword}
               onChange={(e) => setMakerKeyword(e.target.value)}
               placeholder="제작사 검색"
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
             />
             <input
               type="text"
               value={labelKeyword}
               onChange={(e) => setLabelKeyword(e.target.value)}
               placeholder="레이블 검색"
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
+            />
+            <input
+              type="text"
+              value={codeKeyword}
+              onChange={(e) => setCodeKeyword(e.target.value)}
+              placeholder="코드 검색"
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
             />
             <button
-              onClick={() => { setMakerKeyword(''); setLabelKeyword('') }}
+              onClick={() => { setMakerKeyword(''); setLabelKeyword(''); setCodeKeyword('') }}
               className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"
             >
               초기화

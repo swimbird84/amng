@@ -95,6 +95,10 @@ export function registerStudiosHandlers(): void {
 
   // ========== 레이블 코드 CRUD ==========
 
+  ipcMain.handle('studio-codes:listAll', () => {
+    return db().prepare('SELECT * FROM studio_codes ORDER BY code').all()
+  })
+
   ipcMain.handle('studio-codes:list', (_e, studioId: number) => {
     return db().prepare('SELECT * FROM studio_codes WHERE studio_id = ? ORDER BY code').all(studioId)
   })

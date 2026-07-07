@@ -93,6 +93,7 @@ export const makersApi = {
 
 // 레이블 코드
 export const studioCodesApi = {
+  listAll: () => api.invoke('studio-codes:listAll') as Promise<{ id: number; studio_id: number; code: string }[]>,
   list: (studioId: number) => api.invoke('studio-codes:list', studioId) as Promise<{ id: number; studio_id: number; code: string }[]>,
   create: (studioId: number, code: string) => api.invoke('studio-codes:create', studioId, code) as Promise<number>,
   update: (id: number, code: string) => api.invoke('studio-codes:update', id, code) as Promise<boolean>,
