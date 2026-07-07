@@ -254,16 +254,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     setDeleteConfirm(false)
   }
 
-  const handleBulkDelete = async (withFolder = false) => {
-    if (withFolder) {
-      const ids = [...selectedDeleteIds]
-      const files = await workFilesApi.listByWorkIds(ids)
-      const filePaths = files.map(f => f.file_path)
-      if (filePaths.length > 0) {
-        const deleted = await shellApi.trashFolders(filePaths)
-        if (deleted > 0) alert(`${deleted}개 폴더를 휴지통으로 이동했습니다`)
-      }
-    }
+  const handleBulkDelete = async () => {
     let blockedCount = 0
     for (const id of selectedDeleteIds) {
       const res = await worksApi.delete(id) as { blocked: boolean }
@@ -274,6 +265,17 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     setSelected(null)
     exitDeleteMode()
     refreshWorks(-deletedCount)
+  }
+
+  const handleBulkTrashFolders = async () => {
+    const ids = [...selectedDeleteIds]
+    const files = await workFilesApi.listByWorkIds(ids)
+    const filePaths = files.map(f => f.file_path)
+    if (filePaths.length > 0) {
+      const deleted = await shellApi.trashFolders(filePaths)
+      if (deleted > 0) alert(`${deleted}개 폴더를 휴지통으로 이동했습니다`)
+    }
+    setDeleteConfirm(false)
   }
 
   const handleToggleFavorite = async (id: number, current: number, e?: React.MouseEvent) => {
@@ -504,9 +506,9 @@ export default function Works({ onNavigateToActor }: WorksProps) {
             <p className="text-white">선택된 {selectedDeleteIds.size}개 작품을 삭제하시겠습니까?</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setDeleteConfirm(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>
-              <button onClick={() => handleBulkDelete(false)} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded text-sm">삭제</button>
+              <button onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded text-sm">삭제</button>
+              <button onClick={handleBulkTrashFolders} className="bg-orange-700 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm">폴더 삭제</button>
             </div>
-            <button onClick={() => handleBulkDelete(true)} className="w-full bg-orange-700 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm">폴더 삭제</button>
           </div>
         </div>
       )}
