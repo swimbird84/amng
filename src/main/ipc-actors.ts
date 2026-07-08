@@ -354,8 +354,13 @@ export function registerActorsHandlers(): void {
   })
 
   ipcMain.handle('actors:findOrCreate', (_e, name: string, birthday?: string) => {
-    const existing = db().prepare('SELECT id FROM actors WHERE name = ?').get(name) as { id: number } | undefined
-    if (existing) return existing.id
+    const matches = db().prepare('SELECT id FROM actors WHERE name = ?').all(name) as { id: number }[]
+    if (matches.length === 1) return matches[0].id
+    if (matches.length > 1 && birthday) {
+      const exact = db().prepare('SELECT id FROM actors WHERE name = ? AND birthday = ?').get(name, birthday) as { id: number } | undefined
+      if (exact) return exact.id
+    }
+    if (matches.length > 1 && !birthday) return matches[0].id
     const result = db().prepare('INSERT INTO actors (name, birthday) VALUES (?, ?)').run(name, birthday || null)
     const actorId = result.lastInsertRowid
     db().prepare(`
