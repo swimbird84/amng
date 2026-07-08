@@ -25,11 +25,13 @@ export default function MatchCard({
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [workRating, setWorkRating] = useState<number>(item.rating ?? 0)
   const [isFavorite, setIsFavorite] = useState(!!(item.is_favorite))
+  const [isDeletePending, setIsDeletePending] = useState(!!(item.delete_pending))
 
   useEffect(() => {
     setWorkRating(item.rating ?? 0)
     setIsFavorite(!!(item.is_favorite))
-  }, [item.id, item.rating, item.is_favorite])
+    setIsDeletePending(!!(item.delete_pending))
+  }, [item.id, item.rating, item.is_favorite, item.delete_pending])
 
   useEffect(() => {
     if (isMaster) {
@@ -112,6 +114,8 @@ export default function MatchCard({
         {/* 이름 / 작품 정보 */}
         {type === 'actor' ? (
           <div className="flex items-center gap-1">
+            {isFavorite && <span className="shrink-0 text-pink-500 text-sm">♥</span>}
+            {isDeletePending && <span className="shrink-0 text-red-500 text-xs">🗑</span>}
             <p
               className="flex-1 text-[1.47rem] font-bold text-white text-center truncate cursor-pointer hover:underline"
               onClick={onNavigate}
@@ -132,6 +136,7 @@ export default function MatchCard({
                 {item.release_date && <span className="shrink-0">{item.release_date}</span>}
                 {workRating > 0 && <span className="shrink-0"><Rating value={workRating} readonly small /></span>}
                 {isFavorite && <span className="shrink-0 text-pink-500 text-xs">♥</span>}
+                {isDeletePending && <span className="shrink-0 text-red-500 text-xs">🗑</span>}
               </div>
               {(item.actors?.length ?? 0) > 0 && (() => {
                 const repIds = new Set(item.rep_actors?.map(a => a.id) ?? [])
