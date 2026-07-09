@@ -225,7 +225,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
   }
 
   const currentLabel = RANK_ITEMS.find(i => i.value === rankBy)?.label ?? ''
-  const title = `${currentLabel} 랭킹`
+  const title = `${currentLabel === '마스터랭킹' ? '마스터' : currentLabel} 랭킹`
   const top5 = ranked.slice(0, 5)
   const rest = ranked.slice(5)
 
