@@ -115,7 +115,7 @@ export default function MatchCard({
         {type === 'actor' ? (
           <div className="flex items-center gap-1">
             {isFavorite && <span className="shrink-0 text-pink-500 text-sm">♥</span>}
-            {isDeletePending && <span className="shrink-0 text-red-500 text-xs">🗑</span>}
+            {isDeletePending && <span className="shrink-0 text-red-500 text-xs font-bold">X</span>}
             <p
               className="flex-1 text-[1.47rem] font-bold text-white text-center truncate cursor-pointer hover:underline"
               onClick={onNavigate}
@@ -136,7 +136,7 @@ export default function MatchCard({
                 {item.release_date && <span className="shrink-0">{item.release_date}</span>}
                 {workRating > 0 && <span className="shrink-0"><Rating value={workRating} readonly small /></span>}
                 {isFavorite && <span className="shrink-0 text-pink-500 text-xs">♥</span>}
-                {isDeletePending && <span className="shrink-0 text-red-500 text-xs">🗑</span>}
+                {isDeletePending && <span className="shrink-0 text-red-500 text-xs font-bold">X</span>}
               </div>
               {(item.actors?.length ?? 0) > 0 && (() => {
                 const repIds = new Set(item.rep_actors?.map(a => a.id) ?? [])

@@ -101,7 +101,6 @@ export default function PlayView({
     const runStatus = result.run?.status
     const isDone = runStatus === 'completed' || cm === null
     setCurrentMatch(isDone ? 'done' : cm)
-    if (isDone) setTab('match')
     if (cm) {
       fetchItemInfo(cm.item1_id, result.tournament.type)
       if (cm.item2_id) fetchItemInfo(cm.item2_id, result.tournament.type)
