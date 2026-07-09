@@ -149,7 +149,7 @@ export const dashboardApi = {
   debutYears: () => api.invoke('dashboard:debut-years'),
   debutMonths: (year: string) => api.invoke('dashboard:debut-months', year),
   debutMonthActors: (year: string, month: number) => api.invoke('dashboard:debut-month-actors', year, month),
-  rankChangeChart: (type: 'actor' | 'work', limit?: number, rankFrom?: number, rankTo?: number) => api.invoke('dashboard:rank-change-chart', { type, limit, rankFrom, rankTo }) as Promise<{
+  rankChangeChart: (type: 'actor' | 'work', limit?: number, rankFrom?: number, rankTo?: number, seasonId?: number) => api.invoke('dashboard:rank-change-chart', { type, limit, rankFrom, rankTo, seasonId }) as Promise<{
     runs: { runId: number; label: string; completedAt: string }[]
     series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[]; globalRanks: (number | null)[]; displayRanks: (number | null)[] }[]
   }>,
@@ -177,8 +177,8 @@ export const cupApi = {
     api.invoke('cup:standings', runId),
   itemCount: (tournamentId: number) =>
     api.invoke('cup:item-count', { tournamentId }) as Promise<number>,
-  divisionCounts: (type: 'actor' | 'work') =>
-    api.invoke('cup:division-counts', { type }) as Promise<{ division: number; count: number }[]>,
+  divisionCounts: (type: 'actor' | 'work', seasonId?: number) =>
+    api.invoke('cup:division-counts', { type, seasonId }) as Promise<{ division: number; count: number }[]>,
   start: (tournamentId: number, roundTotal: number, force?: boolean) =>
     api.invoke('cup:start', { tournamentId, roundTotal, force }),
   clearRun: (tournamentId: number) =>
@@ -197,8 +197,8 @@ export const cupApi = {
     api.invoke('cup:item-tournament-stats', { tournamentId, itemId }) as Promise<{ total_runs: number; run_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number; rank: number }>,
   rankHistory: (tournamentId: number, itemId: number) =>
     api.invoke('cup:rank-history', { tournamentId, itemId }) as Promise<{ rank: number; recorded_at: string }[]>,
-  headToHead: (type: 'actor' | 'work', itemId: number) =>
-    api.invoke('cup:head-to-head', { type, itemId }) as Promise<{ opp_id: number; total: number; wins: number; losses: number; draws: number; opp_rank?: number | null; name?: string; title?: string; product_number?: string; photo_path?: string; cover_path?: string }[]>,
+  headToHead: (type: 'actor' | 'work', itemId: number, seasonId?: number) =>
+    api.invoke('cup:head-to-head', { type, itemId, seasonId }) as Promise<{ opp_id: number; total: number; wins: number; losses: number; draws: number; opp_rank?: number | null; name?: string; title?: string; product_number?: string; photo_path?: string; cover_path?: string }[]>,
 }
 
 // 랭킹 설정
@@ -211,22 +211,26 @@ export const rankingSettingsApi = {
 
 // 마스터 랭킹
 export const masterRankingApi = {
-  list: (params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc' }) =>
+  list: (params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc'; seasonId?: number }) =>
     api.invoke('master-ranking:list', params) as Promise<{ rows: unknown[]; total: number }>,
   reset: (type: 'actor' | 'work') =>
-    api.invoke('master-ranking:reset', type),
+    api.invoke('master-ranking:reset', type) as Promise<{ ok: boolean; seasonId: number; seasonName: string }>,
   recalcRun: (runId: number) =>
     api.invoke('master-ranking:recalcRun', runId) as Promise<{ ok: boolean }>,
-  rankTrends: (type: 'actor' | 'work') =>
-    api.invoke('master-ranking:rank-trends', type) as Promise<{ item_id: number; prev_rank: number | null }[]>,
-  itemFormatStats: (type: 'actor' | 'work', itemId: number) =>
-    api.invoke('master-ranking:item-format-stats', { type, itemId }) as Promise<{ format: 'worldcup' | 'tournament' | 'league'; total_cups: number; cup_wins: number; total_matches: number; match_wins: number }[]>,
-  rankHistory: (type: 'actor' | 'work', itemId: number, limit?: number) =>
-    api.invoke('master-ranking:rank-history', { type, itemId, limit: limit ?? 0 }) as Promise<{ rank: number; recorded_at: string; tournament_name: string }[]>,
-  divisionHistory: (type: 'actor' | 'work', itemId: number) =>
-    api.invoke('master-ranking:division-history', { type, itemId }) as Promise<{ recorded_at: string; rank: number; total_points: number }[]>,
-  itemStats: (type: 'actor' | 'work', itemId: number) =>
-    api.invoke('master-ranking:item-stats', { type, itemId }) as Promise<{ rank: number; total_points: number; total_cups: number; cup_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number }>,
+  rankTrends: (type: 'actor' | 'work', seasonId?: number) =>
+    api.invoke('master-ranking:rank-trends', type, seasonId) as Promise<{ item_id: number; prev_rank: number | null }[]>,
+  itemFormatStats: (type: 'actor' | 'work', itemId: number, seasonId?: number) =>
+    api.invoke('master-ranking:item-format-stats', { type, itemId, seasonId }) as Promise<{ format: 'worldcup' | 'tournament' | 'league'; total_cups: number; cup_wins: number; total_matches: number; match_wins: number }[]>,
+  rankHistory: (type: 'actor' | 'work', itemId: number, limit?: number, seasonId?: number) =>
+    api.invoke('master-ranking:rank-history', { type, itemId, limit: limit ?? 0, seasonId }) as Promise<{ rank: number; recorded_at: string; tournament_name: string }[]>,
+  divisionHistory: (type: 'actor' | 'work', itemId: number, seasonId?: number) =>
+    api.invoke('master-ranking:division-history', { type, itemId, seasonId }) as Promise<{ recorded_at: string; rank: number; total_points: number }[]>,
+  itemStats: (type: 'actor' | 'work', itemId: number, seasonId?: number) =>
+    api.invoke('master-ranking:item-stats', { type, itemId, seasonId }) as Promise<{ rank: number; total_points: number; total_cups: number; cup_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number }>,
+  seasons: (type: 'actor' | 'work') =>
+    api.invoke('master-ranking:seasons', type) as Promise<{ id: number; type: string; name: string; created_at: string; ended_at: string }[]>,
+  seasonDelete: (seasonId: number) =>
+    api.invoke('master-ranking:season-delete', seasonId) as Promise<{ ok: boolean }>,
   workActorDistribution: () =>
     api.invoke('master-ranking:work-actor-distribution') as Promise<{
       divisions: { division: number; actors: { id: number; name: string; photo_path: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number; actor_rank: number | null }[] }[]

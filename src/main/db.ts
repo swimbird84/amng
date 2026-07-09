@@ -477,4 +477,22 @@ export function initDatabase(): void {
     )
   `)
 
+  // master_ranking_seasons 테이블 추가
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS master_ranking_seasons (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL CHECK(type IN ('actor', 'work')),
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      ended_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+
+  // master_ranking_history.season_id 컬럼 추가
+  const mrhCols = (db.prepare("PRAGMA table_info(master_ranking_history)").all() as { name: string }[]).map(c => c.name)
+  if (!mrhCols.includes('season_id')) {
+    db.prepare('ALTER TABLE master_ranking_history ADD COLUMN season_id INTEGER REFERENCES master_ranking_seasons(id) ON DELETE CASCADE').run()
+    db.exec('CREATE INDEX IF NOT EXISTS idx_master_ranking_history_season ON master_ranking_history(season_id)')
+  }
+
 }

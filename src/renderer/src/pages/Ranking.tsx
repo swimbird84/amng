@@ -105,19 +105,23 @@ export default function Ranking({ onNavigateToActor }: Props) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [masterRanks, setMasterRanks] = useState<Map<number, { total_points: number; rank: number }>>(new Map())
   const [masterTrends, setMasterTrends] = useState<Map<number, number | null>>(new Map())
+  const [seasons, setSeasons] = useState<{ id: number; name: string }[]>([])
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
 
   const loadData = useCallback(async () => {
     const data = await actorsApi.physicalData() as ActorPhysicalData[]
     setActors(data)
   }, [])
 
-  const loadMasterRanking = useCallback(async () => {
-    const [res, trends] = await Promise.all([
-      masterRankingApi.list({ type: 'actor', limit: 9999, offset: 0 }) as Promise<{ rows: { id: number; total_points: number; rank: number }[]; total: number }>,
-      masterRankingApi.rankTrends('actor') as Promise<{ item_id: number; prev_rank: number | null }[]>,
+  const loadMasterRanking = useCallback(async (sid: number | null = null) => {
+    const [res, trends, seasonList] = await Promise.all([
+      masterRankingApi.list({ type: 'actor', limit: 9999, offset: 0, ...(sid !== null ? { seasonId: sid } : {}) }) as Promise<{ rows: { id: number; total_points: number; rank: number }[]; total: number }>,
+      masterRankingApi.rankTrends('actor', sid ?? undefined) as Promise<{ item_id: number; prev_rank: number | null }[]>,
+      masterRankingApi.seasons('actor'),
     ])
     setMasterRanks(new Map(res.rows.map(r => [r.id, { total_points: r.total_points, rank: r.rank }])))
     setMasterTrends(new Map(trends.map(t => [t.item_id, t.prev_rank])))
+    setSeasons(seasonList.map(s => ({ id: s.id, name: s.name })))
   }, [])
 
   useEffect(() => {
@@ -130,8 +134,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
   useDataChanged(() => loadData())
 
   useEffect(() => {
-    if (rankBy === 'masterRanking') loadMasterRanking()
-  }, [rankBy, loadMasterRanking])
+    if (rankBy === 'masterRanking') loadMasterRanking(selectedSeasonId)
+  }, [rankBy, selectedSeasonId, loadMasterRanking])
 
   const stats = useMemo(() => computeStats(actors), [actors])
 
@@ -276,6 +280,18 @@ export default function Ranking({ onNavigateToActor }: Props) {
       <div className="px-4 pb-3 flex items-center gap-2">
         <h2 className="text-white font-bold text-base">{title}</h2>
         <span className="text-xs text-gray-500">{ranked.length}명</span>
+        {rankBy === 'masterRanking' && (
+          <select
+            value={selectedSeasonId ?? ''}
+            onChange={e => setSelectedSeasonId(e.target.value === '' ? null : Number(e.target.value))}
+            className="bg-gray-800 text-gray-300 text-xs rounded px-2 py-1 border-none outline-none cursor-pointer hover:text-white"
+          >
+            <option value="">{seasons.length + 1}시즌(현재)</option>
+            {seasons.map(s => (
+              <option key={s.id} value={s.id}>{s.name}시즌</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* 랭킹 목록 */}

@@ -12,32 +12,36 @@ function getRecentRunLimit(database: DB, type: 'actor' | 'work'): number {
 
 // recentRunLimit에 따른 포인트 집계 SQL 조각 생성
 // limit=0: 전체 누적, limit>0: 최근 N회만 합산
-function buildPointsCte(type: 'actor' | 'work', limit: number, alias = 'pts', masterOnly = true): string {
+// seasonId: null=현재시즌, number=과거시즌
+function buildPointsCte(type: 'actor' | 'work', limit: number, alias = 'pts', masterOnly = true, seasonId: number | null = null): string {
+  const seasonFilter = seasonId == null ? 'AND mh2.season_id IS NULL' : `AND mh2.season_id = ${seasonId}`
   const masterJoin = masterOnly
     ? `JOIN cup_runs r ON r.id = mh2.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1`
     : ''
   if (limit <= 0) {
     return `(SELECT mh2.item_id, SUM(mh2.points) AS total_points
       FROM master_ranking_history mh2 ${masterJoin}
-      WHERE mh2.type = '${type}'
+      WHERE mh2.type = '${type}' ${seasonFilter}
       GROUP BY mh2.item_id) ${alias}`
   }
   return `(SELECT mh.item_id, SUM(mh.points) AS total_points
     FROM (
       SELECT mh2.item_id, mh2.points, ROW_NUMBER() OVER (PARTITION BY mh2.item_id ORDER BY mh2.recorded_at DESC) AS rn
       FROM master_ranking_history mh2 ${masterJoin}
-      WHERE mh2.type = '${type}'
+      WHERE mh2.type = '${type}' ${seasonFilter}
     ) mh WHERE rn <= ${limit} GROUP BY mh.item_id) ${alias}`
 }
 
 // 특정 시점까지의 포인트 집계 SQL (rank-history, division-history용)
-function buildPointsAtTimeSql(type: 'actor' | 'work', limit: number): string {
+// seasonId: null=현재시즌, number=과거시즌
+function buildPointsAtTimeSql(type: 'actor' | 'work', limit: number, seasonId: number | null = null): string {
+  const seasonFilter = seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`
   if (limit <= 0) {
     return `SELECT mh.item_id, SUM(mh.points) AS total
       FROM master_ranking_history mh
       JOIN cup_runs r ON r.id = mh.run_id
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-      WHERE mh.type = ? AND r.completed_at <= ?
+      WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilter}
       GROUP BY mh.item_id`
   }
   return `SELECT item_id, SUM(pts) AS total FROM (
@@ -46,7 +50,7 @@ function buildPointsAtTimeSql(type: 'actor' | 'work', limit: number): string {
     FROM master_ranking_history mh
     JOIN cup_runs r ON r.id = mh.run_id
     JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-    WHERE mh.type = ? AND r.completed_at <= ?
+    WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilter}
   ) WHERE rn <= ${limit} GROUP BY item_id`
 }
 
@@ -884,8 +888,8 @@ export function registerCupHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('master-ranking:list', (_e, params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc' }) => {
-    const { type, limit = 50, offset = 0, search, division, sortBy = 'total_points', sortDir = 'desc' } = params
+  ipcMain.handle('master-ranking:list', (_e, params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc'; seasonId?: number }) => {
+    const { type, limit = 50, offset = 0, search, division, sortBy = 'total_points', sortDir = 'desc', seasonId = null } = params
     const dir = sortDir === 'asc' ? 'ASC' : 'DESC'
     const nameSortCol = type === 'actor' ? 'name' : 'title'
     const orderBy = (() => {
@@ -917,7 +921,8 @@ export function registerCupHandlers(): void {
     const searchWhere = search ? (type === 'actor' ? ` AND name LIKE ?` : ` AND (title LIKE ? OR product_number LIKE ?)`) : ''
     const searchBindings: unknown[] = search ? (type === 'work' ? [`%${search}%`, `%${search}%`] : [`%${search}%`]) : []
     const rl = getRecentRunLimit(db(), type)
-    const ptsCte = buildPointsCte(type, rl)
+    const ptsCte = buildPointsCte(type, rl, 'pts', true, seasonId)
+    const seasonFilter = seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`
     if (type === 'actor') {
       const cte = `
         WITH ranked AS (
@@ -947,7 +952,7 @@ export function registerCupHandlers(): void {
           COALESCE(cs_match.match_wins, 0) AS match_wins,
           (SELECT mh.points FROM master_ranking_history mh
            JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-           WHERE mh.type = 'actor' AND mh.item_id = ranked.id
+           WHERE mh.type = 'actor' AND mh.item_id = ranked.id ${seasonFilter}
            ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
         FROM ranked
         LEFT JOIN (
@@ -1002,7 +1007,7 @@ export function registerCupHandlers(): void {
           COALESCE(cs_match.match_wins, 0) AS match_wins,
           (SELECT mh.points FROM master_ranking_history mh
            JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-           WHERE mh.type = 'work' AND mh.item_id = ranked.id
+           WHERE mh.type = 'work' AND mh.item_id = ranked.id ${seasonFilter}
            ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
         FROM ranked
         LEFT JOIN studios s ON s.id = ranked.studio_id
@@ -1036,10 +1041,10 @@ export function registerCupHandlers(): void {
     }
   })
 
-  ipcMain.handle('master-ranking:item-stats', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
-    const { type, itemId } = params
+  ipcMain.handle('master-ranking:item-stats', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number }) => {
+    const { type, itemId, seasonId = null } = params
     const rl = getRecentRunLimit(db(), type)
-    const ptsCte = buildPointsCte(type, rl, 'pts', true)
+    const ptsCte = buildPointsCte(type, rl, 'pts', true, seasonId)
     const ptsRow = db().prepare(`SELECT total_points FROM ${ptsCte} WHERE pts.item_id = ?`).get(itemId) as { total_points: number } | undefined
     const totalPoints = ptsRow?.total_points ?? 0
     const rankRow = db().prepare(`
@@ -1077,19 +1082,22 @@ export function registerCupHandlers(): void {
     }
   })
 
-  ipcMain.handle('master-ranking:rank-trends', (_e, type: 'actor' | 'work') => {
+  ipcMain.handle('master-ranking:rank-trends', (_e, type: 'actor' | 'work', seasonId?: number) => {
+    const sid = seasonId ?? null
+    const seasonFilter = sid == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${sid}`
     // Get most recent completed master run
     const latestRun = db().prepare(`
       SELECT r.completed_at FROM cup_runs r
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+      JOIN master_ranking_history mh ON mh.run_id = r.id AND mh.type = ? ${seasonFilter}
       WHERE r.status = 'completed'
       ORDER BY r.completed_at DESC LIMIT 1
-    `).get() as { completed_at: string } | undefined
+    `).get(type) as { completed_at: string } | undefined
     if (!latestRun) return []
 
     const rl = getRecentRunLimit(db(), type)
     // Current points per item
-    const currentRows = db().prepare(`SELECT item_id, total_points AS pts FROM ${buildPointsCte(type, rl)}`).all() as { item_id: number; pts: number }[]
+    const currentRows = db().prepare(`SELECT item_id, total_points AS pts FROM ${buildPointsCte(type, rl, 'pts', true, sid)}`).all() as { item_id: number; pts: number }[]
 
     // Previous points (excluding most recent run)
     const prevPtsSql = rl <= 0
@@ -1097,7 +1105,7 @@ export function registerCupHandlers(): void {
         FROM master_ranking_history mh
         JOIN cup_runs r ON r.id = mh.run_id
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-        WHERE mh.type = ? AND r.completed_at < ?
+        WHERE mh.type = ? AND r.completed_at < ? ${seasonFilter}
         GROUP BY mh.item_id`
       : `SELECT item_id, SUM(pts) AS total FROM (
         SELECT mh.item_id, mh.points AS pts,
@@ -1105,7 +1113,7 @@ export function registerCupHandlers(): void {
         FROM master_ranking_history mh
         JOIN cup_runs r ON r.id = mh.run_id
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-        WHERE mh.type = ? AND r.completed_at < ?
+        WHERE mh.type = ? AND r.completed_at < ? ${seasonFilter}
       ) WHERE rn <= ${rl} GROUP BY item_id`
     const prevRows = db().prepare(prevPtsSql).all(type, latestRun.completed_at) as { item_id: number; total: number }[]
     const prevMapped = prevRows.map(r => ({ item_id: r.item_id, pts: r.total }))
@@ -1121,19 +1129,21 @@ export function registerCupHandlers(): void {
     }))
   })
 
-  ipcMain.handle('master-ranking:rank-history', (_e, params: { type: 'actor' | 'work'; itemId: number; limit?: number }) => {
-    const { type, itemId, limit = 0 } = params
+  ipcMain.handle('master-ranking:rank-history', (_e, params: { type: 'actor' | 'work'; itemId: number; limit?: number; seasonId?: number }) => {
+    const { type, itemId, limit = 0, seasonId = null } = params
+    const seasonFilter = seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`
     const limitClause = limit > 0 ? `LIMIT ${limit}` : ''
     const runs = db().prepare(`
-      SELECT r.id, r.completed_at, t.name AS tournament_name FROM cup_runs r
+      SELECT DISTINCT r.id, r.completed_at, t.name AS tournament_name FROM cup_runs r
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+      JOIN master_ranking_history mh ON mh.run_id = r.id AND mh.type = ? ${seasonFilter}
       WHERE r.status = 'completed' AND t.type = ?
       ORDER BY r.completed_at DESC ${limitClause}
-    `).all(type) as { id: number; completed_at: string; tournament_name: string }[]
+    `).all(type, type) as { id: number; completed_at: string; tournament_name: string }[]
     if (runs.length === 0) return []
     runs.reverse()
     const rl = getRecentRunLimit(db(), type)
-    const atTimeSql = buildPointsAtTimeSql(type, rl)
+    const atTimeSql = buildPointsAtTimeSql(type, rl, seasonId)
     const result: { rank: number; recorded_at: string; tournament_name: string }[] = []
     for (const run of runs) {
       const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
@@ -1144,15 +1154,18 @@ export function registerCupHandlers(): void {
     return result
   })
 
-  ipcMain.handle('master-ranking:item-format-stats', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
-    const { type, itemId } = params
+  ipcMain.handle('master-ranking:item-format-stats', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number }) => {
+    const { type, itemId, seasonId = null } = params
+    const seasonRunFilter = seasonId == null
+      ? `AND EXISTS (SELECT 1 FROM master_ranking_history mh WHERE mh.run_id = r.id AND mh.season_id IS NULL)`
+      : `AND EXISTS (SELECT 1 FROM master_ranking_history mh WHERE mh.run_id = r.id AND mh.season_id = ${seasonId})`
     const rows = db().prepare(`
       WITH entry_stats AS (
         SELECT t.format,
           COUNT(DISTINCT e.run_id) AS total_cups,
           SUM(CASE WHEN r.winner_id = ? THEN 1 ELSE 0 END) AS cup_wins
         FROM cup_entries e
-        JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+        JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' ${seasonRunFilter}
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
         WHERE e.item_id = ?
         GROUP BY t.format
@@ -1162,7 +1175,7 @@ export function registerCupHandlers(): void {
           CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
           CASE WHEN m.winner_id = ? THEN 1 ELSE 0 END AS is_win
         FROM cup_matches m
-        JOIN cup_runs r ON r.id = m.run_id AND r.status = 'completed'
+        JOIN cup_runs r ON r.id = m.run_id AND r.status = 'completed' ${seasonRunFilter}
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
         WHERE m.item1_id = ? OR (m.item2_id IS NOT NULL AND m.item2_id = ?)
       ),
@@ -1184,9 +1197,28 @@ export function registerCupHandlers(): void {
   })
 
   ipcMain.handle('master-ranking:reset', (_e, type: 'actor' | 'work') => {
-    const inProgress = db().prepare(`SELECT 1 FROM cup_runs WHERE status = 'in_progress' LIMIT 1`).get()
-    if (inProgress) throw new Error('진행 중인 대회가 있어 리셋할 수 없습니다')
-    db().prepare(`DELETE FROM master_ranking_history WHERE type = ?`).run(type)
+    const inProgress = db().prepare(`
+      SELECT 1 FROM cup_runs r
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+      WHERE r.status = 'in_progress' LIMIT 1
+    `).get(type)
+    if (inProgress) throw new Error('진행 중인 마스터 대회가 있어 시즌을 종료할 수 없습니다')
+    const hasData = db().prepare(`SELECT 1 FROM master_ranking_history WHERE type = ? AND season_id IS NULL LIMIT 1`).get(type)
+    if (!hasData) throw new Error('현재 시즌에 데이터가 없습니다')
+    const countRow = db().prepare(`SELECT COUNT(*) AS cnt FROM master_ranking_seasons WHERE type = ?`).get(type) as { cnt: number }
+    const seasonName = String(countRow.cnt + 1)
+    const result = db().prepare(`INSERT INTO master_ranking_seasons (type, name) VALUES (?, ?)`).run(type, seasonName)
+    const seasonId = result.lastInsertRowid
+    db().prepare(`UPDATE master_ranking_history SET season_id = ? WHERE type = ? AND season_id IS NULL`).run(seasonId, type)
+    return { ok: true, seasonId, seasonName }
+  })
+
+  ipcMain.handle('master-ranking:seasons', (_e, type: 'actor' | 'work') => {
+    return db().prepare(`SELECT id, type, name, created_at, ended_at FROM master_ranking_seasons WHERE type = ? ORDER BY id DESC`).all(type)
+  })
+
+  ipcMain.handle('master-ranking:season-delete', (_e, seasonId: number) => {
+    db().prepare(`DELETE FROM master_ranking_seasons WHERE id = ?`).run(seasonId)
     return { ok: true }
   })
 
@@ -1203,26 +1235,29 @@ export function registerCupHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('cup:head-to-head', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
-    const { type, itemId } = params
+  ipcMain.handle('cup:head-to-head', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number }) => {
+    const { type, itemId, seasonId = null } = params
+    const seasonRunFilter = seasonId == null
+      ? `AND EXISTS (SELECT 1 FROM master_ranking_history mh WHERE mh.run_id = r.id AND mh.season_id IS NULL)`
+      : `AND EXISTS (SELECT 1 FROM master_ranking_history mh WHERE mh.run_id = r.id AND mh.season_id = ${seasonId})`
     const h2hRow = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
     const h2hMin = h2hRow ? (JSON.parse(h2hRow.settings_json).h2hMinMatches ?? 3) : 3
     const rows = db().prepare(`
       WITH h2h AS (
         SELECT item2_id AS opp_id, m.winner_id, m.is_draw
         FROM cup_matches m
-        JOIN cup_runs r ON r.id = m.run_id
+        JOIN cup_runs r ON r.id = m.run_id ${seasonRunFilter}
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = $type
         WHERE m.item1_id = $itemId AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
         UNION ALL
         SELECT item1_id AS opp_id, m.winner_id, m.is_draw
         FROM cup_matches m
-        JOIN cup_runs r ON r.id = m.run_id
+        JOIN cup_runs r ON r.id = m.run_id ${seasonRunFilter}
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = $type
         WHERE m.item2_id = $itemId AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
       ),
       pts AS (
-        SELECT item_id, total_points FROM ${buildPointsCte(type, getRecentRunLimit(db(), type), 'rpt', false)}
+        SELECT item_id, total_points FROM ${buildPointsCte(type, getRecentRunLimit(db(), type), 'rpt', false, seasonId)}
       ),
       ranked AS (
         SELECT item_id, RANK() OVER (ORDER BY total_points DESC) AS opp_rank
@@ -1247,18 +1282,19 @@ export function registerCupHandlers(): void {
     return rows.filter(r => r.opp_id != null && infoMap.has(r.opp_id)).map(r => ({ ...r, losses: r.total - r.wins - r.draws, ...infoMap.get(r.opp_id)! }))
   })
 
-  ipcMain.handle('master-ranking:division-history', (_e, params: { type: 'actor' | 'work'; itemId: number }) => {
-    const { type, itemId } = params
+  ipcMain.handle('master-ranking:division-history', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number }) => {
+    const { type, itemId, seasonId = null } = params
+    const seasonFilter = seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`
     const itemHistory = db().prepare(`
       SELECT mh.run_id, mh.points, r.completed_at
       FROM master_ranking_history mh
       JOIN cup_runs r ON r.id = mh.run_id
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-      WHERE mh.item_id = ?
+      WHERE mh.item_id = ? ${seasonFilter}
       ORDER BY r.completed_at ASC
     `).all(type, itemId) as { run_id: number; points: number; completed_at: string }[]
     const rl = getRecentRunLimit(db(), type)
-    const atTimeSql = buildPointsAtTimeSql(type, rl)
+    const atTimeSql = buildPointsAtTimeSql(type, rl, seasonId)
     const result: { recorded_at: string; rank: number; total_points: number }[] = []
     for (const run of itemHistory) {
       const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
@@ -1269,15 +1305,15 @@ export function registerCupHandlers(): void {
     return result
   })
 
-  ipcMain.handle('cup:division-counts', (_e, params: { type: 'actor' | 'work' }) => {
-    const { type } = params
+  ipcMain.handle('cup:division-counts', (_e, params: { type: 'actor' | 'work'; seasonId?: number }) => {
+    const { type, seasonId = null } = params
     const divBoundaries = [32, 96, 224, 480, 992, 2016]
     const itemCol = type === 'actor' ? 'a.id' : 'w.id'
     const fromClause = type === 'actor' ? 'actors a' : 'works w'
     const rl = getRecentRunLimit(db(), type)
     const ranked = db().prepare(`
       WITH pts AS (
-        SELECT item_id, total_points FROM ${buildPointsCte(type, rl, 'rpt')}
+        SELECT item_id, total_points FROM ${buildPointsCte(type, rl, 'rpt', true, seasonId)}
       ),
       mrc AS (
         SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count

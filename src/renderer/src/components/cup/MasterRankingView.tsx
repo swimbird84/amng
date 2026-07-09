@@ -23,6 +23,9 @@ export default function MasterRankingView({
   const [type, setType] = useState<'actor' | 'work'>(() =>
     (localStorage.getItem('masterRank:type') as 'actor' | 'work') || 'actor'
   )
+  const [seasons, setSeasons] = useState<{ id: number; name: string }[]>([])
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null) // null = 현재 시즌
+  const isCurrentSeason = selectedSeasonId === null
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [divFilter, setDivFilter] = useState<number | null>(null)
@@ -32,7 +35,7 @@ export default function MasterRankingView({
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState<'actor' | 'work' | false>(false)
   const [pageSize, setPageSize] = useState<number>(() => {
     const saved = parseInt(localStorage.getItem('masterRank:pageSize') ?? '', 10)
     return MASTER_PAGE_SIZES.includes(saved) ? saved : MASTER_PAGE_SIZES[0]
@@ -75,7 +78,7 @@ export default function MasterRankingView({
   const [rankChartHover, setRankChartHover] = useState<number | null>(null)
   const [rankChartTooltip, setRankChartTooltip] = useState<TooltipState | null>(null)
 
-  const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc') => {
+  const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc', sid: number | null = null) => {
     setLoading(true)
     try {
       const data = await masterRankingApi.list({
@@ -83,6 +86,7 @@ export default function MasterRankingView({
         search: s || undefined,
         ...(div !== null ? { division: div } : {}),
         sortBy: sb, sortDir: sd,
+        ...(sid !== null ? { seasonId: sid } : {}),
       })
       setRows(data.rows as MasterRankRow[])
       setTotal(data.total)
@@ -91,23 +95,26 @@ export default function MasterRankingView({
     }
   }, [])
 
-  const loadTrends = useCallback(async (t: 'actor' | 'work') => {
-    const trends = await masterRankingApi.rankTrends(t)
+  const loadTrends = useCallback(async (t: 'actor' | 'work', sid: number | null = null) => {
+    const trends = await masterRankingApi.rankTrends(t, sid ?? undefined)
     setRankTrends(new Map(trends.map(r => [r.item_id, r.prev_rank])))
   }, [])
 
-  useEffect(() => { setPage(0); setDivFilter(null) }, [type])
-  useEffect(() => { setPage(0) }, [search, divFilter, pageSize, sortBy, sortDir])
-  useEffect(() => { load(type, search, page, divFilter, pageSize, sortBy, sortDir) }, [type, search, page, divFilter, pageSize, sortBy, sortDir, load])
+  useEffect(() => { setPage(0); setDivFilter(null); setSelectedSeasonId(null) }, [type])
+  useEffect(() => { setPage(0) }, [search, divFilter, pageSize, sortBy, sortDir, selectedSeasonId])
+  useEffect(() => { load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId) }, [type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, load])
 
-  useDataChanged(() => load(type, search, page, divFilter, pageSize, sortBy, sortDir))
-  useEffect(() => { loadTrends(type) }, [type, loadTrends])
+  useDataChanged(() => load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId))
+  useEffect(() => { loadTrends(type, selectedSeasonId) }, [type, selectedSeasonId, loadTrends])
   useEffect(() => { localStorage.setItem('masterRank:type', type) }, [type])
   useEffect(() => { localStorage.setItem('masterRank:pageSize', String(pageSize)) }, [pageSize])
   useEffect(() => { localStorage.setItem('masterRank:sortBy', sortBy) }, [sortBy])
   useEffect(() => { localStorage.setItem('masterRank:sortDir', sortDir) }, [sortDir])
   useEffect(() => {
-    cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+    cupApi.divisionCounts(type, selectedSeasonId ?? undefined).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+  }, [type, selectedSeasonId])
+  useEffect(() => {
+    masterRankingApi.seasons(type).then(s => setSeasons(s.map(r => ({ id: r.id, name: r.name })))).catch(() => setSeasons([]))
   }, [type])
 
   useEffect(() => {
@@ -133,23 +140,23 @@ export default function MasterRankingView({
     if (!rankChartModal) return
     setRankChartData(null)
     const cfg = CHART_RANGE_CONFIG[rankChartDiv] ?? CHART_RANGE_CONFIG[0]
-    dashboardApi.rankChangeChart(type, rankChartLimit, cfg.rankFrom, cfg.rankTo).then(setRankChartData)
-  }, [rankChartModal, type, rankChartLimit, rankChartDiv])
+    dashboardApi.rankChangeChart(type, rankChartLimit, cfg.rankFrom, cfg.rankTo, selectedSeasonId ?? undefined).then(setRankChartData)
+  }, [rankChartModal, type, rankChartLimit, rankChartDiv, selectedSeasonId])
 
   // 추이 모달 데이터 로드
   useEffect(() => {
     if (!detailModal) return
-    const cacheKey = `${detailModal.itemId}_${trendLimitApi}`
+    const cacheKey = `${detailModal.itemId}_${trendLimitApi}_${selectedSeasonId ?? 'cur'}`
     if (rankHistCache.current.has(cacheKey)) {
       setTrendHistory(rankHistCache.current.get(cacheKey)!)
     } else {
       setTrendHistory(null)
-      masterRankingApi.rankHistory(type, detailModal.itemId, trendLimitApi).then(data => {
+      masterRankingApi.rankHistory(type, detailModal.itemId, trendLimitApi, selectedSeasonId ?? undefined).then(data => {
         rankHistCache.current.set(cacheKey, data)
         setTrendHistory(data)
       })
     }
-  }, [detailModal, trendLimit, type])
+  }, [detailModal, trendLimit, type, selectedSeasonId])
 
   const imgPath = (row: MasterRankRow) => row.photo_path ?? row.cover_path ?? null
   const label = (row: MasterRankRow) => row.name ?? row.title ?? row.product_number ?? `#${row.id}`
@@ -158,7 +165,7 @@ export default function MasterRankingView({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setRateTooltip({ itemId: row.id, statType, top: rect.bottom + 4, left: rect.left + rect.width / 2 })
     if (!formatStatsCache.current.has(row.id)) {
-      const data = await masterRankingApi.itemFormatStats(type, row.id)
+      const data = await masterRankingApi.itemFormatStats(type, row.id, selectedSeasonId ?? undefined)
       formatStatsCache.current.set(row.id, data)
       setRateTooltip(prev => prev?.itemId === row.id ? { ...prev } : prev)
     }
@@ -239,25 +246,51 @@ export default function MasterRankingView({
             ))}
           </select>
 
-          {/* 설정 */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-400 hover:text-gray-200 text-sm transition"
-          >
-            ⚙ 설정
-          </button>
-          {/* 리셋 */}
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
-          >
-            리셋
-          </button>
+          {/* 설정 (현재 시즌만) */}
+          {isCurrentSeason && (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-400 hover:text-gray-200 text-sm transition"
+            >
+              ⚙ 설정
+            </button>
+          )}
+          {/* 시즌 종료 (현재 시즌만) */}
+          {isCurrentSeason && (
+            <>
+              <button
+                onClick={() => setShowResetConfirm('actor')}
+                className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
+              >
+                배우 시즌 종료
+              </button>
+              <button
+                onClick={() => setShowResetConfirm('work')}
+                className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
+              >
+                작품 시즌 종료
+              </button>
+            </>
+          )}
         </div>
 
-        {/* 부별 필터 */}
-        {divisionCounts.length > 0 && (
-          <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+        {/* 시즌 선택 + 부별 필터 */}
+        <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+          {/* 시즌 드롭다운 */}
+          <select
+            value={selectedSeasonId ?? ''}
+            onChange={e => setSelectedSeasonId(e.target.value === '' ? null : Number(e.target.value))}
+            className="bg-gray-800 text-gray-300 text-xs rounded px-2 py-1 border-none outline-none cursor-pointer hover:text-white"
+          >
+            <option value="">{seasons.length + 1}시즌(현재)</option>
+            {seasons.map(s => (
+              <option key={s.id} value={s.id}>{s.name}시즌</option>
+            ))}
+          </select>
+
+          {/* 부별 필터 */}
+          {divisionCounts.length > 0 && (<>
+
             <button
               onClick={() => setDivFilter(null)}
               className={`px-2.5 py-1 rounded text-xs font-medium transition ${divFilter === null ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}
@@ -300,8 +333,8 @@ export default function MasterRankingView({
             >
               랭킹차트
             </button>
-          </div>
-        )}
+          </>)}
+        </div>
       </div>
 
       {showActorDist && (
@@ -317,30 +350,35 @@ export default function MasterRankingView({
 
       {showSettings && <RankingSettingsModal onClose={() => {
         setShowSettings(false)
-        load(type, search, page, divFilter, pageSize, sortBy, sortDir)
-        loadTrends(type)
-        cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+        load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId)
+        loadTrends(type, selectedSeasonId)
+        cupApi.divisionCounts(type, selectedSeasonId ?? undefined).then(setDivisionCounts).catch(() => setDivisionCounts([]))
       }} />}
 
       {showResetConfirm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowResetConfirm(false)}>
           <div className="bg-gray-800 rounded-xl p-6 w-[360px] shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h2 className="text-base font-bold text-white mb-2">마스터 랭킹 리셋</h2>
-            <p className="text-sm text-gray-400 mb-6">
-              {type === 'actor' ? '배우' : '작품'} 마스터 랭킹 이력을 전부 삭제합니다.<br />
-              이 작업은 되돌릴 수 없습니다.
+            <h2 className="text-base font-bold text-white mb-2">{showResetConfirm === 'actor' ? '배우' : '작품'} 시즌 종료</h2>
+            <p className="text-sm text-gray-400 mb-2">
+              현재까지의 {showResetConfirm === 'actor' ? '배우' : '작품'} 랭킹 데이터를 시즌으로 보관하고 새 시즌을 시작합니다.
+            </p>
+            <p className="text-xs text-yellow-400 mb-6">
+              시즌 {seasons.filter(s => s.id).length + 1}으로 보관됩니다.
             </p>
             <div className="flex gap-2">
               <button
                 onClick={async () => {
-                  await masterRankingApi.reset(type)
+                  const resetType = showResetConfirm as 'actor' | 'work'
+                  await masterRankingApi.reset(resetType)
                   setShowResetConfirm(false)
-                  load(type, search, page, divFilter, pageSize, sortBy, sortDir)
-                  loadTrends(type)
+                  setSelectedSeasonId(null)
+                  masterRankingApi.seasons(type).then(s => setSeasons(s.map(r => ({ id: r.id, name: r.name })))).catch(() => setSeasons([]))
+                  load(type, search, page, divFilter, pageSize, sortBy, sortDir, null)
+                  loadTrends(type, null)
                   cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
                 }}
                 className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white rounded text-sm font-semibold"
-              >삭제</button>
+              >시즌 종료</button>
               <button
                 onClick={() => setShowResetConfirm(false)}
                 className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
@@ -493,7 +531,7 @@ export default function MasterRankingView({
                               setH2hModal({ itemId: row.id, lbl, img: imgPath(row) })
                               setH2hData(null)
                               setH2hLoading(true)
-                              cupApi.headToHead(type, row.id).then(setH2hData).catch(() => setH2hData([])).finally(() => setH2hLoading(false))
+                              cupApi.headToHead(type, row.id, selectedSeasonId ?? undefined).then(setH2hData).catch(() => setH2hData([])).finally(() => setH2hLoading(false))
                             }}
                             title="상대 전적"
                           >📄</button>

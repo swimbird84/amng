@@ -282,8 +282,9 @@ export function registerDashboardHandlers(): void {
     `).all()
   })
 
-  ipcMain.handle('dashboard:rank-change-chart', (_e, params: { type: 'actor' | 'work'; limit?: number; rankFrom?: number; rankTo?: number }) => {
-    const { type, limit = 10, rankFrom = 1, rankTo = 32 } = params
+  ipcMain.handle('dashboard:rank-change-chart', (_e, params: { type: 'actor' | 'work'; limit?: number; rankFrom?: number; rankTo?: number; seasonId?: number }) => {
+    const { type, limit = 10, rankFrom = 1, rankTo = 32, seasonId = null } = params
+    const seasonFilter = seasonId == null ? 'AND season_id IS NULL' : `AND season_id = ${seasonId}`
 
     // recentRunLimit 설정 읽기
     const rlRow = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
@@ -298,11 +299,11 @@ export function registerDashboardHandlers(): void {
     // 포인트 CTE (recentRunLimit 반영)
     let ptsCte: string
     if (recentRunLimit <= 0) {
-      ptsCte = `SELECT item_id, SUM(points) AS total_points FROM master_ranking_history WHERE type = '${type}' GROUP BY item_id`
+      ptsCte = `SELECT item_id, SUM(points) AS total_points FROM master_ranking_history WHERE type = '${type}' ${seasonFilter} GROUP BY item_id`
     } else {
       ptsCte = `SELECT item_id, SUM(points) AS total_points FROM (
         SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY recorded_at DESC) AS rn
-        FROM master_ranking_history WHERE type = '${type}'
+        FROM master_ranking_history WHERE type = '${type}' ${seasonFilter}
       ) WHERE rn <= ${recentRunLimit} GROUP BY item_id`
     }
 
@@ -311,7 +312,7 @@ export function registerDashboardHandlers(): void {
       WITH pts AS (${ptsCte}),
       mrc AS (
         SELECT item_id, COUNT(DISTINCT run_id) AS run_count
-        FROM master_ranking_history WHERE type = '${type}' GROUP BY item_id
+        FROM master_ranking_history WHERE type = '${type}' ${seasonFilter} GROUP BY item_id
       ),
       ranked AS (
         SELECT ${idCol} AS id, ${nameCol} AS name, ${photoCol} AS photo_path,
@@ -331,15 +332,16 @@ export function registerDashboardHandlers(): void {
     const itemIds = topItems.map(i => i.id)
     const itemMap = new Map(topItems.map(i => [i.id, i]))
 
-    // 2) 완료된 마스터 대회 run 목록 (최근 limit개)
+    // 2) 완료된 마스터 대회 run 목록 (최근 limit개, 해당 시즌만)
     const runs = db().prepare(`
-      SELECT r.id AS run_id, t.name AS tournament_name, r.completed_at
+      SELECT DISTINCT r.id AS run_id, t.name AS tournament_name, r.completed_at
       FROM cup_runs r
       JOIN cup_tournaments t ON t.id = r.tournament_id
+      JOIN master_ranking_history mh ON mh.run_id = r.id AND mh.type = ? ${seasonFilter}
       WHERE r.status = 'completed' AND t.type = ? AND t.is_master = 1
       ORDER BY r.completed_at DESC
       LIMIT ?
-    `).all(type, limit) as { run_id: number; tournament_name: string; completed_at: string }[]
+    `).all(type, type, limit) as { run_id: number; tournament_name: string; completed_at: string }[]
     runs.reverse()
 
     if (runs.length === 0) return { runs: [], series: [] }
@@ -355,7 +357,7 @@ export function registerDashboardHandlers(): void {
           FROM master_ranking_history mh
           JOIN cup_runs r ON r.id = mh.run_id
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-          WHERE mh.type = ? AND r.completed_at <= ?
+          WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilter}
           GROUP BY item_id`
       } else {
         atTimeSql = `SELECT item_id, SUM(pts) AS total FROM (
@@ -364,7 +366,7 @@ export function registerDashboardHandlers(): void {
           FROM master_ranking_history mh
           JOIN cup_runs r ON r.id = mh.run_id
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-          WHERE mh.type = ? AND r.completed_at <= ?
+          WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilter}
         ) WHERE rn <= ${recentRunLimit} GROUP BY item_id`
       }
       const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
