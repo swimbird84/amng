@@ -1644,7 +1644,7 @@ export function registerCupHandlers(): void {
         ? db().prepare(`
             SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
             FROM cup_entries e
-            JOIN cup_runs r ON r.id = e.run_id
+            JOIN cup_runs r ON r.id = e.run_id AND r.season_id IS NULL
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
             WHERE e.item_id IN (${ph})
             GROUP BY e.item_id

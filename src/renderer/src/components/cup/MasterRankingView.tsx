@@ -75,6 +75,7 @@ export default function MasterRankingView({
   const [rankChartModal, setRankChartModal] = useState(false)
   const [rankChartDiv, setRankChartDiv] = useState(0)
   const [rankChartLimit, setRankChartLimit] = useState(() => Number(localStorage.getItem('cup:rankChartLimit')) || 10)
+  const [chartSeasonId, setChartSeasonId] = useState<number | null>(null)
   const [rankChartData, setRankChartData] = useState<{
     runs: { runId: number; label: string; completedAt: string }[]
     series: { id: number; name: string; photo_path: string | null; currentRank: number; ranks: (number | null)[]; globalRanks: (number | null)[]; displayRanks: (number | null)[] }[]
@@ -144,8 +145,8 @@ export default function MasterRankingView({
     if (!rankChartModal) return
     setRankChartData(null)
     const cfg = CHART_RANGE_CONFIG[rankChartDiv] ?? CHART_RANGE_CONFIG[0]
-    dashboardApi.rankChangeChart(type, rankChartLimit, cfg.rankFrom, cfg.rankTo, selectedSeasonId ?? undefined).then(setRankChartData)
-  }, [rankChartModal, type, rankChartLimit, rankChartDiv, selectedSeasonId])
+    dashboardApi.rankChangeChart(type, rankChartLimit, cfg.rankFrom, cfg.rankTo, chartSeasonId ?? undefined).then(setRankChartData)
+  }, [rankChartModal, type, rankChartLimit, rankChartDiv, chartSeasonId])
 
   // 추이 모달 데이터 로드
   useEffect(() => {
@@ -333,7 +334,7 @@ export default function MasterRankingView({
               </>
             )}
             <button
-              onClick={() => setRankChartModal(true)}
+              onClick={() => { setChartSeasonId(selectedSeasonId); setRankChartModal(true) }}
               className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
             >
               랭킹차트
@@ -1007,6 +1008,17 @@ export default function MasterRankingView({
                   <option value={9999}>전체</option>
                 </select>
               </div>
+              <select
+                value={chartSeasonId === null ? '' : String(chartSeasonId)}
+                onChange={e => setChartSeasonId(e.target.value === '' ? null : Number(e.target.value))}
+                className="bg-gray-700 text-gray-300 text-xs rounded px-2 py-1 border-none outline-none cursor-pointer"
+              >
+                <option value="">{seasons.length + 1}시즌(현재)</option>
+                {seasons.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}시즌</option>
+                ))}
+                <option value="-1">전체</option>
+              </select>
               {rankChartData && (
                 <span className="text-xs text-gray-500">{rankChartData.series.length}명 · {rankChartData.runs.length}회</span>
               )}
