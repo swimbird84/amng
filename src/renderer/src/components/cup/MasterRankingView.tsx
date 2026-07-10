@@ -11,6 +11,7 @@ import ActorForm from '../ActorForm'
 import { pushEscHandler, popEscHandler } from '../../escManager'
 import { useDataChanged } from '../../dataEvents'
 import TournamentStatsModal from './TournamentStatsModal'
+import MasterRecordModal from './MasterRecordModal'
 
 export default function MasterRankingView({
   onBack,
@@ -70,6 +71,7 @@ export default function MasterRankingView({
   const [showActorDist, setShowActorDist] = useState(false)
   const [showLabelDist, setShowLabelDist] = useState(false)
   const [showTournamentStats, setShowTournamentStats] = useState(false)
+  const [recordModal, setRecordModal] = useState<{ id: number; name: string; img: string | null } | null>(null)
   const [rankChartModal, setRankChartModal] = useState(false)
   const [rankChartDiv, setRankChartDiv] = useState(0)
   const [rankChartLimit, setRankChartLimit] = useState(() => Number(localStorage.getItem('cup:rankChartLimit')) || 10)
@@ -361,6 +363,16 @@ export default function MasterRankingView({
         <TournamentStatsModal type={type} onClose={() => setShowTournamentStats(false)} />
       )}
 
+      {recordModal && (
+        <MasterRecordModal
+          type={type}
+          itemId={recordModal.id}
+          itemName={recordModal.name}
+          itemImage={recordModal.img}
+          onClose={() => setRecordModal(null)}
+        />
+      )}
+
       {showSettings && <RankingSettingsModal onClose={() => {
         setShowSettings(false)
         load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId)
@@ -486,7 +498,12 @@ export default function MasterRankingView({
                         </span>
                       </td>
                       {/* 썸네일 */}
-                      <td className="p-0 h-14" onMouseEnter={() => img && setImgOverlay({ path: img })} onMouseLeave={() => setImgOverlay(null)}>
+                      <td
+                        className="p-0 h-14 cursor-pointer"
+                        onMouseEnter={() => img && setImgOverlay({ path: img })}
+                        onMouseLeave={() => setImgOverlay(null)}
+                        onClick={() => { setImgOverlay(null); setRecordModal({ id: row.id, name: lbl, img }) }}
+                      >
                         {img
                           ? <ImagePreview path={img} alt={lbl} className="w-full h-14 object-cover" objectPosition="center 10%" />
                           : <div className="w-full h-14 bg-gray-700 flex items-center justify-center text-gray-600 text-xs">?</div>

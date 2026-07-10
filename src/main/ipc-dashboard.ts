@@ -284,7 +284,10 @@ export function registerDashboardHandlers(): void {
 
   ipcMain.handle('dashboard:rank-change-chart', (_e, params: { type: 'actor' | 'work'; limit?: number; rankFrom?: number; rankTo?: number; seasonId?: number }) => {
     const { type, limit = 10, rankFrom = 1, rankTo = 32, seasonId = null } = params
-    const seasonFilter = seasonId === -1 ? '' : (seasonId == null ? 'AND season_id IS NULL' : `AND season_id = ${seasonId}`)
+    // seasonFilterBare: 단독 테이블 쿼리용 (alias 없음)
+    const seasonFilterBare = seasonId === -1 ? '' : (seasonId == null ? 'AND season_id IS NULL' : `AND season_id = ${seasonId}`)
+    // seasonFilterMh: mh alias JOIN 쿼리용
+    const seasonFilterMh = seasonId === -1 ? '' : (seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`)
     const seasonRunFilter = seasonId === -1 ? '' : (seasonId == null ? 'AND r.season_id IS NULL' : `AND r.season_id = ${seasonId}`)
 
     // recentRunLimit 설정 읽기
@@ -300,11 +303,11 @@ export function registerDashboardHandlers(): void {
     // 포인트 CTE (recentRunLimit 반영)
     let ptsCte: string
     if (recentRunLimit <= 0) {
-      ptsCte = `SELECT item_id, SUM(points) AS total_points FROM master_ranking_history WHERE type = '${type}' ${seasonFilter} GROUP BY item_id`
+      ptsCte = `SELECT item_id, SUM(points) AS total_points FROM master_ranking_history WHERE type = '${type}' ${seasonFilterBare} GROUP BY item_id`
     } else {
       ptsCte = `SELECT item_id, SUM(points) AS total_points FROM (
         SELECT item_id, points, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY recorded_at DESC) AS rn
-        FROM master_ranking_history WHERE type = '${type}' ${seasonFilter}
+        FROM master_ranking_history WHERE type = '${type}' ${seasonFilterBare}
       ) WHERE rn <= ${recentRunLimit} GROUP BY item_id`
     }
 
@@ -313,7 +316,7 @@ export function registerDashboardHandlers(): void {
       WITH pts AS (${ptsCte}),
       mrc AS (
         SELECT item_id, COUNT(DISTINCT run_id) AS run_count
-        FROM master_ranking_history WHERE type = '${type}' ${seasonFilter} GROUP BY item_id
+        FROM master_ranking_history WHERE type = '${type}' ${seasonFilterBare} GROUP BY item_id
       ),
       ranked AS (
         SELECT ${idCol} AS id, ${nameCol} AS name, ${photoCol} AS photo_path,
@@ -357,7 +360,7 @@ export function registerDashboardHandlers(): void {
           FROM master_ranking_history mh
           JOIN cup_runs r ON r.id = mh.run_id
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-          WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilter}
+          WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilterMh}
           GROUP BY item_id`
       } else {
         atTimeSql = `SELECT item_id, SUM(pts) AS total FROM (
@@ -366,7 +369,7 @@ export function registerDashboardHandlers(): void {
           FROM master_ranking_history mh
           JOIN cup_runs r ON r.id = mh.run_id
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
-          WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilter}
+          WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilterMh}
         ) WHERE rn <= ${recentRunLimit} GROUP BY item_id`
       }
       const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]

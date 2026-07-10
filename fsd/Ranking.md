@@ -53,6 +53,8 @@
 ### 5. 마스터 랭킹 모드
 - `masterRanking` 선택 시 대회 시스템의 마스터 포인트 기반 랭킹
 - 순위 변동 표시 (NEW, 상승, 하락, 유지)
+- 시즌 선택 드롭다운 (타이틀 인원수 뒤, 현재/과거/전체)
+- 타이틀: "마스터 랭킹 N명" (드롭다운 기준명 "마스터랭킹"은 유지, 표시만 "마스터"로 치환)
 
 ### 6. 카드 레이아웃
 - 1~5위: 5열 그리드 (큰 카드, h-40)
@@ -64,8 +66,9 @@
 | API 함수 | IPC 채널 | 설명 |
 |----------|----------|------|
 | `actorsApi.physicalData()` | `actors:physical-data` | 전체 배우 피지컬 데이터 (점수, 신체, 작품수, 찜작품수 포함) |
-| `masterRankingApi.list({ type: 'actor', limit: 9999 })` | `master-ranking:list` | 마스터 랭킹 포인트 (마스터랭킹 모드 시) |
-| `masterRankingApi.rankTrends('actor')` | `master-ranking:rank-trends` | 순위 변동 (이전 순위 대비) |
+| `masterRankingApi.list({ type: 'actor', limit: 9999, seasonId? })` | `master-ranking:list` | 마스터 랭킹 포인트 (마스터랭킹 모드 시, 시즌 지원) |
+| `masterRankingApi.rankTrends('actor', seasonId?)` | `master-ranking:rank-trends` | 순위 변동 (이전 순위 대비, 시즌 지원) |
+| `masterRankingApi.seasons('actor')` | `master-ranking:seasons` | 시즌 목록 조회 |
 
 ## 클라이언트 사이드 로직
 
