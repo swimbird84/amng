@@ -2286,12 +2286,13 @@ export function registerCupHandlers(): void {
   ipcMain.handle('cup:tournament-stats', (_e, tournamentId: number) => {
     const tInfo = db().prepare(`SELECT type, is_master, filter_json FROM cup_tournaments WHERE id = ?`).get(tournamentId) as { type: string; is_master: number; filter_json: string | null } | undefined
     if (!tInfo) return null
+    const seasonRunCond = tInfo.is_master ? 'AND season_id IS NULL' : ''
 
     const runStats = db().prepare(`
       SELECT COUNT(*) AS total_runs,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_runs,
         MAX(started_at) AS last_run_at
-      FROM cup_runs WHERE tournament_id = ?
+      FROM cup_runs WHERE tournament_id = ? ${seasonRunCond}
     `).get(tournamentId) as { total_runs: number; completed_runs: number; last_run_at: string | null } | undefined
     if (!runStats) return null
 
@@ -2308,7 +2309,7 @@ export function registerCupHandlers(): void {
       const allEntries = db().prepare(`
         SELECT e.item_id, COUNT(DISTINCT e.run_id) AS run_count
         FROM cup_entries e
-        JOIN cup_runs r ON r.id = e.run_id
+        JOIN cup_runs r ON r.id = e.run_id AND r.season_id IS NULL
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
         ${existsJoin}
         GROUP BY e.item_id
