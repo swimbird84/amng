@@ -62,17 +62,22 @@
 | `cup:head-to-head` | 상대전적 |
 | `cup:list` | 마스터 대회 최근 런 (현재 시즌만) |
 | `cup:get` | 마스터 대회 런 조회 (현재 시즌만) |
-| `cup:start` | 대회 시작 시 division 계산 (현재 시즌 기준) |
+| `cup:start` | 대회 시작 시 division 계산 + 참가횟수 집계 (현재 시즌 기준) |
 | `cup:tournament-stats` | 개별 대회 통계 (현재 시즌만) |
-| `dashboard:rank-change-chart` | 랭킹 차트 |
+| `dashboard:rank-change-chart` | 랭킹 차트 (seasonId 지원) |
+| `master-ranking:work-actor-distribution` | 작품 배우 분포 (현재 시즌) |
+| `master-ranking:work-label-distribution` | 작품 레이블 분포 (현재 시즌) |
+| `master-ranking:work-maker-distribution` | 작품 제작사 분포 (현재 시즌) |
 
 ## UI
 
 ### 시즌 드롭다운
-3곳에 동일한 시즌 드롭다운 배치:
+5곳에 동일한 시즌 드롭다운 배치:
 - **MasterRankingView** — 부별 필터 좌측
 - **MasterRecordModal** — 헤더
 - **Ranking.tsx** — 마스터 기준 선택 시 타이틀 옆
+- **TournamentStatsModal** — 헤더
+- **랭킹차트 모달** — 헤더 (MasterRankingView 내부, 독립 시즌 전환)
 
 ```
 [N시즌(현재) ▼]
