@@ -550,7 +550,7 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
       mrc AS (
         SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
         FROM cup_entries e
-        JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+        JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' AND r.season_id IS NULL
         JOIN cup_tournaments t2 ON t2.id = r.tournament_id AND t2.is_master = 1 AND t2.type = '${t.type}'
         GROUP BY e.item_id
       )
@@ -1606,7 +1606,7 @@ export function registerCupHandlers(): void {
         mrc AS (
           SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
           FROM cup_entries e
-          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' AND r.season_id IS NULL
           JOIN cup_tournaments t2 ON t2.id = r.tournament_id AND t2.is_master = 1 AND t2.type = '${tournament.type}'
           GROUP BY e.item_id
         )
