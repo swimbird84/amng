@@ -10,6 +10,7 @@ import CardTooltip, { type TooltipState } from './CardTooltip'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from './PhysicalCorrectionModal'
 import { getAge, getDebutAge } from '../utils/dateHelpers'
 import { emitDataChanged } from '../dataEvents'
+import MasterRecordModal from './cup/MasterRecordModal'
 
 interface Props {
   actorId: number
@@ -33,6 +34,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   const [showForm, setShowForm] = useState(false)
   const [editActor, setEditActor] = useState<(Actor & { tags?: Tag[] }) | undefined>(undefined)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [showMasterRecord, setShowMasterRecord] = useState(false)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -157,6 +159,8 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                   >
                     {actor.is_favorite ? '♥' : '♡'}
                   </button>
+                  <div className="flex-1" />
+                  <button onClick={() => setShowMasterRecord(true)} className="text-xs px-1.5 py-0.5 rounded bg-yellow-900/60 text-yellow-400 hover:bg-yellow-800/60 transition">☆전적</button>
                 </div>
                 <div className="grid gap-x-2 text-sm text-gray-400 mt-1" style={{ gridTemplateColumns: 'auto 1fr' }}>
                   <span>생년월일</span>
@@ -447,6 +451,15 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
           actor={editActor}
           onSave={() => { setShowForm(false); setRefreshKey(k => k + 1); loadActor(); emitDataChanged('actor') }}
           onCancel={() => setShowForm(false)}
+        />
+      )}
+      {showMasterRecord && actor && (
+        <MasterRecordModal
+          type="actor"
+          itemId={actor.id}
+          itemName={actor.name}
+          itemImage={actor.photo_path ?? null}
+          onClose={() => setShowMasterRecord(false)}
         />
       )}
     </>

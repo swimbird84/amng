@@ -284,7 +284,8 @@ export function registerDashboardHandlers(): void {
 
   ipcMain.handle('dashboard:rank-change-chart', (_e, params: { type: 'actor' | 'work'; limit?: number; rankFrom?: number; rankTo?: number; seasonId?: number }) => {
     const { type, limit = 10, rankFrom = 1, rankTo = 32, seasonId = null } = params
-    const seasonFilter = seasonId == null ? 'AND season_id IS NULL' : `AND season_id = ${seasonId}`
+    const seasonFilter = seasonId === -1 ? '' : (seasonId == null ? 'AND season_id IS NULL' : `AND season_id = ${seasonId}`)
+    const seasonRunFilter = seasonId === -1 ? '' : (seasonId == null ? 'AND r.season_id IS NULL' : `AND r.season_id = ${seasonId}`)
 
     // recentRunLimit 설정 읽기
     const rlRow = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
@@ -334,14 +335,13 @@ export function registerDashboardHandlers(): void {
 
     // 2) 완료된 마스터 대회 run 목록 (최근 limit개, 해당 시즌만)
     const runs = db().prepare(`
-      SELECT DISTINCT r.id AS run_id, t.name AS tournament_name, r.completed_at
+      SELECT r.id AS run_id, t.name AS tournament_name, r.completed_at
       FROM cup_runs r
       JOIN cup_tournaments t ON t.id = r.tournament_id
-      JOIN master_ranking_history mh ON mh.run_id = r.id AND mh.type = ? ${seasonFilter}
-      WHERE r.status = 'completed' AND t.type = ? AND t.is_master = 1
+      WHERE r.status = 'completed' AND t.type = ? AND t.is_master = 1 ${seasonRunFilter}
       ORDER BY r.completed_at DESC
       LIMIT ?
-    `).all(type, type, limit) as { run_id: number; tournament_name: string; completed_at: string }[]
+    `).all(type, limit) as { run_id: number; tournament_name: string; completed_at: string }[]
     runs.reverse()
 
     if (runs.length === 0) return { runs: [], series: [] }

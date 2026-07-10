@@ -282,7 +282,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
         <span className="text-xs text-gray-500">{ranked.length}명</span>
         {rankBy === 'masterRanking' && (
           <select
-            value={selectedSeasonId ?? ''}
+            value={selectedSeasonId === null ? '' : String(selectedSeasonId)}
             onChange={e => setSelectedSeasonId(e.target.value === '' ? null : Number(e.target.value))}
             className="bg-gray-800 text-gray-300 text-xs rounded px-2 py-1 border-none outline-none cursor-pointer hover:text-white"
           >
@@ -290,6 +290,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
             {seasons.map(s => (
               <option key={s.id} value={s.id}>{s.name}시즌</option>
             ))}
+            <option value="-1">전체</option>
           </select>
         )}
       </div>

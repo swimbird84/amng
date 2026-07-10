@@ -10,6 +10,7 @@ import WorkLabelDistModal from './WorkLabelDistModal'
 import ActorForm from '../ActorForm'
 import { pushEscHandler, popEscHandler } from '../../escManager'
 import { useDataChanged } from '../../dataEvents'
+import TournamentStatsModal from './TournamentStatsModal'
 
 export default function MasterRankingView({
   onBack,
@@ -68,6 +69,7 @@ export default function MasterRankingView({
   // 랭킹 차트
   const [showActorDist, setShowActorDist] = useState(false)
   const [showLabelDist, setShowLabelDist] = useState(false)
+  const [showTournamentStats, setShowTournamentStats] = useState(false)
   const [rankChartModal, setRankChartModal] = useState(false)
   const [rankChartDiv, setRankChartDiv] = useState(0)
   const [rankChartLimit, setRankChartLimit] = useState(() => Number(localStorage.getItem('cup:rankChartLimit')) || 10)
@@ -278,7 +280,7 @@ export default function MasterRankingView({
         <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
           {/* 시즌 드롭다운 */}
           <select
-            value={selectedSeasonId ?? ''}
+            value={selectedSeasonId === null ? '' : String(selectedSeasonId)}
             onChange={e => setSelectedSeasonId(e.target.value === '' ? null : Number(e.target.value))}
             className="bg-gray-800 text-gray-300 text-xs rounded px-2 py-1 border-none outline-none cursor-pointer hover:text-white"
           >
@@ -286,6 +288,7 @@ export default function MasterRankingView({
             {seasons.map(s => (
               <option key={s.id} value={s.id}>{s.name}시즌</option>
             ))}
+            <option value="-1">전체</option>
           </select>
 
           {/* 부별 필터 */}
@@ -333,6 +336,12 @@ export default function MasterRankingView({
             >
               랭킹차트
             </button>
+            <button
+              onClick={() => setShowTournamentStats(true)}
+              className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
+            >
+              대회통계
+            </button>
           </>)}
         </div>
       </div>
@@ -346,6 +355,10 @@ export default function MasterRankingView({
 
       {showLabelDist && (
         <WorkLabelDistModal onClose={() => setShowLabelDist(false)} />
+      )}
+
+      {showTournamentStats && (
+        <TournamentStatsModal type={type} onClose={() => setShowTournamentStats(false)} />
       )}
 
       {showSettings && <RankingSettingsModal onClose={() => {
@@ -438,29 +451,33 @@ export default function MasterRankingView({
                 {rows.map((row, idx) => {
                   const img = imgPath(row)
                   const lbl = label(row)
-                  const division = getDivision(row.rank, (row as any).master_run_count ?? 0)
+                  const runCount = (row as any).master_run_count ?? 0
+                  const isRegistered = runCount > 0
+                  const division = getDivision(row.rank, runCount)
                   const prevRank = rankTrends.get(row.id)
                   const winRate = row.total_cups > 0 ? row.cup_wins / row.total_cups * 100 : null
                   const matchWinRate = row.total_matches > 0 ? row.match_wins / row.total_matches * 100 : null
                   let trendBadge: React.ReactNode = <span className="text-gray-700 text-xs">—</span>
-                  if (prevRank !== undefined && prevRank !== null) {
-                    const delta = prevRank - row.rank
-                    if (delta > 0) trendBadge = <span className="text-green-400 text-xs font-medium">▲{delta}</span>
-                    else if (delta < 0) trendBadge = <span className="text-red-400 text-xs font-medium">▼{Math.abs(delta)}</span>
-                    else trendBadge = <span className="text-gray-500 text-xs">=</span>
-                  } else if (prevRank === null && row.total_points > 0) {
-                    trendBadge = <span className="text-blue-400 text-xs">NEW</span>
+                  if (isRegistered) {
+                    if (prevRank !== undefined && prevRank !== null) {
+                      const delta = prevRank - row.rank
+                      if (delta > 0) trendBadge = <span className="text-green-400 text-xs font-medium">▲{delta}</span>
+                      else if (delta < 0) trendBadge = <span className="text-red-400 text-xs font-medium">▼{Math.abs(delta)}</span>
+                      else trendBadge = <span className="text-gray-500 text-xs">=</span>
+                    } else if (prevRank === null && row.total_points > 0) {
+                      trendBadge = <span className="text-blue-400 text-xs">NEW</span>
+                    }
                   }
                   return (
                     <tr
                       key={row.id}
-                      className={`border-b border-gray-800 hover:bg-gray-800/40 transition ${row.rank <= 3 ? 'bg-yellow-950/10' : ''}`}
+                      className={`border-b border-gray-800 hover:bg-gray-800/40 transition ${isRegistered && row.rank <= 3 ? 'bg-yellow-950/10' : ''}`}
                     >
                       {/* # */}
                       <td className="px-2 py-2 text-center text-gray-600 text-xs">{page * pageSize + idx + 1}</td>
                       {/* 순위 */}
                       <td className="px-2 py-2 text-center">
-                        <span className={`text-xs font-medium ${row.rank <= 3 ? 'text-yellow-400' : 'text-gray-300'}`}>{row.rank}</span>
+                        <span className={`text-xs font-medium ${!isRegistered ? 'text-gray-600' : row.rank <= 3 ? 'text-yellow-400' : 'text-gray-300'}`}>{isRegistered ? row.rank : '-'}</span>
                       </td>
                       {/* 리그 */}
                       <td className="px-2 py-2 text-center">
@@ -550,7 +567,7 @@ export default function MasterRankingView({
                       {type === 'actor' && (() => {
                         const scoreRank = (row as any).score_rank as number | undefined
                         const avgScore = (row as any).avg_score as number | undefined
-                        const gap = scoreRank != null ? row.rank - scoreRank : null
+                        const gap = scoreRank != null && isRegistered ? row.rank - scoreRank : null
                         return (
                           <td
                             className="px-2 py-2 text-center cursor-pointer"

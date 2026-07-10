@@ -10,11 +10,22 @@ function getRecentRunLimit(database: DB, type: 'actor' | 'work'): number {
   return s.recentRunLimit ?? 0
 }
 
+// seasonId → SQL 필터 헬퍼: null=현재시즌, -1=전체, N=과거시즌
+function buildSeasonFilter(col: string, seasonId: number | null): string {
+  if (seasonId === -1) return ''
+  return seasonId == null ? `AND ${col} IS NULL` : `AND ${col} = ${seasonId}`
+}
+
+function buildSeasonRunFilter(seasonId: number | null): string {
+  if (seasonId === -1) return ''
+  return seasonId == null ? 'AND r.season_id IS NULL' : `AND r.season_id = ${seasonId}`
+}
+
 // recentRunLimit에 따른 포인트 집계 SQL 조각 생성
 // limit=0: 전체 누적, limit>0: 최근 N회만 합산
-// seasonId: null=현재시즌, number=과거시즌
+// seasonId: null=현재시즌, -1=전체, number=과거시즌
 function buildPointsCte(type: 'actor' | 'work', limit: number, alias = 'pts', masterOnly = true, seasonId: number | null = null): string {
-  const seasonFilter = seasonId == null ? 'AND mh2.season_id IS NULL' : `AND mh2.season_id = ${seasonId}`
+  const seasonFilter = buildSeasonFilter('mh2.season_id', seasonId)
   const masterJoin = masterOnly
     ? `JOIN cup_runs r ON r.id = mh2.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1`
     : ''
@@ -33,9 +44,9 @@ function buildPointsCte(type: 'actor' | 'work', limit: number, alias = 'pts', ma
 }
 
 // 특정 시점까지의 포인트 집계 SQL (rank-history, division-history용)
-// seasonId: null=현재시즌, number=과거시즌
+// seasonId: null=현재시즌, -1=전체, number=과거시즌
 function buildPointsAtTimeSql(type: 'actor' | 'work', limit: number, seasonId: number | null = null): string {
-  const seasonFilter = seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`
+  const seasonFilter = buildSeasonFilter('mh.season_id', seasonId)
   if (limit <= 0) {
     return `SELECT mh.item_id, SUM(mh.points) AS total
       FROM master_ranking_history mh
@@ -686,10 +697,10 @@ export function registerCupHandlers(): void {
         CASE WHEN t.type = 'actor' THEN a.photo_path ELSE w.cover_path END AS winner_photo
       FROM cup_tournaments t
       LEFT JOIN cup_runs lr ON lr.id = (
-        SELECT id FROM cup_runs WHERE tournament_id = t.id ORDER BY id DESC LIMIT 1
+        SELECT id FROM cup_runs WHERE tournament_id = t.id AND (season_id IS NULL OR t.is_master = 0) ORDER BY id DESC LIMIT 1
       )
       LEFT JOIN cup_runs lc ON lc.id = (
-        SELECT id FROM cup_runs WHERE tournament_id = t.id AND status = 'completed' ORDER BY id DESC LIMIT 1
+        SELECT id FROM cup_runs WHERE tournament_id = t.id AND status = 'completed' AND (season_id IS NULL OR t.is_master = 0) ORDER BY id DESC LIMIT 1
       )
       LEFT JOIN actors a ON a.id = lc.winner_id AND t.type = 'actor'
       LEFT JOIN works w ON w.id = lc.winner_id AND t.type = 'work'
@@ -701,7 +712,8 @@ export function registerCupHandlers(): void {
   ipcMain.handle('cup:get', (_e, tournamentId: number) => {
     const tournament = db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId) as Record<string, unknown> | undefined
     if (!tournament) return null
-    const run = db().prepare(`SELECT * FROM cup_runs WHERE tournament_id = ? ORDER BY id DESC LIMIT 1`).get(tournamentId) as Record<string, unknown> | undefined
+    const isMaster = (tournament as any).is_master === 1
+    const run = db().prepare(`SELECT * FROM cup_runs WHERE tournament_id = ? ${isMaster ? 'AND season_id IS NULL' : ''} ORDER BY id DESC LIMIT 1`).get(tournamentId) as Record<string, unknown> | undefined
     if (!run) return { tournament, run: null, currentMatch: null, totalMatches: 0, completedMatches: 0 }
     const runId = run.id as number
     if (run.status === 'in_progress') {
@@ -922,7 +934,8 @@ export function registerCupHandlers(): void {
     const searchBindings: unknown[] = search ? (type === 'work' ? [`%${search}%`, `%${search}%`] : [`%${search}%`]) : []
     const rl = getRecentRunLimit(db(), type)
     const ptsCte = buildPointsCte(type, rl, 'pts', true, seasonId)
-    const seasonFilter = seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`
+    const seasonFilter = buildSeasonFilter('mh.season_id', seasonId)
+    const srf = buildSeasonRunFilter(seasonId)
     if (type === 'actor') {
       const cte = `
         WITH ranked AS (
@@ -938,7 +951,7 @@ export function registerCupHandlers(): void {
           LEFT JOIN (
             SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
             FROM cup_entries e
-            JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+            JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' ${srf}
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'actor'
             GROUP BY e.item_id
           ) mrc ON mrc.item_id = a.id
@@ -960,7 +973,7 @@ export function registerCupHandlers(): void {
             COUNT(DISTINCT e.run_id) AS total_cups,
             SUM(CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END) AS cup_wins
           FROM cup_entries e
-          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' ${srf}
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'actor'
           GROUP BY e.item_id
         ) cs_cup ON cs_cup.item_id = ranked.id
@@ -971,7 +984,7 @@ export function registerCupHandlers(): void {
               CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
               CASE WHEN m.winner_id = e2.item_id THEN 1 ELSE 0 END AS is_win
             FROM cup_entries e2
-            JOIN cup_runs r ON r.id = e2.run_id AND r.status = 'completed'
+            JOIN cup_runs r ON r.id = e2.run_id AND r.status = 'completed' ${srf}
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'actor'
             JOIN cup_matches m ON m.run_id = r.id AND (m.item1_id = e2.item_id OR m.item2_id = e2.item_id)
           ) sub GROUP BY sub.item_id
@@ -994,7 +1007,7 @@ export function registerCupHandlers(): void {
           LEFT JOIN (
             SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
             FROM cup_entries e
-            JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+            JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' ${srf}
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
             GROUP BY e.item_id
           ) mrc ON mrc.item_id = w.id
@@ -1017,7 +1030,7 @@ export function registerCupHandlers(): void {
             COUNT(DISTINCT e.run_id) AS total_cups,
             SUM(CASE WHEN r.winner_id = e.item_id THEN 1 ELSE 0 END) AS cup_wins
           FROM cup_entries e
-          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' ${srf}
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
           GROUP BY e.item_id
         ) cs_cup ON cs_cup.item_id = ranked.id
@@ -1028,7 +1041,7 @@ export function registerCupHandlers(): void {
               CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END AS is_played,
               CASE WHEN m.winner_id = e2.item_id THEN 1 ELSE 0 END AS is_win
             FROM cup_entries e2
-            JOIN cup_runs r ON r.id = e2.run_id AND r.status = 'completed'
+            JOIN cup_runs r ON r.id = e2.run_id AND r.status = 'completed' ${srf}
             JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
             JOIN cup_matches m ON m.run_id = r.id AND (m.item1_id = e2.item_id OR m.item2_id = e2.item_id)
           ) sub GROUP BY sub.item_id
@@ -1050,11 +1063,12 @@ export function registerCupHandlers(): void {
     const rankRow = db().prepare(`
       SELECT COUNT(*) + 1 AS rank FROM ${ptsCte} WHERE pts.total_points > ?
     `).get(totalPoints) as { rank: number }
+    const srf = buildSeasonRunFilter(seasonId)
     const masterCupsRow = db().prepare(`
       SELECT COUNT(DISTINCT r.id) AS master_run_count,
         SUM(CASE WHEN r.winner_id = ? THEN 1 ELSE 0 END) AS master_cup_wins
       FROM cup_entries e
-      JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+      JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' ${srf}
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
       WHERE e.item_id = ?
     `).get(itemId, type, itemId) as { master_run_count: number; master_cup_wins: number } | undefined
@@ -1062,7 +1076,7 @@ export function registerCupHandlers(): void {
       SELECT SUM(CASE WHEN m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) THEN 1 ELSE 0 END) AS total_matches,
         SUM(CASE WHEN m.winner_id = ? THEN 1 ELSE 0 END) AS match_wins
       FROM cup_matches m
-      JOIN cup_runs r ON r.id = m.run_id AND r.status = 'completed'
+      JOIN cup_runs r ON r.id = m.run_id AND r.status = 'completed' ${srf}
       JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
       WHERE (m.item1_id = ? OR m.item2_id = ?) AND m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
     `).get(itemId, type, itemId, itemId) as { total_matches: number; match_wins: number } | undefined
@@ -1084,7 +1098,7 @@ export function registerCupHandlers(): void {
 
   ipcMain.handle('master-ranking:rank-trends', (_e, type: 'actor' | 'work', seasonId?: number) => {
     const sid = seasonId ?? null
-    const seasonFilter = sid == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${sid}`
+    const seasonFilter = buildSeasonFilter('mh.season_id', sid)
     // Get most recent completed master run
     const latestRun = db().prepare(`
       SELECT r.completed_at FROM cup_runs r
@@ -1131,7 +1145,7 @@ export function registerCupHandlers(): void {
 
   ipcMain.handle('master-ranking:rank-history', (_e, params: { type: 'actor' | 'work'; itemId: number; limit?: number; seasonId?: number }) => {
     const { type, itemId, limit = 0, seasonId = null } = params
-    const seasonFilter = seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`
+    const seasonFilter = buildSeasonFilter('mh.season_id', seasonId)
     const limitClause = limit > 0 ? `LIMIT ${limit}` : ''
     const runs = db().prepare(`
       SELECT DISTINCT r.id, r.completed_at, t.name AS tournament_name FROM cup_runs r
@@ -1156,9 +1170,7 @@ export function registerCupHandlers(): void {
 
   ipcMain.handle('master-ranking:item-format-stats', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number }) => {
     const { type, itemId, seasonId = null } = params
-    const seasonRunFilter = seasonId == null
-      ? `AND EXISTS (SELECT 1 FROM master_ranking_history mh WHERE mh.run_id = r.id AND mh.season_id IS NULL)`
-      : `AND EXISTS (SELECT 1 FROM master_ranking_history mh WHERE mh.run_id = r.id AND mh.season_id = ${seasonId})`
+    const seasonRunFilter = buildSeasonRunFilter(seasonId)
     const rows = db().prepare(`
       WITH entry_stats AS (
         SELECT t.format,
@@ -1210,6 +1222,13 @@ export function registerCupHandlers(): void {
     const result = db().prepare(`INSERT INTO master_ranking_seasons (type, name) VALUES (?, ?)`).run(type, seasonName)
     const seasonId = result.lastInsertRowid
     db().prepare(`UPDATE master_ranking_history SET season_id = ? WHERE type = ? AND season_id IS NULL`).run(seasonId, type)
+    db().prepare(`
+      UPDATE cup_runs SET season_id = ? WHERE id IN (
+        SELECT r.id FROM cup_runs r
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        WHERE r.status = 'completed' AND r.season_id IS NULL
+      )
+    `).run(seasonId, type)
     return { ok: true, seasonId, seasonName }
   })
 
@@ -1237,9 +1256,7 @@ export function registerCupHandlers(): void {
 
   ipcMain.handle('cup:head-to-head', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number }) => {
     const { type, itemId, seasonId = null } = params
-    const seasonRunFilter = seasonId == null
-      ? `AND EXISTS (SELECT 1 FROM master_ranking_history mh WHERE mh.run_id = r.id AND mh.season_id IS NULL)`
-      : `AND EXISTS (SELECT 1 FROM master_ranking_history mh WHERE mh.run_id = r.id AND mh.season_id = ${seasonId})`
+    const seasonRunFilter = buildSeasonRunFilter(seasonId)
     const h2hRow = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
     const h2hMin = h2hRow ? (JSON.parse(h2hRow.settings_json).h2hMinMatches ?? 3) : 3
     const rows = db().prepare(`
@@ -1284,7 +1301,7 @@ export function registerCupHandlers(): void {
 
   ipcMain.handle('master-ranking:division-history', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number }) => {
     const { type, itemId, seasonId = null } = params
-    const seasonFilter = seasonId == null ? 'AND mh.season_id IS NULL' : `AND mh.season_id = ${seasonId}`
+    const seasonFilter = buildSeasonFilter('mh.season_id', seasonId)
     const itemHistory = db().prepare(`
       SELECT mh.run_id, mh.points, r.completed_at
       FROM master_ranking_history mh
@@ -1318,7 +1335,7 @@ export function registerCupHandlers(): void {
       mrc AS (
         SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
         FROM cup_entries e
-        JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed'
+        JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' ${buildSeasonRunFilter(seasonId)}
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
         GROUP BY e.item_id
       )
@@ -1349,6 +1366,91 @@ export function registerCupHandlers(): void {
         if (b.division === 0) return -1
         return a.division - b.division
       })
+  })
+
+  ipcMain.handle('master-ranking:tournament-stats', (_e, params: { type: 'actor' | 'work'; seasonId?: number }) => {
+    const { type, seasonId = null } = params
+    const srf = buildSeasonRunFilter(seasonId)
+
+    // 요약
+    const summary = db().prepare(`
+      SELECT COUNT(DISTINCT r.id) AS total_runs,
+        SUM(ec.entry_count) AS total_entries,
+        CASE WHEN COUNT(DISTINCT r.id) > 0 THEN CAST(SUM(ec.entry_count) AS REAL) / COUNT(DISTINCT r.id) ELSE 0 END AS avg_entries
+      FROM cup_runs r
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+      LEFT JOIN (SELECT run_id, COUNT(*) AS entry_count FROM cup_entries GROUP BY run_id) ec ON ec.run_id = r.id
+      WHERE r.status = 'completed' ${srf}
+    `).get(type) as { total_runs: number; total_entries: number; avg_entries: number }
+
+    const matchCount = db().prepare(`
+      SELECT COUNT(*) AS total_matches FROM cup_matches m
+      JOIN cup_runs r ON r.id = m.run_id AND r.status = 'completed' ${srf}
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+      WHERE m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1)
+    `).get(type) as { total_matches: number }
+
+    // 포맷별
+    const formatStats = db().prepare(`
+      SELECT t.format,
+        COUNT(DISTINCT r.id) AS run_count,
+        CASE WHEN COUNT(DISTINCT r.id) > 0 THEN CAST(SUM(ec.entry_count) AS REAL) / COUNT(DISTINCT r.id) ELSE 0 END AS avg_entries,
+        COALESCE(mc.match_count, 0) AS total_matches
+      FROM cup_runs r
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+      LEFT JOIN (SELECT run_id, COUNT(*) AS entry_count FROM cup_entries GROUP BY run_id) ec ON ec.run_id = r.id
+      LEFT JOIN (
+        SELECT m.run_id, COUNT(*) AS match_count FROM cup_matches m
+        WHERE m.is_bye = 0 AND (m.winner_id IS NOT NULL OR m.is_draw = 1) GROUP BY m.run_id
+      ) mc ON mc.run_id = r.id
+      WHERE r.status = 'completed' ${srf}
+      GROUP BY t.format
+    `).all(type) as { format: string; run_count: number; avg_entries: number; total_matches: number }[]
+
+    // 우승 랭킹 Top 10
+    const winRankingSql = type === 'actor'
+      ? `SELECT r.winner_id AS id, a.name, a.photo_path AS img, COUNT(*) AS win_count,
+          (SELECT COUNT(DISTINCT e2.run_id) FROM cup_entries e2 JOIN cup_runs r2 ON r2.id = e2.run_id AND r2.status = 'completed' ${srf} JOIN cup_tournaments t2 ON t2.id = r2.tournament_id AND t2.is_master = 1 AND t2.type = '${type}' WHERE e2.item_id = r.winner_id) AS entry_count
+        FROM cup_runs r
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        JOIN actors a ON a.id = r.winner_id
+        WHERE r.status = 'completed' AND r.winner_id IS NOT NULL ${srf}
+        GROUP BY r.winner_id ORDER BY win_count DESC LIMIT 10`
+      : `SELECT r.winner_id AS id, COALESCE(w.product_number, w.title) AS name, w.cover_path AS img, COUNT(*) AS win_count,
+          (SELECT COUNT(DISTINCT e2.run_id) FROM cup_entries e2 JOIN cup_runs r2 ON r2.id = e2.run_id AND r2.status = 'completed' ${srf} JOIN cup_tournaments t2 ON t2.id = r2.tournament_id AND t2.is_master = 1 AND t2.type = '${type}' WHERE e2.item_id = r.winner_id) AS entry_count
+        FROM cup_runs r
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        JOIN works w ON w.id = r.winner_id
+        WHERE r.status = 'completed' AND r.winner_id IS NOT NULL ${srf}
+        GROUP BY r.winner_id ORDER BY win_count DESC LIMIT 10`
+    const winRanking = db().prepare(winRankingSql).all(type) as { id: number; name: string; img: string | null; win_count: number; entry_count: number }[]
+
+    // 대회 히스토리
+    const historySql = type === 'actor'
+      ? `SELECT r.id AS run_id, t.name AS tournament_name, t.format, r.completed_at,
+          (SELECT COUNT(*) FROM cup_entries e WHERE e.run_id = r.id) AS entry_count,
+          r.winner_id, a.name AS winner_name, a.photo_path AS winner_img
+        FROM cup_runs r
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        LEFT JOIN actors a ON a.id = r.winner_id
+        WHERE r.status = 'completed' ${srf}
+        ORDER BY r.completed_at DESC`
+      : `SELECT r.id AS run_id, t.name AS tournament_name, t.format, r.completed_at,
+          (SELECT COUNT(*) FROM cup_entries e WHERE e.run_id = r.id) AS entry_count,
+          r.winner_id, COALESCE(w.product_number, w.title) AS winner_name, w.cover_path AS winner_img
+        FROM cup_runs r
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
+        LEFT JOIN works w ON w.id = r.winner_id
+        WHERE r.status = 'completed' ${srf}
+        ORDER BY r.completed_at DESC`
+    const history = db().prepare(historySql).all(type) as { run_id: number; tournament_name: string; format: string; completed_at: string; entry_count: number; winner_id: number | null; winner_name: string | null; winner_img: string | null }[]
+
+    return {
+      summary: { total_runs: summary.total_runs ?? 0, total_entries: summary.total_entries ?? 0, avg_entries: Math.round(summary.avg_entries ?? 0), total_matches: matchCount.total_matches ?? 0 },
+      formatStats,
+      winRanking,
+      history,
+    }
   })
 
   ipcMain.handle('cup:item-count', (_e, params: { tournamentId: number }) => {

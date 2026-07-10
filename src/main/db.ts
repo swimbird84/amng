@@ -495,4 +495,22 @@ export function initDatabase(): void {
     db.exec('CREATE INDEX IF NOT EXISTS idx_master_ranking_history_season ON master_ranking_history(season_id)')
   }
 
+  // cup_runs.season_id 컬럼 추가
+  const cupRunsCols2 = (db.prepare("PRAGMA table_info(cup_runs)").all() as { name: string }[]).map(c => c.name)
+  if (!cupRunsCols2.includes('season_id')) {
+    db.prepare('ALTER TABLE cup_runs ADD COLUMN season_id INTEGER REFERENCES master_ranking_seasons(id) ON DELETE SET NULL').run()
+    // 기존 데이터 백필: master_ranking_history의 season_id를 역참조
+    db.exec(`
+      UPDATE cup_runs SET season_id = (
+        SELECT mh.season_id FROM master_ranking_history mh
+        WHERE mh.run_id = cup_runs.id AND mh.season_id IS NOT NULL
+        LIMIT 1
+      )
+      WHERE EXISTS (
+        SELECT 1 FROM master_ranking_history mh
+        WHERE mh.run_id = cup_runs.id AND mh.season_id IS NOT NULL
+      )
+    `)
+  }
+
 }

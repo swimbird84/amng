@@ -231,6 +231,13 @@ export const masterRankingApi = {
     api.invoke('master-ranking:seasons', type) as Promise<{ id: number; type: string; name: string; created_at: string; ended_at: string }[]>,
   seasonDelete: (seasonId: number) =>
     api.invoke('master-ranking:season-delete', seasonId) as Promise<{ ok: boolean }>,
+  tournamentStats: (type: 'actor' | 'work', seasonId?: number) =>
+    api.invoke('master-ranking:tournament-stats', { type, seasonId }) as Promise<{
+      summary: { total_runs: number; total_entries: number; avg_entries: number; total_matches: number }
+      formatStats: { format: string; run_count: number; avg_entries: number; total_matches: number }[]
+      winRanking: { id: number; name: string; img: string | null; win_count: number; entry_count: number }[]
+      history: { run_id: number; tournament_name: string; format: string; completed_at: string; entry_count: number; winner_id: number | null; winner_name: string | null; winner_img: string | null }[]
+    }>,
   workActorDistribution: () =>
     api.invoke('master-ranking:work-actor-distribution') as Promise<{
       divisions: { division: number; actors: { id: number; name: string; photo_path: string | null; work_count: number; avg_rank: number; best_rank: number; worst_rank: number; actor_rank: number | null }[] }[]

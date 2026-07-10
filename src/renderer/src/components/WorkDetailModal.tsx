@@ -8,6 +8,7 @@ import Rating from './Rating'
 import CardTooltip, { type TooltipState } from './CardTooltip'
 import { hashColor, studioColor } from '../utils/colorHelpers'
 import { emitDataChanged } from '../dataEvents'
+import MasterRecordModal from './cup/MasterRecordModal'
 
 interface Props {
   workId: number
@@ -23,6 +24,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
   const [editWork, setEditWork] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | undefined>(undefined)
   const [refreshKey, setRefreshKey] = useState(0)
   const [actorTooltip, setActorTooltip] = useState<TooltipState | null>(null)
+  const [showMasterRecord, setShowMasterRecord] = useState(false)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -112,17 +114,17 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
               </button>
             </div>
             <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-5 space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <h3 className="text-white font-bold text-lg">{work.product_number || '-'}</h3>
-                  {!!work.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
-                </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-white font-bold text-lg">{work.product_number || '-'}</h3>
+                {!!work.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                 <button
                   onClick={handleToggleFavorite}
-                  className={`text-2xl leading-none ml-2 shrink-0 ${work.is_favorite ? 'text-red-500' : 'text-gray-500 hover:text-red-400'}`}
+                  className={`text-2xl leading-none ${work.is_favorite ? 'text-red-500' : 'text-gray-500 hover:text-red-400'}`}
                 >
                   {work.is_favorite ? '♥' : '♡'}
                 </button>
+                <div className="flex-1" />
+                <button onClick={() => setShowMasterRecord(true)} className="text-xs px-1.5 py-0.5 rounded bg-yellow-900/60 text-yellow-400 hover:bg-yellow-800/60 transition">☆전적</button>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -324,6 +326,15 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
           work={editWork}
           onSave={() => { setShowForm(false); setRefreshKey(k => k + 1); loadWork(); emitDataChanged('work') }}
           onCancel={() => setShowForm(false)}
+        />
+      )}
+      {showMasterRecord && work && (
+        <MasterRecordModal
+          type="work"
+          itemId={work.id}
+          itemName={work.product_number ?? work.title ?? `#${work.id}`}
+          itemImage={work.cover_path ?? null}
+          onClose={() => setShowMasterRecord(false)}
         />
       )}
     </>
