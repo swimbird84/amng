@@ -2389,7 +2389,7 @@ export function registerCupHandlers(): void {
   ipcMain.handle('master-ranking:work-actor-distribution', (_e) => {
     const type = 'work' as const
     const rl = getRecentRunLimit(db(), type)
-    const ptsCte = buildPointsCte(type, rl)
+    const ptsCte = buildPointsCte(type, rl, 'pts', true, null)
     // 작품별 랭크 계산
     const rankedWorks = db().prepare(`
       WITH ranked AS (
@@ -2403,7 +2403,7 @@ export function registerCupHandlers(): void {
         LEFT JOIN (
           SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
           FROM cup_entries e
-          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_runs r ON r.id = e.run_id AND r.season_id IS NULL
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
           GROUP BY e.item_id
         ) mrc ON mrc.item_id = w.id
@@ -2504,7 +2504,7 @@ export function registerCupHandlers(): void {
   ipcMain.handle('master-ranking:work-label-distribution', (_e) => {
     const type = 'work' as const
     const rl = getRecentRunLimit(db(), type)
-    const ptsCte = buildPointsCte(type, rl)
+    const ptsCte = buildPointsCte(type, rl, 'pts', true, null)
     const rankedWorks = db().prepare(`
       WITH ranked AS (
         SELECT
@@ -2517,7 +2517,7 @@ export function registerCupHandlers(): void {
         LEFT JOIN (
           SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
           FROM cup_entries e
-          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_runs r ON r.id = e.run_id AND r.season_id IS NULL
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
           GROUP BY e.item_id
         ) mrc ON mrc.item_id = w.id
@@ -2600,7 +2600,7 @@ export function registerCupHandlers(): void {
   ipcMain.handle('master-ranking:work-maker-distribution', (_e) => {
     const type = 'work' as const
     const rl = getRecentRunLimit(db(), type)
-    const ptsCte = buildPointsCte(type, rl)
+    const ptsCte = buildPointsCte(type, rl, 'pts', true, null)
     const rankedWorks = db().prepare(`
       WITH ranked AS (
         SELECT
@@ -2613,7 +2613,7 @@ export function registerCupHandlers(): void {
         LEFT JOIN (
           SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
           FROM cup_entries e
-          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_runs r ON r.id = e.run_id AND r.season_id IS NULL
           JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
           GROUP BY e.item_id
         ) mrc ON mrc.item_id = w.id
