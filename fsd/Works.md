@@ -7,7 +7,7 @@
 - **페이지**: `src/renderer/src/pages/Works.tsx`
 - **폼 컴포넌트**: `src/renderer/src/components/WorkForm.tsx`
 - **검색바**: `src/renderer/src/components/SearchBar.tsx` (WorkSearchParams)
-- **API**: `src/renderer/src/api.ts` (worksApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, workFilesApi)
+- **API**: `src/renderer/src/api.ts` (worksApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, workFilesApi, masterRankingApi)
 - **IPC 핸들러**: `src/main/ipc-works.ts`
 - **관련 컴포넌트**: ImagePreview, Rating, CardTooltip
 
@@ -15,7 +15,8 @@
 
 ### 1. 작품 목록 (무한 스크롤)
 - IntersectionObserver 기반 무한 스크롤 (BATCH_SIZE=100)
-- 정렬: 등록일/품번/별점/발매일/타이틀
+- 정렬: 등록일/품번/마스터랭킹/별점/발매일/타이틀/배우/레이블
+- 마스터랭킹 정렬: 서버 사이드 (현재 시즌 마스터포인트 합산 DESC → 품번 ASC)
 - 검색: 품번 키워드, 태그(AND/OR), 배우, 스튜디오, 발매일 범위, 별점 범위, 타이틀, 코멘트, 배우수, 찜/삭제예정 필터
 
 ### 2. 작품 등록 (WorkForm)
@@ -40,6 +41,14 @@
 ### 6. 찜 토글
 - 작품 카드에서 하트 버튼으로 즐겨찾기 토글
 
+### 7. 카드 마스터랭킹 표시
+- 품번 라인 아래에 현재 시즌 마스터랭킹 정보 표시
+- 형식: `[리그태그] #순위위    포인트pt`
+- 리그 태그: `DIV_COLOR` 스타일 적용, 순위/포인트: `text-green-400`
+- 미분류 (master_run_count=0): `[미분류] #-    -pt` (text-gray-500)
+- 데이터: `masterRankingApi.list({ type: 'work', limit: 99999 })` → masterPointsMap
+- 삭제 시 masterPointsMap 갱신
+
 ## 사용 API 함수
 
 | API 함수 | IPC 채널 | 설명 |
@@ -49,6 +58,7 @@
 | `worksApi.create(data)` | `works:create` | 작품 생성 |
 | `worksApi.update(id, data)` | `works:update` | 작품 수정 (별점, 찜, 대표태그 등) |
 | `worksApi.delete(id)` | `works:delete` | 작품 삭제 (진행 중 대회 참가 시 차단) |
+| `masterRankingApi.list({ type: 'work', limit: 99999 })` | `master-ranking:list` | 현재 시즌 마스터랭킹 (카드 표시) |
 | `workTagsApi.list()` | `work-tags:list` | 작품 태그 마스터 목록 |
 | `actorsApi.list()` | `actors:list` | 배우 목록 (검색바 드롭다운) |
 | `actorsApi.findOrCreate()` | `actors:findOrCreate` | 스캔 시 배우 자동 생성 |
@@ -92,6 +102,14 @@ LEFT JOIN makers m ON m.id = s.maker_id
 -- 동적 JOIN/WHERE 조건 추가
 ORDER BY w.{sortCol} {sortDir}
 LIMIT ? OFFSET ?
+```
+- master_points 정렬 시:
+```sql
+ORDER BY COALESCE((SELECT SUM(mh.points) FROM master_ranking_history mh
+  JOIN cup_runs r ON r.id = mh.run_id
+  JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
+  WHERE mh.type = 'work' AND mh.item_id = w.id AND mh.season_id IS NULL), 0) DESC,
+  w.product_number ASC
 ```
 - 페이지네이션 시 `COUNT(*) AS cnt`로 총 개수 별도 조회
 - 대표 태그/대표 배우는 별도 배치 쿼리로 조회

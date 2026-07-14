@@ -9,13 +9,14 @@
 - **검색바**: `src/renderer/src/components/SearchBar.tsx` (ActorSearchParams)
 - **레이더 차트**: `src/renderer/src/components/RadarChart.tsx`
 - **피지컬 보정**: `src/renderer/src/components/PhysicalCorrectionModal.tsx`
-- **API**: `src/renderer/src/api.ts` (actorsApi, actorTagsApi, shellApi)
+- **API**: `src/renderer/src/api.ts` (actorsApi, actorTagsApi, shellApi, masterRankingApi)
 - **IPC 핸들러**: `src/main/ipc-actors.ts`
 
 ## 주요 기능
 
 ### 1. 배우 목록
-- 정렬: 등록일/이름/평점/피지컬/생년월일/데뷔일/작품수/작품발매일/작품등록일
+- 정렬: 등록일/이름/평점/마스터랭킹/피지컬/생년월일/데뷔일/작품수/작품발매일/작품등록일
+- 마스터랭킹 정렬: 클라이언트 사이드 (마스터포인트 DESC → 평점평균 DESC)
 - 검색: 이름 키워드, 태그(AND/OR), 나이 범위, 데뷔일 범위, 작품수 범위, 평점 범위, 각 점수 항목별 범위, 피지컬 범위, 신체 수치(키/바스트/웨이스트/힙/컵) 범위, NULL 필터, 제외 필터, 코멘트, 삭제예정
 
 ### 2. 배우 등록/수정 (ActorForm)
@@ -43,6 +44,15 @@
 ### 7. 찜 토글
 - 배우 카드에서 하트 버튼으로 즐겨찾기 토글
 
+### 8. 카드 마스터랭킹 표시
+- 배우명 라인 아래에 현재 시즌 마스터랭킹 정보 표시
+- 형식: `[리그태그] #순위위    포인트pt`
+- 리그 태그: `DIV_COLOR` 스타일 적용 (1부=금색, 2부=회색 등)
+- 순위/포인트: `text-green-400` (마스터랭킹 테이블과 동일)
+- 미분류 (master_run_count=0): `[미분류] #-    -pt` (text-gray-500)
+- 데이터: `masterRankingApi.list({ type: 'actor', limit: 99999 })` → masterPointsMap
+- 삭제 시 masterPointsMap 갱신
+
 ## 사용 API 함수
 
 | API 함수 | IPC 채널 | 설명 |
@@ -55,6 +65,7 @@
 | `actorsApi.physicalData()` | `actors:physical-data` | 피지컬 계산용 전체 배우 데이터 |
 | `actorsApi.workTags(actorId)` | `actors:workTags` | 출연작 태그 클라우드 |
 | `actorsApi.scoreGradeCounts(excludeId)` | `actors:scoreGradeCounts` | 11점 이상 점수 현황 |
+| `masterRankingApi.list({ type: 'actor', limit: 99999 })` | `master-ranking:list` | 현재 시즌 마스터랭킹 (카드 표시 + 정렬) |
 | `actorTagsApi.list()` | `actor-tags:list` | 배우 태그 마스터 목록 |
 | `shellApi.openPath(path)` | `shell:openPath` | 파일 재생 |
 | `shellApi.fileExists(path)` | `shell:fileExists` | 파일 존재 확인 |

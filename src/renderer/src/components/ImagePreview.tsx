@@ -9,16 +9,18 @@ interface Props {
   style?: React.CSSProperties
   objectPosition?: string
   version?: number
+  reobserve?: number
   onMouseEnter?: () => void
   onMouseLeave?: () => void
 }
 
-export default function ImagePreview({ path, alt, className = '', style, objectPosition, version, onMouseEnter, onMouseLeave }: Props) {
+export default function ImagePreview({ path, alt, className = '', style, objectPosition, version, reobserve, onMouseEnter, onMouseLeave }: Props) {
   const [src, setSrc] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (visible) return
     const el = ref.current
     if (!el) return
     const observer = new IntersectionObserver(
@@ -27,7 +29,7 @@ export default function ImagePreview({ path, alt, className = '', style, objectP
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [visible, reobserve])
 
   useEffect(() => {
     if (!visible) return
