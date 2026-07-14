@@ -393,16 +393,6 @@ export function initDatabase(): void {
         is_draw INTEGER NOT NULL DEFAULT 0
       );
 
-      CREATE TABLE cup_match_points (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
-        match_id INTEGER NOT NULL REFERENCES cup_matches(id) ON DELETE CASCADE,
-        item_id INTEGER NOT NULL,
-        base_points REAL NOT NULL DEFAULT 0,
-        bonus_points REAL NOT NULL DEFAULT 0,
-        total_points REAL NOT NULL DEFAULT 0
-      );
-
       CREATE TABLE master_ranking_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         run_id INTEGER NOT NULL REFERENCES cup_runs(id) ON DELETE CASCADE,
@@ -512,5 +502,8 @@ export function initDatabase(): void {
       )
     `)
   }
+
+  // 미사용 cup_match_points 테이블 제거
+  db.exec('DROP TABLE IF EXISTS cup_match_points')
 
 }

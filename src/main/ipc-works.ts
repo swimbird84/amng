@@ -385,10 +385,9 @@ export function registerWorksHandlers(): void {
     deleteImagesByPattern('works', id)
     db().prepare('DELETE FROM works WHERE id = ?').run(id)
     db().prepare(`DELETE FROM master_ranking_history WHERE type = 'work' AND item_id = ?`).run(id)
-    db().prepare(`DELETE FROM cup_entries WHERE item_id = ?`).run(id)
+    db().prepare(`DELETE FROM cup_entries WHERE item_id = ? AND run_id IN (SELECT r.id FROM cup_runs r JOIN cup_tournaments t ON t.id = r.tournament_id WHERE t.type = 'work')`).run(id)
     db().prepare(`DELETE FROM cup_stats WHERE type = 'work' AND item_id = ?`).run(id)
-    db().prepare(`DELETE FROM cup_match_points WHERE item_id = ?`).run(id)
-    db().prepare(`DELETE FROM cup_rank_snapshots WHERE item_id = ?`).run(id)
+    db().prepare(`DELETE FROM cup_rank_snapshots WHERE item_id = ? AND tournament_id IN (SELECT id FROM cup_tournaments WHERE type = 'work')`).run(id)
     return { blocked: false }
   })
 
