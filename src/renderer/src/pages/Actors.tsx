@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Actor, Tag, Work } from '../types'
-import { actorsApi, actorTagsApi, shellApi } from '../api'
+import { actorsApi, actorTagsApi, shellApi, masterRankingApi } from '../api'
 import SearchBar, { type ActorSearchParams, DEFAULT_ACTOR_SEARCH } from '../components/SearchBar'
 import ActorForm from '../components/ActorForm'
 import ImagePreview from '../components/ImagePreview'
@@ -10,6 +10,7 @@ import RadarChart from '../components/RadarChart'
 import ActorDetailModal from '../components/ActorDetailModal'
 import PhysicalCorrectionModal, { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
+import { getDivision, DIV_LABEL, DIV_COLOR } from '../components/cup/cupConstants'
 import { getAge, getDebutAge } from '../utils/dateHelpers'
 
 interface ActorsProps {
@@ -31,8 +32,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
       return DEFAULT_ACTOR_SEARCH
     }
   })
-  const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at'>(
-    (localStorage.getItem('actors:sortBy') as 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at') || 'avg_score'
+  const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at' | 'master_points'>(
+    (localStorage.getItem('actors:sortBy') as 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at' | 'master_points') || 'avg_score'
   )
   const [showPhysical, setShowPhysical] = useState(false)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
@@ -46,6 +47,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [refreshKey, setRefreshKey] = useState(0)
+  const [masterPointsMap, setMasterPointsMap] = useState<Map<number, { rank: number; total_points: number; master_run_count: number }>>(new Map())
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -63,6 +65,15 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
       if (score !== null) map.set(a.id, score)
     }
     setPhysScoreMap(map)
+  }, [])
+
+  const loadMasterPoints = useCallback(async () => {
+    const res = await masterRankingApi.list({ type: 'actor', limit: 99999 }) as { rows: { id: number; rank: number; total_points: number; master_run_count: number }[] }
+    const map = new Map<number, { rank: number; total_points: number; master_run_count: number }>()
+    for (const r of res.rows) {
+      map.set(r.id, { rank: r.rank, total_points: r.total_points, master_run_count: r.master_run_count })
+    }
+    setMasterPointsMap(map)
   }, [])
 
   const loadActors = useCallback(async () => {
@@ -117,7 +128,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     if (search.waistNull) params.waistNull = true
     if (search.hipNull) params.hipNull = true
     if (search.cupNull) params.cupNull = true
-    if (sortBy !== 'ratio_score') {
+    if (sortBy !== 'ratio_score' && sortBy !== 'master_points') {
       params.sortBy = sortBy
       params.sortDir = sortDir
     }
@@ -142,19 +153,31 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
           return true
         })
       : actors
+    if (sortBy === 'master_points') {
+      return [...filtered].sort((a, b) => {
+        const ma = masterPointsMap.get(a.id)
+        const mb = masterPointsMap.get(b.id)
+        const pa = ma ? ma.total_points : -1
+        const pb = mb ? mb.total_points : -1
+        const diff = sortDir === 'desc' ? pb - pa : pa - pb
+        if (diff !== 0) return diff
+        return (b.avg_score ?? 0) - (a.avg_score ?? 0)
+      })
+    }
     if (sortBy !== 'ratio_score') return filtered
     return [...filtered].sort((a, b) => {
       const sa = physScoreMap.get(a.id) ?? -1
       const sb = physScoreMap.get(b.id) ?? -1
       return sortDir === 'desc' ? sb - sa : sa - sb
     })
-  }, [actors, sortBy, sortDir, physScoreMap])
+  }, [actors, sortBy, sortDir, physScoreMap, masterPointsMap])
 
   const loadTags = async () => {
     setTags(await actorTagsApi.list() as Tag[])
   }
 
   useEffect(() => { loadActors() }, [loadActors])
+  useEffect(() => { loadMasterPoints() }, [loadMasterPoints])
   useEffect(() => { loadTags() }, [])
   useEffect(() => {
     const onMouseUp = () => { isDragging.current = false }
@@ -173,10 +196,10 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     return () => window.removeEventListener('physicalSettingsChange', computePhysScores)
   }, [computePhysScores])
   useEffect(() => {
-    const handler = () => { loadActors(); computePhysScores() }
+    const handler = () => { loadActors(); computePhysScores(); loadMasterPoints() }
     window.addEventListener('actorScoresUpdated', handler)
     return () => window.removeEventListener('actorScoresUpdated', handler)
-  }, [loadActors, computePhysScores])
+  }, [loadActors, computePhysScores, loadMasterPoints])
   useEffect(() => { localStorage.setItem('actors:search', JSON.stringify(search)) }, [search])
 
   const handleSelect = async (id: number) => {
@@ -200,6 +223,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
       if (res?.blocked) { alert('진행 중인 월드컵에 참가 중인 배우는 삭제할 수 없습니다.'); return }
       setSelected(null)
       loadActors()
+      loadMasterPoints()
     }
   }
 
@@ -249,6 +273,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     setSelected(null)
     exitDeleteMode()
     loadActors()
+    loadMasterPoints()
   }
 
   const handleToggleFavorite = async (id: number, current: number, e?: React.MouseEvent) => {
@@ -276,6 +301,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                 <option value="created_at">등록일</option>
                 <option value="name">이름</option>
                 <option value="avg_score">평점</option>
+                <option value="master_points">마스터랭킹</option>
                 <option value="ratio_score">피지컬</option>
                 <option value="birthday">생년월일</option>
                 <option value="debut_date">데뷔일</option>
@@ -373,12 +399,24 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                     <p className="text-sm font-bold text-white truncate flex-1">{a.name}</p>
                     <p className="text-sm font-bold text-yellow-400 flex-shrink-0">{(a.avg_score ?? 0).toFixed(2)}점</p>
                   </div>
+                  {(() => {
+                    const mp = masterPointsMap.get(a.id)
+                    if (!mp) return null
+                    const div = getDivision(mp.rank, mp.master_run_count)
+                    const isUnranked = mp.master_run_count === 0
+                    return (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <span className={`text-[10px] px-1 py-0.5 rounded ${DIV_COLOR[div]}`}>{DIV_LABEL[div]}</span>
+                          <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>#{isUnranked ? '-' : `${mp.rank}위`}</span>
+                        </div>
+                        <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>{isUnranked ? '-' : mp.total_points.toFixed(1)}pt</span>
+                      </div>
+                    )
+                  })()}
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-gray-400">{a.birthday || '-'} ({getAge(a.birthday)})</p>
                     <p className="text-xs text-gray-400">총{a.work_count ?? 0}편</p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-gray-400">{a.debut_date || '-'} ({getDebutAge(a.birthday, a.debut_date)})</p>
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-gray-400">

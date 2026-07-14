@@ -17,7 +17,7 @@ export function registerWorksHandlers(): void {
     ratingTo?: number
     actorId?: number
     studioId?: number
-    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio'
+    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
     titleSearch?: string
@@ -148,6 +148,8 @@ export function registerWorksHandlers(): void {
       ) ${invertedDir}, w.release_date ${invertedDir}, w.product_number ${invertedDir}`
     } else if (params?.sortBy === 'studio') {
       sql += ` ORDER BY m.name IS NULL ${invertedDir === 'ASC' ? 'ASC' : 'DESC'}, m.name ${invertedDir}, s.name IS NULL ${invertedDir === 'ASC' ? 'ASC' : 'DESC'}, s.name ${invertedDir}, w.release_date ${invertedDir}, w.product_number ${invertedDir}`
+    } else if (params?.sortBy === 'master_points') {
+      sql += ` ORDER BY COALESCE((SELECT SUM(mh.points) FROM master_ranking_history mh JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 WHERE mh.type = 'work' AND mh.item_id = w.id AND mh.season_id IS NULL), 0) ${sortDir}, w.product_number ASC`
     } else if (params?.sortBy === 'product_number') {
       sql += ` ORDER BY w.product_number ${invertedDir}`
     } else {

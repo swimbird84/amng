@@ -119,7 +119,7 @@ export default function MatchCard({
             <p
               className="flex-1 text-[1.47rem] font-bold text-white text-center truncate cursor-pointer hover:underline"
               onClick={onNavigate}
-            >{item.name ?? '...'}</p>
+            >{item.name ?? '...'}{item.avg_score != null && item.avg_score > 0 && <span className="text-yellow-400 text-xs font-normal ml-1">{item.avg_score.toFixed(2)}</span>}</p>
             <button
               onClick={handleEditClick}
               className="shrink-0 w-7 h-7 rounded flex items-center justify-center cursor-pointer hover:border hover:border-gray-500 transition"

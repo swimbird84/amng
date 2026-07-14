@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work, Tag, Actor, Studio } from '../types'
-import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi } from '../api'
+import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, masterRankingApi } from '../api'
 import SearchBar, { type WorkSearchParams, DEFAULT_WORK_SEARCH } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import WorkDetailModal from '../components/WorkDetailModal'
@@ -9,6 +9,7 @@ import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import { hashColor, studioColor } from '../utils/colorHelpers'
+import { getDivision, DIV_LABEL, DIV_COLOR } from '../components/cup/cupConstants'
 
 const BATCH_SIZE = 100
 
@@ -33,14 +34,15 @@ export default function Works({ onNavigateToActor }: WorksProps) {
       return DEFAULT_WORK_SEARCH
     }
   })
-  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio'>(
-    (localStorage.getItem('works:sortBy') as 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio') || 'release_date'
+  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points'>(
+    (localStorage.getItem('works:sortBy') as 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points') || 'release_date'
   )
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('works:sortDir') as 'asc' | 'desc') || 'desc'
   )
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [masterPointsMap, setMasterPointsMap] = useState<Map<number, { rank: number; total_points: number; master_run_count: number }>>(new Map())
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -80,8 +82,12 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     params.limit = limit
     params.offset = offset
     const result = await worksApi.list(params) as { items: Work[]; total: number }
-    if (replace) setWorks(result.items)
-    else setWorks(prev => [...prev, ...result.items])
+    if (replace) {
+      setWorks(result.items)
+      worksCountRef.current = result.items.length
+    } else {
+      setWorks(prev => { const next = [...prev, ...result.items]; worksCountRef.current = next.length; return next })
+    }
     setTotalCount(result.total)
     const more = result.items.length === limit
     setHasMore(more)
@@ -89,6 +95,15 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     setIsLoadingMore(false)
     isLoadingMoreRef.current = false
   }, [search, sortBy, sortDir])
+
+  const loadMasterPoints = useCallback(async () => {
+    const res = await masterRankingApi.list({ type: 'work', limit: 99999 }) as { rows: { id: number; rank: number; total_points: number; master_run_count: number }[] }
+    const map = new Map<number, { rank: number; total_points: number; master_run_count: number }>()
+    for (const r of res.rows) {
+      map.set(r.id, { rank: r.rank, total_points: r.total_points, master_run_count: r.master_run_count })
+    }
+    setMasterPointsMap(map)
+  }, [])
 
   const refreshWorks = useCallback((extraCount = 0) => {
     const count = Math.max(worksCountRef.current + extraCount, BATCH_SIZE)
@@ -140,6 +155,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   useEffect(() => {
     loadTags()
     loadActorList()
+    loadMasterPoints()
     studiosApi.list().then((d) => setStudioList(d as Studio[]))
   }, [])
   useEffect(() => { localStorage.setItem('works:search', JSON.stringify(search)) }, [search])
@@ -166,6 +182,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
       if (res?.blocked) { alert('진행 중인 월드컵에 참가 중인 작품은 삭제할 수 없습니다.'); return }
       setSelected(null)
       refreshWorks(-1)
+      loadMasterPoints()
     }
   }
 
@@ -265,6 +282,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     setSelected(null)
     exitDeleteMode()
     refreshWorks(-deletedCount)
+    loadMasterPoints()
   }
 
   const handleBulkTrashFolders = async () => {
@@ -345,6 +363,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
               >
                 <option value="created_at">등록일</option>
                 <option value="product_number">품번</option>
+                <option value="master_points">마스터랭킹</option>
                 <option value="rating">별점</option>
                 <option value="release_date">발매일</option>
                 <option value="title">타이틀</option>
@@ -455,6 +474,21 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                       <Rating value={w.rating} readonly small />
                     </div>
                   </div>
+                  {(() => {
+                    const mp = masterPointsMap.get(w.id)
+                    if (!mp) return null
+                    const div = getDivision(mp.rank, mp.master_run_count)
+                    const isUnranked = mp.master_run_count === 0
+                    return (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <span className={`text-[10px] px-1 py-0.5 rounded ${DIV_COLOR[div]}`}>{DIV_LABEL[div]}</span>
+                          <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>#{isUnranked ? '-' : `${mp.rank}위`}</span>
+                        </div>
+                        <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>{isUnranked ? '-' : mp.total_points.toFixed(1)}pt</span>
+                      </div>
+                    )
+                  })()}
                   <p className="text-xs text-gray-500">{w.release_date || '-'}</p>
                   {w.rep_actors && w.rep_actors.length > 0 && (
                     <div className="flex flex-wrap gap-0.5 mt-0.5">

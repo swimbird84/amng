@@ -38,11 +38,9 @@ export default function ImagePreview({ path, alt, className = '', style, objectP
     }
   }, [path, version, visible])
 
-  if (!src) {
-    return (
-      <div ref={ref} className={`bg-gray-700 flex items-center justify-center text-gray-500 ${className}`} style={style} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} />
-    )
-  }
-
-  return <img src={src} alt={alt} className={`object-cover ${className}`} style={{ objectPosition, ...style }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} />
+  return (
+    <div ref={ref} className={`${src ? '' : 'bg-gray-700 flex items-center justify-center text-gray-500 '}${className}`} style={style} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      {src && <img src={src} alt={alt} className={`object-cover w-full h-full`} style={{ objectPosition }} />}
+    </div>
+  )
 }

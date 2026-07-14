@@ -55,6 +55,7 @@ export type ItemInfo = {
   release_date?: string | null
   is_favorite?: number | null
   delete_pending?: number | null
+  avg_score?: number | null
   comment?: string | null
   files?: { id: number; file_path: string; type: string }[]
   actors?: { id: number; name: string }[]
