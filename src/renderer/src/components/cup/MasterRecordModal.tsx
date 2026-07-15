@@ -15,7 +15,10 @@ interface Props {
 
 export default function MasterRecordModal({ type, itemId, itemName, itemImage, onClose }: Props) {
   const [seasons, setSeasons] = useState<{ id: number; name: string }[]>([])
-  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('cup:recordSeasonId')
+    return saved ? Number(saved) : null
+  })
 
   const [stats, setStats] = useState<{
     rank: number; total_points: number; total_cups: number; cup_wins: number
@@ -70,7 +73,8 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
       case 'wins': return m * (a.wins - b.wins)
       case 'draws': return m * (a.draws - b.draws)
       case 'losses': return m * (a.losses - b.losses)
-      case 'rate': {
+      case 'rate':
+      case 'eval': {
         const ra = a.total > 0 ? a.wins / a.total : -1
         const rb = b.total > 0 ? b.wins / b.total : -1
         return m * (ra - rb)
@@ -82,6 +86,23 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
   const handleH2hSort = (col: string) => {
     if (h2hSort.col === col) setH2hSort({ col, dir: h2hSort.dir === 'desc' ? 'asc' : 'desc' })
     else setH2hSort({ col, dir: 'desc' })
+  }
+
+  const getWinRateColor = (rate: number, total: number) => {
+    if (total < 3) return 'text-gray-500'
+    if (rate >= 80) return 'text-emerald-400'
+    if (rate >= 60) return 'text-blue-400'
+    if (rate >= 40) return 'text-gray-200'
+    if (rate >= 20) return 'text-orange-400'
+    return 'text-red-400'
+  }
+  const getWinRateLabel = (rate: number, total: number) => {
+    if (total < 3) return null
+    if (rate >= 80) return '초강세'
+    if (rate >= 60) return '강세'
+    if (rate >= 40) return '비등'
+    if (rate >= 20) return '약세'
+    return '초약세'
   }
 
   // 추이 차트 렌더링 (간단한 SVG 꺾은선)
@@ -123,7 +144,7 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
           <span className="text-yellow-400 text-sm font-semibold">마스터 전적</span>
           <select
             value={selectedSeasonId === null ? '' : String(selectedSeasonId)}
-            onChange={e => setSelectedSeasonId(e.target.value === '' ? null : Number(e.target.value))}
+            onChange={e => { const v = e.target.value === '' ? null : Number(e.target.value); setSelectedSeasonId(v); localStorage.setItem('cup:recordSeasonId', v === null ? '' : String(v)) }}
             className="bg-gray-700 text-gray-300 text-xs rounded px-2 py-1 border-none outline-none cursor-pointer"
           >
             <option value="">{seasons.length + 1}시즌(현재)</option>
@@ -203,18 +224,18 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
               </div>
 
               {/* 상대전적 */}
-              {h2hData.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-sm font-semibold text-gray-300">상대전적</h3>
-                    <select
-                      value={h2hMin}
-                      onChange={e => { const v = Number(e.target.value); setH2hMin(v); localStorage.setItem('cup:h2hMin', String(v)) }}
-                      className="bg-gray-700 text-white text-xs px-1.5 py-0.5 rounded"
-                    >
-                      {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}전 이상</option>)}
-                    </select>
-                  </div>
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-300">상대전적</h3>
+                  <select
+                    value={h2hMin}
+                    onChange={e => { const v = Number(e.target.value); setH2hMin(v); localStorage.setItem('cup:h2hMin', String(v)) }}
+                    className="bg-gray-700 text-white text-xs px-1.5 py-0.5 rounded"
+                  >
+                    {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}전 이상</option>)}
+                  </select>
+                </div>
+                {h2hData.length > 0 ? (
                   <div className="max-h-[480px] overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead className="sticky top-0 bg-gray-800">
@@ -226,6 +247,7 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
                             { col: 'draws', label: '무', w: 'w-[50px] text-center' },
                             { col: 'losses', label: '패', w: 'w-[50px] text-center' },
                             { col: 'rate', label: '승률', w: 'w-[60px] text-center' },
+                            { col: 'eval', label: '평가', w: 'w-[60px] text-center' },
                           ].map(({ col, label, w }) => (
                             <th
                               key={col}
@@ -252,14 +274,26 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
                             <td className="text-center py-1.5 px-2 text-blue-400">{row.wins}</td>
                             <td className="text-center py-1.5 px-2 text-gray-400">{row.draws}</td>
                             <td className="text-center py-1.5 px-2 text-red-400">{row.losses}</td>
-                            <td className="text-center py-1.5 px-2">{row.total > 0 ? Math.round(row.wins / row.total * 100) : 0}%</td>
+                            {(() => {
+                              const winRate = row.total > 0 ? row.wins / row.total * 100 : 0
+                              const label = getWinRateLabel(winRate, row.total)
+                              const color = getWinRateColor(winRate, row.total)
+                              return (
+                                <>
+                                  <td className={`text-center py-1.5 px-2 ${color}`}>{Math.round(winRate)}%</td>
+                                  <td className={`text-center py-1.5 px-2 text-xs ${color}`}>{label ?? '-'}</td>
+                                </>
+                              )
+                            })()}
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-gray-500 text-sm text-center py-4">상대전적 데이터가 없습니다.</p>
+                )}
+              </div>
             </>
           )}
         </div>
