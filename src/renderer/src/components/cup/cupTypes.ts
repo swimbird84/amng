@@ -100,7 +100,6 @@ export type RankingSettings = {
   rankBonus: Record<string, Record<string, number>>
   worldcupMainMultiplier?: number
   recentRunLimit?: number
-  h2hMinMatches?: number
 }
 
 export type MasterRankRow = {

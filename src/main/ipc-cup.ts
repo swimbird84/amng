@@ -1254,11 +1254,10 @@ export function registerCupHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('cup:head-to-head', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number }) => {
-    const { type, itemId, seasonId = null } = params
+  ipcMain.handle('cup:head-to-head', (_e, params: { type: 'actor' | 'work'; itemId: number; seasonId?: number; minMatches?: number }) => {
+    const { type, itemId, seasonId = null, minMatches = 1 } = params
     const seasonRunFilter = buildSeasonRunFilter(seasonId)
-    const h2hRow = db().prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
-    const h2hMin = h2hRow ? (JSON.parse(h2hRow.settings_json).h2hMinMatches ?? 3) : 3
+    const h2hMin = Math.max(1, minMatches)
     const rows = db().prepare(`
       WITH h2h AS (
         SELECT item2_id AS opp_id, m.winner_id, m.is_draw

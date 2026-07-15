@@ -25,6 +25,7 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
   const [formatStats, setFormatStats] = useState<FormatStat[]>([])
   const [h2hData, setH2hData] = useState<H2HRow[]>([])
   const [h2hSort, setH2hSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'total', dir: 'desc' })
+  const [h2hMin, setH2hMin] = useState<number>(() => Number(localStorage.getItem('cup:h2hMin')) || 1)
   const [loading, setLoading] = useState(true)
 
   const loadData = useCallback(async (sid: number | null) => {
@@ -34,7 +35,7 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
         masterRankingApi.itemStats(type, itemId, sid ?? undefined),
         masterRankingApi.rankHistory(type, itemId, 0, sid ?? undefined),
         masterRankingApi.itemFormatStats(type, itemId, sid ?? undefined),
-        cupApi.headToHead(type, itemId, sid ?? undefined),
+        cupApi.headToHead(type, itemId, sid ?? undefined, h2hMin),
       ])
       setStats(s)
       setRankHistory(rh)
@@ -43,7 +44,7 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
     } finally {
       setLoading(false)
     }
-  }, [type, itemId])
+  }, [type, itemId, h2hMin])
 
   useEffect(() => {
     masterRankingApi.seasons(type).then(s => setSeasons(s.map(r => ({ id: r.id, name: r.name }))))
@@ -204,7 +205,16 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
               {/* 상대전적 */}
               {h2hData.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-300 mb-2">상대전적</h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-sm font-semibold text-gray-300">상대전적</h3>
+                    <select
+                      value={h2hMin}
+                      onChange={e => { const v = Number(e.target.value); setH2hMin(v); localStorage.setItem('cup:h2hMin', String(v)) }}
+                      className="bg-gray-700 text-white text-xs px-1.5 py-0.5 rounded"
+                    >
+                      {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}전 이상</option>)}
+                    </select>
+                  </div>
                   <div className="max-h-[480px] overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead className="sticky top-0 bg-gray-800">

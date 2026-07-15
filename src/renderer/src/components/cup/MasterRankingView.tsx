@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { cupApi, masterRankingApi, dashboardApi, actorsApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
-import type { MasterRankRow, FormatStat, H2HRow, RateTooltip } from './cupTypes'
+import type { MasterRankRow, FormatStat, RateTooltip } from './cupTypes'
 import { MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
 import RankingSettingsModal from './RankingSettingsModal'
 import WorkActorDistModal from './WorkActorDistModal'
@@ -54,15 +54,6 @@ export default function MasterRankingView({
   const [trendLimit, setTrendLimit] = useState<number>(() => Number(localStorage.getItem('cup:trendLimit')) || 10)
   const trendLimitApi = trendLimit >= 9999 ? 0 : trendLimit
   const rankHistCache = useRef<Map<string, { rank: number; recorded_at: string; tournament_name: string }[]>>(new Map())
-  const [h2hData, setH2hData] = useState<H2HRow[] | null>(null)
-  const [h2hLoading, setH2hLoading] = useState(false)
-  const [h2hSort, setH2hSort] = useState<{ col: 'name' | 'total' | 'wins' | 'draws' | 'losses' | 'rate' | 'div'; dir: 'asc' | 'desc' }>({ col: 'total', dir: 'desc' })
-  const [h2hDivFilter, setH2hDivFilter] = useState<number | null>(null)
-  const [h2hDivDropdown, setH2hDivDropdown] = useState(false)
-
-  // 상대전적 전용 모달
-  const [h2hModal, setH2hModal] = useState<{ itemId: number; lbl: string; img: string | null } | null>(null)
-
   // 평점 편집
   const [editActorId, setEditActorId] = useState<number | null>(null)
   const [editActorData, setEditActorData] = useState<any>(null)
@@ -433,7 +424,6 @@ export default function MasterRankingView({
                 <col style={{ width: '4rem' }} />
                 <col />
                 {type === 'work' && <col style={{ width: '6rem' }} />}
-                {type === 'actor' && <col style={{ width: '3rem' }} />}
                 <col style={{ width: '5.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
                 {type === 'actor' && <col style={{ width: '5rem' }} />}
@@ -449,7 +439,6 @@ export default function MasterRankingView({
                   <th className="px-2 py-2.5 text-left text-gray-400">썸네일</th>
                   <th className="px-3 py-2.5 text-left text-gray-400">이름</th>
                   {type === 'work' && <th className="px-2 py-2.5 text-left text-gray-400">레이블</th>}
-                  {type === 'actor' && <th className="px-2 py-2.5 text-center text-gray-400 text-xs"><div className="leading-tight">상대<br />전적</div></th>}
                   <SortTh col="total_points" label="마스터" subLabel="포인트" subLabelClass="font-normal" />
                   {type === 'actor' && <SortTh col="score_rank" label="평점" />}
                   <SortTh col="win_rate" label="우승률" subLabel="(우승/런)" subLabelClass="text-[9px] text-gray-600 font-normal" />
@@ -556,22 +545,6 @@ export default function MasterRankingView({
                           </td>
                         )
                       })()}
-                      {/* 상대전적 (배우만) */}
-                      {type === 'actor' && (
-                        <td className="px-2 py-2 text-center">
-                          <button
-                            className="text-gray-500 hover:text-white transition text-sm"
-                            onClick={e => {
-                              e.stopPropagation()
-                              setH2hModal({ itemId: row.id, lbl, img: imgPath(row) })
-                              setH2hData(null)
-                              setH2hLoading(true)
-                              cupApi.headToHead(type, row.id, selectedSeasonId ?? undefined).then(setH2hData).catch(() => setH2hData([])).finally(() => setH2hLoading(false))
-                            }}
-                            title="상대 전적"
-                          >📄</button>
-                        </td>
-                      )}
                       {/* 마스터 점수 */}
                       <td className="px-3 py-2 text-right">
                         <span className={`font-bold ${row.total_points > 0 ? 'text-green-400' : 'text-gray-600'}`}>
@@ -844,136 +817,6 @@ export default function MasterRankingView({
           </div>
         </div>
       )}
-
-      {/* 상대전적 모달 */}
-      {h2hModal && (() => {
-        const getWinRateColor = (rate: number, total: number) => {
-          if (total < 5) return 'text-gray-500'
-          if (rate >= 80) return 'text-emerald-400'
-          if (rate >= 60) return 'text-blue-400'
-          if (rate >= 40) return 'text-gray-200'
-          if (rate >= 20) return 'text-orange-400'
-          return 'text-red-400'
-        }
-        const getWinRateLabel = (rate: number, total: number) => {
-          if (total < 5) return null
-          if (rate >= 80) return '초강세'
-          if (rate >= 60) return '강세'
-          if (rate >= 40) return '비등'
-          if (rate >= 20) return '약세'
-          return '초약세'
-        }
-        const handleH2hSort = (col: typeof h2hSort.col) => {
-          setH2hSort(prev => prev.col === col ? { col, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'name' || col === 'div' ? 'asc' : 'desc' })
-        }
-        const existingDivs = h2hData ? [...new Set(h2hData.map(r => r.opp_rank != null ? getDivision(r.opp_rank, 1) : 0))].sort((a, b) => a - b) : []
-        const filtered = h2hDivFilter !== null && h2hData
-          ? h2hData.filter(r => getDivision(r.opp_rank ?? 9999, r.opp_rank != null ? 1 : 0) === h2hDivFilter)
-          : h2hData ?? []
-        const sorted = [...filtered].sort((a, b) => {
-          const dir = h2hSort.dir === 'asc' ? 1 : -1
-          if (h2hSort.col === 'name') return ((a.name ?? a.title ?? a.product_number ?? '').localeCompare(b.name ?? b.title ?? b.product_number ?? '')) * dir
-          if (h2hSort.col === 'div') return ((getDivision(a.opp_rank ?? 9999, a.opp_rank != null ? 1 : 0)) - (getDivision(b.opp_rank ?? 9999, b.opp_rank != null ? 1 : 0))) * dir
-          if (h2hSort.col === 'total') return (a.total - b.total) * dir
-          if (h2hSort.col === 'wins') return (a.wins - b.wins) * dir
-          if (h2hSort.col === 'draws') return (a.draws - b.draws) * dir
-          if (h2hSort.col === 'losses') return (a.losses - b.losses) * dir
-          if (h2hSort.col === 'rate') return ((a.total > 0 ? a.wins / a.total : -1) - (b.total > 0 ? b.wins / b.total : -1)) * dir
-          return 0
-        })
-        const SortIcon = ({ col }: { col: typeof h2hSort.col }) =>
-          h2hSort.col === col ? <span className="text-[9px]">{h2hSort.dir === 'desc' ? '▼' : '▲'}</span> : <span className="text-[9px] text-gray-700">▼</span>
-
-        return (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]" onClick={() => { setH2hModal(null); setH2hDivDropdown(false) }}>
-            <div className="bg-gray-800 rounded-lg w-[600px] max-h-[95vh] flex flex-col relative" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setH2hModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
-              <div className="shrink-0 px-6 pt-5 pb-3 border-b border-gray-700">
-                <div className="flex items-center gap-3">
-                  {h2hModal.img && (
-                    <div className="w-10 h-10 rounded overflow-hidden shrink-0">
-                      <ImagePreview path={h2hModal.img} alt={h2hModal.lbl} className="w-full h-full object-cover" objectPosition="center 10%" />
-                    </div>
-                  )}
-                  <p className="text-white font-bold text-lg">{h2hModal.lbl} 상대 전적</p>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto px-6 pb-4">
-                {h2hLoading ? <p className="text-gray-500 text-sm text-center py-8">로딩 중...</p>
-                : !h2hData || h2hData.length === 0 ? <p className="text-gray-500 text-sm text-center py-8">상대 전적 데이터가 없습니다.</p>
-                : (
-                  <table className="w-full table-fixed text-xs">
-                    <colgroup>
-                      <col style={{ width: '2.5rem' }} />
-                      <col style={{ width: '3.5rem' }} />
-                      <col />
-                      <col style={{ width: '2.8rem' }} />
-                      <col style={{ width: '2.8rem' }} />
-                      <col style={{ width: '2.2rem' }} />
-                      <col style={{ width: '2.8rem' }} />
-                      <col style={{ width: '4.5rem' }} />
-                    </colgroup>
-                    <thead className="sticky top-0 bg-gray-800 z-10">
-                      <tr className="border-b border-gray-700 text-gray-400">
-                        <th className="px-1 py-2 text-center"></th>
-                        <th className="px-1 py-2 text-center relative">
-                          <div className="flex items-center justify-center gap-1">
-                            <button className={`hover:text-white transition text-xs ${h2hDivFilter !== null ? 'text-blue-400' : ''}`} onClick={() => setH2hDivDropdown(v => !v)}>
-                              리그{h2hDivFilter !== null ? `(${h2hDivFilter}부)` : ''}
-                            </button>
-                            <button className="hover:text-white transition" onClick={() => handleH2hSort('div')}><SortIcon col="div" /></button>
-                          </div>
-                          {h2hDivDropdown && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-20 py-1 min-w-20" onClick={e => e.stopPropagation()}>
-                              <button className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-700 transition ${h2hDivFilter === null ? 'text-blue-400' : 'text-gray-300'}`} onClick={() => { setH2hDivFilter(null); setH2hDivDropdown(false) }}>전체</button>
-                              {existingDivs.map(d => (
-                                <button key={d} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-700 transition ${h2hDivFilter === d ? 'text-blue-400' : 'text-gray-300'}`} onClick={() => { setH2hDivFilter(d); setH2hDivDropdown(false) }}>{DIV_LABEL[d] ?? `${d}부`}</button>
-                              ))}
-                            </div>
-                          )}
-                        </th>
-                        <th className="px-2 py-2 text-left cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('name')}><span className="flex items-center gap-0.5">이름 <SortIcon col="name" /></span></th>
-                        <th className="px-1 py-2 text-right cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('total')}><span className="flex items-center justify-end gap-0.5">전 <SortIcon col="total" /></span></th>
-                        <th className="px-1 py-2 text-right cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('wins')}><span className="flex items-center justify-end gap-0.5">승 <SortIcon col="wins" /></span></th>
-                        <th className="px-1 py-2 text-right cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('draws')}><span className="flex items-center justify-end gap-0.5">무 <SortIcon col="draws" /></span></th>
-                        <th className="px-1 py-2 text-right cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('losses')}><span className="flex items-center justify-end gap-0.5">패 <SortIcon col="losses" /></span></th>
-                        <th className="px-2 py-2 text-right cursor-pointer hover:text-white select-none" onClick={() => handleH2hSort('rate')}><span className="flex items-center justify-end gap-0.5">승률 <SortIcon col="rate" /></span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sorted.map(row => {
-                        const oppName = row.name ?? row.title ?? row.product_number ?? `#${row.opp_id}`
-                        const oppImg = row.photo_path ?? row.cover_path ?? null
-                        const winRate = row.total > 0 ? row.wins / row.total * 100 : 0
-                        const division = row.opp_rank != null ? getDivision(row.opp_rank, 1) : 0
-                        return (
-                          <tr key={row.opp_id} className="border-b border-gray-700/50 hover:bg-gray-700/30 transition">
-                            <td className="p-0 h-10">
-                              {oppImg ? <ImagePreview path={oppImg} alt={oppName} className="w-full h-10 object-cover" objectPosition="center 10%" /> : <div className="w-full h-10 bg-gray-700 flex items-center justify-center text-gray-600">?</div>}
-                            </td>
-                            <td className="px-1 py-1 text-center"><span className={`inline-block px-1 py-0.5 rounded border text-[10px] font-medium ${DIV_COLOR[division] ?? ''}`}>{DIV_LABEL[division] ?? '—'}</span></td>
-                            <td className="px-2 py-1 text-white truncate max-w-0">{oppName}</td>
-                            <td className="px-1 py-1 text-right text-gray-300">{row.total}</td>
-                            <td className="px-1 py-1 text-right text-green-400">{row.wins}</td>
-                            <td className="px-1 py-1 text-right text-yellow-400">{row.draws}</td>
-                            <td className="px-1 py-1 text-right text-red-400">{row.losses}</td>
-                            <td className="px-2 py-1 text-right">
-                              <div className="flex flex-col items-end">
-                                <span className={`font-medium ${getWinRateColor(winRate, row.total)}`}>{winRate.toFixed(1)}%</span>
-                                {getWinRateLabel(winRate, row.total) && <span className={`text-[9px] leading-tight ${getWinRateColor(winRate, row.total)}`}>{getWinRateLabel(winRate, row.total)}</span>}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      })()}
 
       {/* 1부리그 랭킹차트 모달 */}
       {rankChartModal && (

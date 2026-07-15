@@ -197,8 +197,8 @@ export const cupApi = {
     api.invoke('cup:item-tournament-stats', { tournamentId, itemId }) as Promise<{ total_runs: number; run_wins: number; total_matches: number; match_wins: number; win_rate: number; match_win_rate: number; rank: number }>,
   rankHistory: (tournamentId: number, itemId: number) =>
     api.invoke('cup:rank-history', { tournamentId, itemId }) as Promise<{ rank: number; recorded_at: string }[]>,
-  headToHead: (type: 'actor' | 'work', itemId: number, seasonId?: number) =>
-    api.invoke('cup:head-to-head', { type, itemId, seasonId }) as Promise<{ opp_id: number; total: number; wins: number; losses: number; draws: number; opp_rank?: number | null; name?: string; title?: string; product_number?: string; photo_path?: string; cover_path?: string }[]>,
+  headToHead: (type: 'actor' | 'work', itemId: number, seasonId?: number, minMatches?: number) =>
+    api.invoke('cup:head-to-head', { type, itemId, seasonId, minMatches }) as Promise<{ opp_id: number; total: number; wins: number; losses: number; draws: number; opp_rank?: number | null; name?: string; title?: string; product_number?: string; photo_path?: string; cover_path?: string }[]>,
 }
 
 // 랭킹 설정
