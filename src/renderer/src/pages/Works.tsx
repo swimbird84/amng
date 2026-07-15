@@ -361,14 +361,14 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('works:sortBy', v) }}
                 className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
               >
-                <option value="created_at">등록일</option>
-                <option value="product_number">품번</option>
-                <option value="master_points">마스터랭킹</option>
-                <option value="rating">별점</option>
                 <option value="release_date">발매일</option>
-                <option value="title">타이틀</option>
+                <option value="created_at">등록일</option>
+                <option value="master_points">마스터랭킹</option>
                 <option value="actor">배우</option>
                 <option value="studio">레이블</option>
+                <option value="rating">별점</option>
+                <option value="product_number">품번</option>
+                <option value="title">타이틀</option>
               </select>
               <button
                 onClick={() => setSortDir((d) => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem('works:sortDir', next); return next })}
