@@ -59,7 +59,7 @@ function WorkCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work & {
 }
 
 // 작품 미니 카드 (신작용, 절반 크기)
-function WorkMiniCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void }) {
+function WorkMiniCard({ work, onClick, onMouseMove, onMouseLeave, dateLabel }: { work: Work; onClick: () => void; onMouseMove?: (e: React.MouseEvent) => void; onMouseLeave?: () => void; dateLabel?: string }) {
   return (
     <div onClick={onClick} className="cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500">
       <div onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
@@ -67,7 +67,7 @@ function WorkMiniCard({ work, onClick, onMouseMove, onMouseLeave }: { work: Work
       </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{work.product_number || '-'}</p>
-        <p className="text-xs text-gray-500 truncate">{work.release_date || '-'}</p>
+        <p className="text-xs text-gray-500 truncate">{dateLabel ?? work.release_date ?? '-'}</p>
       </div>
     </div>
   )
@@ -198,6 +198,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [newWorks, setNewWorks] = useState<Work[]>([])
   const [expandedWorks, setExpandedWorks] = useState(false)
 
+  const [recentWorks, setRecentWorks] = useState<Work[]>([])
+  const [expandedRecent, setExpandedRecent] = useState(false)
+
   const [newActors, setNewActors] = useState<Actor[]>([])
   const [expandedActors, setExpandedActors] = useState(false)
 
@@ -250,6 +253,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   useEffect(() => {
     dashboardApi.newWorks().then((d) => setNewWorks(d as Work[]))
+    dashboardApi.recentWorks().then((d) => setRecentWorks(d as Work[]))
     dashboardApi.newActors().then((d) => setNewActors(d as Actor[]))
     dashboardApi.releaseYears().then((d) => setYears(d as { year: string; count: number }[]))
     dashboardApi.ageDist().then((d) => setAgeDist(d as (Actor & { age: number; avg_score: number })[]))
@@ -427,7 +431,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         <div>
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-white font-bold text-base">신작</h2>
-            <span className="text-xs text-gray-500">({today} 기준 2개월)</span>
+            <span className="text-xs text-gray-500">({today} 기준 1개월)</span>
             <button
               onClick={() => setExpandedWorks((v) => !v)}
               className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
@@ -443,6 +447,29 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             </div>
           ) : (
             <p className="text-gray-500 text-sm">발매일이 등록된 작품이 없습니다</p>
+          )}
+        </div>
+
+        {/* 등록 */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-white font-bold text-base">등록</h2>
+            <span className="text-xs text-gray-500">({today} 기준 2주)</span>
+            <button
+              onClick={() => setExpandedRecent((v) => !v)}
+              className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
+            >
+              {expandedRecent ? '−' : '+'}
+            </button>
+          </div>
+          {recentWorks.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2">
+              {recentWorks.slice(0, expandedRecent ? undefined : 10).map((w) => (
+                <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} dateLabel={((w as any).created_at as string)?.slice(0, 10) || '-'} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">최근 2주 내 등록된 작품이 없습니다</p>
           )}
         </div>
 

@@ -15,7 +15,7 @@ export function registerDashboardHandlers(): void {
         ), 0) AS actor_avg_score
       FROM works w
       WHERE w.release_date IS NOT NULL AND w.release_date != ''
-        AND w.release_date >= date('now', '-2 months')
+        AND w.release_date >= date('now', '-1 months')
       ORDER BY w.release_date DESC, w.rating DESC, actor_avg_score DESC
     `).all() as Array<Record<string, unknown>>
     if (works.length === 0) return []
@@ -42,6 +42,46 @@ export function registerDashboardHandlers(): void {
       repActorMap2.get(r.work_id)!.push({ id: r.id, name: r.name })
     }
     return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [], rep_actors: repActorMap2.get(w.id as number) ?? [] }))
+  })
+
+  ipcMain.handle('dashboard:recent-works', () => {
+    const works = db().prepare(`
+      SELECT w.*,
+        COALESCE((
+          SELECT AVG((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 10.0)
+          FROM work_actors wa2
+          JOIN actor_scores s ON s.actor_id = wa2.actor_id
+          WHERE wa2.work_id = w.id
+        ), 0) AS actor_avg_score
+      FROM works w
+      WHERE w.created_at IS NOT NULL
+        AND w.created_at >= datetime('now', '-14 days')
+      ORDER BY w.created_at DESC, w.rating DESC, actor_avg_score DESC
+    `).all() as Array<Record<string, unknown>>
+    if (works.length === 0) return []
+    const ids = works.map(w => w.id as number)
+    const ph = ids.map(() => '?').join(',')
+    const repRows = db().prepare(`
+      SELECT wt.work_id, t.id, t.name FROM work_tags wt
+      JOIN work_tags_master t ON t.id = wt.tag_id
+      WHERE wt.is_rep = 1 AND wt.work_id IN (${ph})
+    `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
+    const repMap = new Map<number, Array<{ id: number; name: string }>>()
+    for (const r of repRows) {
+      if (!repMap.has(r.work_id)) repMap.set(r.work_id, [])
+      repMap.get(r.work_id)!.push({ id: r.id, name: r.name })
+    }
+    const repActorRows = db().prepare(`
+      SELECT wa.work_id, a.id, a.name FROM work_actors wa
+      JOIN actors a ON a.id = wa.actor_id
+      WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
+    `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
+    const repActorMap = new Map<number, Array<{ id: number; name: string }>>()
+    for (const r of repActorRows) {
+      if (!repActorMap.has(r.work_id)) repActorMap.set(r.work_id, [])
+      repActorMap.get(r.work_id)!.push({ id: r.id, name: r.name })
+    }
+    return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [], rep_actors: repActorMap.get(w.id as number) ?? [] }))
   })
 
   ipcMain.handle('dashboard:release-years', () => {

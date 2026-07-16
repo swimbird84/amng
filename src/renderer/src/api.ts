@@ -136,6 +136,7 @@ export const shellApi = {
 // 대시보드
 export const dashboardApi = {
   newWorks: () => api.invoke('dashboard:new-works'),
+  recentWorks: () => api.invoke('dashboard:recent-works'),
   releaseYears: () => api.invoke('dashboard:release-years'),
   releaseMonths: (year: string) => api.invoke('dashboard:release-months', year),
   releaseWorks: (year: string, month: number) => api.invoke('dashboard:release-works', year, month),

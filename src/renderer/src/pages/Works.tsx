@@ -489,7 +489,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                       </div>
                     )
                   })()}
-                  <p className="text-xs text-gray-500">{w.release_date || '-'}</p>
+                  <p className="text-xs text-gray-500">발매일 : {w.release_date || '-'}  등록일 : {w.created_at?.slice(0, 10) || '-'}</p>
                   {w.rep_actors && w.rep_actors.length > 0 && (
                     <div className="flex flex-wrap gap-0.5 mt-0.5">
                       {w.rep_actors.map((a) => (

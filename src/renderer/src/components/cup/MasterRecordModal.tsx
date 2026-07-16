@@ -3,6 +3,7 @@ import { masterRankingApi, cupApi } from '../../api'
 import { getDivision, DIV_LABEL, FORMAT_LABEL } from './cupConstants'
 import type { FormatStat, H2HRow } from './cupTypes'
 import ImagePreview from '../ImagePreview'
+import CardTooltip, { type TooltipState } from '../CardTooltip'
 import { pushEscHandler, popEscHandler } from '../../escManager'
 
 interface Props {
@@ -29,6 +30,7 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
   const [h2hData, setH2hData] = useState<H2HRow[]>([])
   const [h2hSort, setH2hSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'total', dir: 'desc' })
   const [h2hMin, setH2hMin] = useState<number>(() => Number(localStorage.getItem('cup:h2hMin')) || 1)
+  const [h2hTooltip, setH2hTooltip] = useState<TooltipState | null>(null)
   const [loading, setLoading] = useState(true)
 
   const loadData = useCallback(async (sid: number | null) => {
@@ -236,18 +238,27 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
                   </select>
                 </div>
                 {h2hData.length > 0 ? (
-                  <div className="max-h-[480px] overflow-y-auto">
-                    <table className="w-full text-sm">
+                  <div className="max-h-[480px] overflow-y-auto relative">
+                    <table className="w-full text-sm table-fixed">
+                      <colgroup>
+                        <col />
+                        <col style={{ width: '50px' }} />
+                        <col style={{ width: '42px' }} />
+                        <col style={{ width: '42px' }} />
+                        <col style={{ width: '42px' }} />
+                        <col style={{ width: '50px' }} />
+                        <col style={{ width: '56px' }} />
+                      </colgroup>
                       <thead className="sticky top-0 bg-gray-800">
                         <tr className="text-gray-500 text-xs border-b border-gray-700">
                           {[
-                            { col: 'name', label: '상대', w: 'w-auto text-left' },
-                            { col: 'total', label: '전적', w: 'w-[60px] text-center' },
-                            { col: 'wins', label: '승', w: 'w-[50px] text-center' },
-                            { col: 'draws', label: '무', w: 'w-[50px] text-center' },
-                            { col: 'losses', label: '패', w: 'w-[50px] text-center' },
-                            { col: 'rate', label: '승률', w: 'w-[60px] text-center' },
-                            { col: 'eval', label: '평가', w: 'w-[60px] text-center' },
+                            { col: 'name', label: '상대', w: 'text-left' },
+                            { col: 'total', label: '전적', w: 'text-center' },
+                            { col: 'wins', label: '승', w: 'text-center' },
+                            { col: 'draws', label: '무', w: 'text-center' },
+                            { col: 'losses', label: '패', w: 'text-center' },
+                            { col: 'rate', label: '승률', w: 'text-center' },
+                            { col: 'eval', label: '평가', w: 'text-center' },
                           ].map(({ col, label, w }) => (
                             <th
                               key={col}
@@ -262,12 +273,11 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
                       <tbody>
                         {sortedH2h.map(row => (
                           <tr key={row.opp_id} className="border-b border-gray-700/50 text-gray-300 hover:bg-gray-700/30">
-                            <td className="py-1.5 px-2 flex items-center gap-2">
-                              <ImagePreview
-                                path={row.photo_path ?? row.cover_path ?? null}
-                                alt={row.name ?? row.title ?? ''}
-                                className="w-6 h-6 rounded shrink-0"
-                              />
+                            <td
+                              className="py-1.5 px-2 truncate max-w-0"
+                              onMouseMove={e => setH2hTooltip({ type, id: row.opp_id, x: e.clientX, y: e.clientY, showCover: true })}
+                              onMouseLeave={() => setH2hTooltip(null)}
+                            >
                               <span className="truncate">{row.name ?? row.title ?? row.product_number ?? ''}</span>
                             </td>
                             <td className="text-center py-1.5 px-2">{row.total}</td>
@@ -298,6 +308,7 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
           )}
         </div>
       </div>
+      {h2hTooltip && <CardTooltip tooltip={h2hTooltip} />}
     </div>
   )
 }

@@ -74,17 +74,21 @@ function WorkContent({ work }: { work: Work }) {
           {work.studio_name && <p className="text-gray-300">{work.studio_name}</p>}
         </div>
       )}
-      {(work.release_date || work.rating != null) && (
-        <div className="flex items-center justify-between">
+      {(work.release_date || work.created_at || work.rating != null) && (
+        <div>
           <span className="text-gray-400">
-            {work.release_date || '-'}
+            발매일 : {work.release_date || '-'}  등록일 : {work.created_at?.slice(0, 10) || '-'}
             {!!work.is_favorite && <span className="ml-1 text-pink-500">♥</span>}
             {!!work.delete_pending && <span className="ml-1 text-red-500">삭제예정</span>}
           </span>
+        </div>
+      )}
+      {work.product_number && (
+        <div className="flex items-center justify-between">
+          <p className="font-bold text-gray-300">{work.product_number}</p>
           <span className="text-yellow-400">{ratingStars(work.rating ?? 0)}</span>
         </div>
       )}
-      {work.product_number && <p className="font-bold text-gray-300">{work.product_number}</p>}
       {hasComment && <p className="whitespace-pre-wrap leading-relaxed text-gray-300">{work.title}</p>}
       {hasActors && <p className="font-bold text-gray-300 leading-relaxed">{allActors.map((a) => a.name).join(', ')}</p>}
       {work.comment && <p className="whitespace-pre-wrap leading-relaxed text-gray-400 text-[12px]">{work.comment}</p>}

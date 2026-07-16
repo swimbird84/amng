@@ -910,6 +910,8 @@ export function registerCupHandlers(): void {
           return `CASE WHEN total_cups > 0 THEN CAST(cup_wins AS REAL) / total_cups ELSE -1 END ${dir}, CASE WHEN total_matches > 0 THEN CAST(match_wins AS REAL) / total_matches ELSE -1 END ${dir}, ${nameSortCol} ASC`
         case 'match_win_rate':
           return `CASE WHEN total_matches > 0 THEN CAST(match_wins AS REAL) / total_matches ELSE -1 END ${dir}, CASE WHEN total_cups > 0 THEN CAST(cup_wins AS REAL) / total_cups ELSE -1 END ${dir}, ${nameSortCol} ASC`
+        case 'master_run_count':
+          return `master_run_count ${dir}, total_points DESC, ${nameSortCol} ASC`
         case 'score_rank':
           return `score_rank ${dir}, ${nameSortCol} ASC`
         default:

@@ -298,6 +298,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                 onChange={(e) => { const v = e.target.value as typeof sortBy; setSortBy(v); localStorage.setItem('actors:sortBy', v) }}
                 className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
               >
+                <option value="created_at">등록일</option>
                 <option value="avg_score">평점</option>
                 <option value="ratio_score">피지컬</option>
                 <option value="master_points">마스터랭킹</option>
@@ -306,7 +307,6 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                 <option value="work_count">작품수</option>
                 <option value="work_release_date">작품발매일</option>
                 <option value="work_created_at">작품등록일</option>
-                <option value="created_at">등록일</option>
                 <option value="name">이름</option>
               </select>
               <button

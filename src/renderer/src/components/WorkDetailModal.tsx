@@ -139,7 +139,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                 </div>
                 <Rating value={work.rating} onChange={handleRating} />
               </div>
-              <p className="text-sm text-gray-400">{work.release_date || '-'}</p>
+              <p className="text-sm text-gray-400">발매일 : {work.release_date || '-'}  등록일 : {work.created_at?.slice(0, 10) || '-'}</p>
 
               {work.actors && work.actors.length > 0 && (
                 <div>

@@ -425,6 +425,7 @@ export default function MasterRankingView({
                 <col />
                 {type === 'work' && <col style={{ width: '6rem' }} />}
                 <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '4.5rem' }} />
                 <col style={{ width: '5.5rem' }} />
                 {type === 'actor' && <col style={{ width: '5rem' }} />}
                 <col style={{ width: '5.5rem' }} />
@@ -440,6 +441,7 @@ export default function MasterRankingView({
                   <th className="px-3 py-2.5 text-left text-gray-400">이름</th>
                   {type === 'work' && <th className="px-2 py-2.5 text-left text-gray-400">레이블</th>}
                   <SortTh col="total_points" label="마스터" subLabel="포인트" subLabelClass="font-normal" />
+                  <SortTh col="master_run_count" label="참가" subLabel="(런수)" subLabelClass="text-[9px] text-gray-600 font-normal" />
                   {type === 'actor' && <SortTh col="score_rank" label="평점" />}
                   <SortTh col="win_rate" label="우승률" subLabel="(우승/런)" subLabelClass="text-[9px] text-gray-600 font-normal" />
                   <SortTh col="match_win_rate" label="승률" subLabel="(승리/매치)" subLabelClass="text-[9px] text-gray-600 font-normal" />
@@ -553,6 +555,12 @@ export default function MasterRankingView({
                         {row.last_run_points != null && (
                           <div className="text-[10px] text-gray-500">{row.last_run_points >= 0 ? '+' : ''}{row.last_run_points.toFixed(1)}</div>
                         )}
+                      </td>
+                      {/* 참가 런수 */}
+                      <td className="px-3 py-2 text-right">
+                        <span className={`font-medium ${runCount > 0 ? 'text-gray-300' : 'text-gray-600'}`}>
+                          {runCount}
+                        </span>
                       </td>
                       {/* 평점 (배우만) */}
                       {type === 'actor' && (() => {

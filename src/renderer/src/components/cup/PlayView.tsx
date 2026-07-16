@@ -277,7 +277,7 @@ export default function PlayView({
         <div className="p-4 pb-3">
           <div className="flex items-center gap-3">
             {/* 뒤로가기 + 대회명 */}
-            <button onClick={onBack} className="text-gray-400 hover:text-white text-sm shrink-0">←</button>
+            <button onClick={() => tab === 'standings' ? setTab('match') : onBack()} className="text-gray-400 hover:text-white text-sm shrink-0">←</button>
             {tournament && (
                 <div className="flex items-center gap-1.5 shrink-0">
                   {tournament.is_master === 1 && <span className="text-yellow-400 text-xs font-semibold">★</span>}
@@ -581,7 +581,7 @@ export default function PlayView({
                               </tr>
                             </thead>
                             <tbody>
-                              {gs.map((row, idx) => {
+                              {((!groupDone && !groupActive) ? [...gs].sort((a, b) => (masterPtsMap.get(b.item_id) ?? 0) - (masterPtsMap.get(a.item_id) ?? 0)) : gs).map((row, idx) => {
                                 const item = items.get(row.item_id)
                                 const div = divisionMap[row.item_id] ?? 0
                                 const groupPending = !groupDone && !groupActive
@@ -808,7 +808,7 @@ export default function PlayView({
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {gs.map((row, idx) => {
+                                  {((!groupDone && !groupActive) ? [...gs].sort((a, b) => (masterPtsMap.get(b.item_id) ?? 0) - (masterPtsMap.get(a.item_id) ?? 0)) : gs).map((row, idx) => {
                                     const item = items.get(row.item_id)
                                     const div = divisionMap[row.item_id] ?? 0
                                     const groupPending = !groupDone && !groupActive
