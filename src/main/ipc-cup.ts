@@ -3,6 +3,12 @@ import { getDatabase } from './db'
 
 type DB = ReturnType<typeof getDatabase>
 
+const DIV_BOUNDS_WORK = [32, 96, 224, 480, 992, 2016]
+const DIV_BOUNDS_ACTOR = [16, 48, 112, 240, 496, 1008]
+function getDivBoundaries(type: 'actor' | 'work'): number[] {
+  return type === 'actor' ? DIV_BOUNDS_ACTOR : DIV_BOUNDS_WORK
+}
+
 function getRecentRunLimit(database: DB, type: 'actor' | 'work'): number {
   const row = database.prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
   if (!row) return 0
@@ -560,7 +566,7 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
       LEFT JOIN pts ON pts.item_id = ${itemCol}
       LEFT JOIN mrc ON mrc.item_id = ${itemCol}
     `).all() as { rank: number; id: number; master_run_count: number }[]
-    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const divBoundaries = getDivBoundaries(t.type as 'actor' | 'work')
     const divisionMap = new Map<number, number>()
     for (const row of ranked) {
       let div = 0
@@ -919,7 +925,7 @@ export function registerCupHandlers(): void {
       }
     })()
     // Division range filter (rank computed over all items, then filtered)
-    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const divBoundaries = getDivBoundaries(type)
     let divWhere = ''
     if (division !== undefined && division !== null) {
       if (division === 0) {
@@ -1325,7 +1331,7 @@ export function registerCupHandlers(): void {
 
   ipcMain.handle('cup:division-counts', (_e, params: { type: 'actor' | 'work'; seasonId?: number }) => {
     const { type, seasonId = null } = params
-    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const divBoundaries = getDivBoundaries(type)
     const itemCol = type === 'actor' ? 'a.id' : 'w.id'
     const fromClause = type === 'actor' ? 'actors a' : 'works w'
     const rl = getRecentRunLimit(db(), type)
@@ -1617,7 +1623,7 @@ export function registerCupHandlers(): void {
         LEFT JOIN pts ON pts.item_id = ${itemCol}
         LEFT JOIN mrc ON mrc.item_id = ${itemCol}
       `).all() as { rank: number; id: number; master_run_count: number }[]
-      const divBoundaries = [32, 96, 224, 480, 992, 2016]
+      const divBoundaries = getDivBoundaries(tournament.type)
       for (const row of ranked) {
         let div = 0
         if (row.master_run_count > 0) {
@@ -2441,7 +2447,7 @@ export function registerCupHandlers(): void {
     for (const ar of actorRanks) actorRankMap.set(ar.id, ar.actor_rank)
 
     // 부 경계
-    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const divBoundaries = getDivBoundaries('work')
     const getDiv = (rank: number) => {
       for (let d = 0; d < divBoundaries.length; d++) {
         if (rank <= divBoundaries[d]) return d + 1
@@ -2538,7 +2544,7 @@ export function registerCupHandlers(): void {
     const studioMap = new Map(studioRows.map(s => [s.id, s]))
 
     // 부 경계
-    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const divBoundaries = getDivBoundaries('work')
     const getDiv = (rank: number) => {
       for (let d = 0; d < divBoundaries.length; d++) {
         if (rank <= divBoundaries[d]) return d + 1
@@ -2633,7 +2639,7 @@ export function registerCupHandlers(): void {
     `).all() as { studio_id: number; maker_id: number | null; maker_id2: number | null; name: string | null; color: string | null }[]
     const studioToMaker = new Map(studioRows.map(s => [s.studio_id, s.maker_id ? { id: s.maker_id, name: s.name!, color: s.color } : null]))
 
-    const divBoundaries = [32, 96, 224, 480, 992, 2016]
+    const divBoundaries = getDivBoundaries('work')
     const getDiv = (rank: number) => {
       for (let d = 0; d < divBoundaries.length; d++) {
         if (rank <= divBoundaries[d]) return d + 1

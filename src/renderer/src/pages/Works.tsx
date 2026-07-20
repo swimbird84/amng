@@ -477,7 +477,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                   {(() => {
                     const mp = masterPointsMap.get(w.id)
                     if (!mp) return null
-                    const div = getDivision(mp.rank, mp.master_run_count)
+                    const div = getDivision(mp.rank, mp.master_run_count, 'work')
                     const isUnranked = mp.master_run_count === 0
                     return (
                       <div className="flex items-center justify-between">
@@ -489,7 +489,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                       </div>
                     )
                   })()}
-                  <p className="text-xs text-gray-500">발매일 : {w.release_date || '-'}  등록일 : {w.created_at?.slice(0, 10) || '-'}</p>
+                  <p className="text-xs text-gray-500">발매일:{w.release_date || '-'} 등록일:{w.created_at?.slice(0, 10) || '-'}</p>
                   {w.rep_actors && w.rep_actors.length > 0 && (
                     <div className="flex flex-wrap gap-0.5 mt-0.5">
                       {w.rep_actors.map((a) => (

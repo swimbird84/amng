@@ -32,8 +32,10 @@ export const RANK_LIMIT_OPTIONS = [100, 200, 500, 1000]
 export const RANK_MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
 export const MASTER_PAGE_SIZES = [100, 200, 500, 1000]
 export const DIV_BOUNDARIES = [32, 96, 224, 480, 992, 2016]
+export const DIV_BOUNDARIES_ACTOR = [16, 48, 112, 240, 496, 1008]
 export const DIV_LABEL: Record<number, string> = { 1: '1부', 2: '2부', 3: '3부', 4: '4부', 5: '5부', 6: '6부', 0: '미분류' }
 export const DIV_STD_SIZES: Record<number, number> = { 1: 32, 2: 64, 3: 128, 4: 256, 5: 512, 6: 1024 }
+export const DIV_STD_SIZES_ACTOR: Record<number, number> = { 1: 16, 2: 32, 3: 64, 4: 128, 5: 256, 6: 512 }
 export const DIV_COLOR: Record<number, string> = {
   1: 'bg-yellow-900/60 text-yellow-300',
   2: 'bg-gray-700/60 text-gray-300',
@@ -92,10 +94,11 @@ export function itemImagePath(item: ItemInfo): string | null | undefined {
   return item.photo_path ?? item.cover_path
 }
 
-export function getDivision(rank: number, masterRunCount: number): number {
+export function getDivision(rank: number, masterRunCount: number, type?: 'actor' | 'work'): number {
   if (masterRunCount === 0) return 0
-  for (let d = 0; d < DIV_BOUNDARIES.length; d++) {
-    if (rank <= DIV_BOUNDARIES[d]) return d + 1
+  const bounds = type === 'actor' ? DIV_BOUNDARIES_ACTOR : DIV_BOUNDARIES
+  for (let d = 0; d < bounds.length; d++) {
+    if (rank <= bounds[d]) return d + 1
   }
   return 6
 }

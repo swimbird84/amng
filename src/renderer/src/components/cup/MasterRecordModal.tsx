@@ -64,7 +64,7 @@ export default function MasterRecordModal({ type, itemId, itemName, itemImage, o
   }, [onClose])
 
   const bestRank = rankHistory.length > 0 ? Math.min(...rankHistory.map(r => r.rank)) : null
-  const division = stats ? getDivision(stats.rank, stats.total_cups) : 0
+  const division = stats ? getDivision(stats.rank, stats.total_cups, type) : 0
 
   const sortedH2h = [...h2hData].sort((a, b) => {
     const { col, dir } = h2hSort

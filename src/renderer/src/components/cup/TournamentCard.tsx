@@ -25,9 +25,6 @@ export default function TournamentCard({
   const [editName, setEditName] = useState(t.name)
   const [showConfirmDel, setShowConfirmDel] = useState(false)
   const [delConfirmInput, setDelConfirmInput] = useState('')
-  const [showInProgress, setShowInProgress] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleteConfirmInput, setDeleteConfirmInput] = useState('')
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [clearConfirmInput, setClearConfirmInput] = useState('')
   const [showFilterModal, setShowFilterModal] = useState(false)
@@ -112,7 +109,7 @@ export default function TournamentCard({
 
   const handleStartClick = () => {
     if (t.latest_run_status === 'in_progress') {
-      setShowInProgress(true)
+      onPlay(t.latest_run_id!, 'match')
     } else {
       doStart()
     }
@@ -284,58 +281,6 @@ export default function TournamentCard({
         </div>
       )}
 
-      {showInProgress && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-[380px] shadow-2xl">
-            <h2 className="text-base font-bold text-white mb-2">이미 진행 중인 대회가 있습니다</h2>
-            <p className="text-sm text-gray-400 mb-6">이어하시겠습니까?</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setShowInProgress(false); onPlay(t.latest_run_id!, 'match') }}
-                className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-semibold"
-              >예</button>
-              <button
-                onClick={() => { setShowInProgress(false); setDeleteConfirmInput(''); setShowDeleteConfirm(true) }}
-                className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white rounded text-sm font-semibold"
-              >아니오</button>
-              <button
-                onClick={() => setShowInProgress(false)}
-                className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
-              >취소</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 새 런 시작 삭제 확인 모달 */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-[380px] shadow-2xl">
-            <h2 className="text-base font-bold text-white mb-2">진행하던 대회가 삭제됩니다</h2>
-            <p className="text-sm text-gray-400 mb-3">정말 새로 시작하시겠습니까?</p>
-            <p className="text-xs text-red-400 mb-2">확인하려면 아래에 <span className="font-bold">지금 삭제</span>를 입력하세요.</p>
-            <input
-              autoFocus
-              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500 mb-4"
-              placeholder="지금 삭제"
-              value={deleteConfirmInput}
-              onChange={e => setDeleteConfirmInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && deleteConfirmInput === '지금 삭제') { setShowDeleteConfirm(false); doStart(true) } }}
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setShowDeleteConfirm(false); doStart(true) }}
-                disabled={deleteConfirmInput !== '지금 삭제'}
-                className="flex-1 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-sm font-semibold"
-              >확인</button>
-              <button
-                onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmInput('') }}
-                className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
-              >취소</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 대회명 수정 모달 */}
       {showEditName && (

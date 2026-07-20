@@ -3,7 +3,7 @@ import { cupApi, masterRankingApi, dashboardApi, actorsApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { MasterRankRow, FormatStat, RateTooltip } from './cupTypes'
-import { MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_LABEL, DIV_STD_SIZES, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
+import { MASTER_PAGE_SIZES, DIV_BOUNDARIES, DIV_BOUNDARIES_ACTOR, DIV_LABEL, DIV_STD_SIZES, DIV_STD_SIZES_ACTOR, DIV_COLOR, DIV_TEXT_COLOR, FORMAT_LABEL, FORMAT_COLOR, Pagination, getDivision } from './cupConstants'
 import RankingSettingsModal from './RankingSettingsModal'
 import WorkActorDistModal from './WorkActorDistModal'
 import WorkLabelDistModal from './WorkLabelDistModal'
@@ -96,7 +96,7 @@ export default function MasterRankingView({
     setRankTrends(new Map(trends.map(r => [r.item_id, r.prev_rank])))
   }, [])
 
-  useEffect(() => { setPage(0); setDivFilter(null); setSelectedSeasonId(null) }, [type])
+  useEffect(() => { setPage(0); setDivFilter(null); setSelectedSeasonId(null); setRankChartDiv(0) }, [type])
   useEffect(() => { setPage(0) }, [search, divFilter, pageSize, sortBy, sortDir, selectedSeasonId])
   useEffect(() => { load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId) }, [type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, load])
 
@@ -125,7 +125,13 @@ export default function MasterRankingView({
     return () => popEscHandler(handler)
   }, [rankChartModal])
 
-  const CHART_RANGE_CONFIG = [
+  const CHART_RANGE_CONFIG = type === 'actor' ? [
+    { key: 0, label: '1부 전체', rankFrom: 1, rankTo: 16 },
+    { key: 1, label: '2부 전체', rankFrom: 17, rankTo: 48 },
+    { key: 2, label: '3부 상위', rankFrom: 49, rankTo: 80 },
+    { key: 3, label: '3부 하위', rankFrom: 81, rankTo: 112 },
+    { key: 4, label: '4부 상위', rankFrom: 113, rankTo: 144 },
+  ] : [
     { key: 0, label: '1부 전체', rankFrom: 1, rankTo: 32 },
     { key: 1, label: '2부 상위', rankFrom: 33, rankTo: 64 },
     { key: 2, label: '2부 하위', rankFrom: 65, rankTo: 96 },
@@ -304,7 +310,7 @@ export default function MasterRankingView({
                     : `${DIV_COLOR[division] ?? 'bg-gray-800 text-gray-400 border-gray-700'} hover:opacity-80`
                 }`}
               >
-                {DIV_LABEL[division] ?? `${division}부`} <span className="opacity-70">{DIV_STD_SIZES[division] != null ? `${DIV_STD_SIZES[division]}(${count})` : count}</span>
+                {DIV_LABEL[division] ?? `${division}부`} <span className="opacity-70">{(type === 'actor' ? DIV_STD_SIZES_ACTOR : DIV_STD_SIZES)[division] != null ? `${(type === 'actor' ? DIV_STD_SIZES_ACTOR : DIV_STD_SIZES)[division]}(${count})` : count}</span>
               </button>
             ))}
             <div className="flex-1" />
@@ -457,7 +463,7 @@ export default function MasterRankingView({
                   const lbl = label(row)
                   const runCount = (row as any).master_run_count ?? 0
                   const isRegistered = runCount > 0
-                  const division = getDivision(row.rank, runCount)
+                  const division = getDivision(row.rank, runCount, type)
                   const prevRank = rankTrends.get(row.id)
                   const winRate = row.total_cups > 0 ? row.cup_wins / row.total_cups * 100 : null
                   const matchWinRate = row.total_matches > 0 ? row.match_wins / row.total_matches * 100 : null
@@ -759,8 +765,8 @@ export default function MasterRankingView({
                   if (yTicks[yTicks.length - 1] !== maxR) yTicks.push(maxR)
                 }
                 const pts = history.map((h, i) => {
-                  const div = getDivision(h.rank, 1)
-                  const prevDiv = i > 0 ? getDivision(history[i - 1].rank, 1) : div
+                  const div = getDivision(h.rank, 1, type)
+                  const prevDiv = i > 0 ? getDivision(history[i - 1].rank, 1, type) : div
                   return { x: getX(i), y: getY(h.rank), rank: h.rank, div, prevDiv, name: h.tournament_name }
                 })
                 const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
@@ -888,7 +894,7 @@ export default function MasterRankingView({
                 const outerBelowBottom = chartH - 8
                 const outerAboveTop = 4
                 const outerAboveBottom = PADDING.top - 8
-                const divBounds = [32, 96, 224, 480, 992, 2016]
+                const divBounds = type === 'actor' ? DIV_BOUNDARIES_ACTOR : DIV_BOUNDARIES
                 const getDiv = (gRank: number) => { for (let d = 0; d < divBounds.length; d++) { if (gRank <= divBounds[d]) return d + 1 } return 6 }
                 const getX = (i: number) => PADDING.left + i / Math.max(runs.length - 1, 1) * (1000 - PADDING.left - PADDING.right)
                 const getY = (globalRank: number) => PADDING.top + (globalRank - rankFrom) / Math.max(maxRank - 1, 1) * (mainBottom - PADDING.top)

@@ -402,7 +402,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                   {(() => {
                     const mp = masterPointsMap.get(a.id)
                     if (!mp) return null
-                    const div = getDivision(mp.rank, mp.master_run_count)
+                    const div = getDivision(mp.rank, mp.master_run_count, 'actor')
                     const isUnranked = mp.master_run_count === 0
                     return (
                       <div className="flex items-center justify-between">

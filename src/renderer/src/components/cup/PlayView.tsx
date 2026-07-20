@@ -301,7 +301,7 @@ export default function PlayView({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         {tab === 'match' && (
           <div className="flex flex-col items-center justify-center min-h-full pt-4 pb-8 px-4">
             {!tournament && <p className="text-gray-500">로딩 중...</p>}

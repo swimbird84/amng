@@ -1,6 +1,6 @@
 {
   "name": "amng",
-  "version": "2.5.6",
+  "version": "2.5.7",
   "description": "동영상 파일 관리 프로그램",
   "main": "./out/main/index.js",
   "scripts": {
@@ -23,7 +23,9 @@
       "target": [
         {
           "target": "dir",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "signAndEditExecutable": false
