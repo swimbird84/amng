@@ -508,6 +508,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                       ))}
                     </div>
                   )}
+                  {w.title && <p className="text-xs text-gray-400 truncate">{w.title}</p>}
                 </div>
               </div>
             ))}

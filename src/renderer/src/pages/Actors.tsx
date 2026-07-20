@@ -439,6 +439,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                       ))}
                     </div>
                   )}
+                  {a.comment && <p className="text-xs text-gray-400 truncate">{a.comment}</p>}
                 </div>
               </div>
             ))}
