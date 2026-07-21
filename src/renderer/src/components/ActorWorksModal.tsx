@@ -20,9 +20,15 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
   const [works, setWorks] = useState<Work[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [studioList, setStudioList] = useState<Studio[]>([])
-  const [search, setSearch] = useState<WorkSearchParams>(DEFAULT_WORK_SEARCH)
-  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points'>('release_date')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [search, setSearch] = useState<WorkSearchParams>(() => {
+    try { const s = localStorage.getItem('actorWorksModal:search'); return s ? { ...DEFAULT_WORK_SEARCH, ...JSON.parse(s) } : DEFAULT_WORK_SEARCH } catch { return DEFAULT_WORK_SEARCH }
+  })
+  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points'>(
+    () => (localStorage.getItem('actorWorksModal:sortBy') as any) || 'release_date'
+  )
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
+    () => (localStorage.getItem('actorWorksModal:sortDir') as 'asc' | 'desc') || 'desc'
+  )
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [selected, setSelected] = useState<Work | null>(null)
@@ -39,6 +45,10 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
   const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string }>>({})
   const [playable, setPlayable] = useState<Record<number, boolean>>({})
   const checkedRef = useRef(new Set<number>())
+
+  useEffect(() => { localStorage.setItem('actorWorksModal:search', JSON.stringify(search)) }, [search])
+  useEffect(() => { localStorage.setItem('actorWorksModal:sortBy', sortBy) }, [sortBy])
+  useEffect(() => { localStorage.setItem('actorWorksModal:sortDir', sortDir) }, [sortDir])
 
   useEffect(() => {
     const handler = () => onClose()
@@ -170,7 +180,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-      <div className="bg-gray-900 rounded-xl w-[calc(100vw-40px)] h-[calc(100vh-40px)] flex flex-col overflow-hidden">
+      <div className="bg-gray-900 rounded-xl w-full h-[calc(100vh-40px)] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="p-4 border-b border-gray-700">
           <div className="flex items-center">

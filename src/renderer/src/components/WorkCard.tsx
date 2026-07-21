@@ -97,13 +97,13 @@ export default function WorkCard({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
                 <span className={`text-[10px] px-1 py-0.5 rounded ${DIV_COLOR[div]}`}>{DIV_LABEL[div]}</span>
-                <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>#{isUnranked ? '-' : `${mp.rank}\uC704`}</span>
+                <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>#{isUnranked ? '-' : `${mp.rank}위`}</span>
               </div>
               <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>{isUnranked ? '-' : mp.total_points.toFixed(1)}pt</span>
             </div>
           )
         })()}
-        <p className="text-xs text-gray-500">\uBC1C\uB9E4\uC77C:{w.release_date || '-'} \uB4F1\uB85D\uC77C:{w.created_at?.slice(0, 10) || '-'}</p>
+        <p className="text-xs text-gray-500">발매일:{w.release_date || '-'} 등록일:{w.created_at?.slice(0, 10) || '-'}</p>
         {w.rep_actors && w.rep_actors.length > 0 && (
           <div className="flex flex-wrap gap-0.5 mt-0.5">
             {w.rep_actors.map((a) => (
