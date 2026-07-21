@@ -44,7 +44,6 @@ export interface ActorPhysicalData {
   hip: number | null
   cup: string | null
   phys_arbitrary?: string | null
-  score_excluded: number
   face: number
   score_bust: number
   score_hip: number
@@ -299,9 +298,6 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
   const [focusMode, setFocusMode] = useState<'fixed' | 'track'>(
     (localStorage.getItem('ratingCalc:focusMode') as 'fixed' | 'track') || 'fixed'
   )
-  const [excludeMode, setExcludeMode] = useState<'include' | 'exclude'>(
-    (localStorage.getItem('ratingCalc:excludeMode') as 'include' | 'exclude') || 'include'
-  )
   const listRef = useRef<HTMLDivElement>(null)
   const scrollTopRef = useRef<number>(parseInt(localStorage.getItem('ratingCalc:scrollTop') ?? '0', 10) || 0)
   const lastEditedActorIdRef = useRef<number | null>(null)
@@ -470,7 +466,6 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
     return actors
       .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
       .filter(a => a.physScore != null && (isProfileSort || getVal(a) != null))
-      .filter(a => excludeMode === 'include' || !a.score_excluded)
       .sort((a, b) => {
         const av = getVal(a)
         const bv = getVal(b)
@@ -483,7 +478,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
         if (secondary !== 0) return secondary
         return rankSortDir === 'desc' ? b.work_count - a.work_count : a.work_count - b.work_count
       })
-  }, [actors, settings, stats, rankSortDir, rankBy, excludeMode])
+  }, [actors, settings, stats, rankSortDir, rankBy])
 
   const update = (s: PhysicalSettings) => {
     setSettings(s)
@@ -671,16 +666,6 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
               >
                 {rankSortDir === 'desc' ? '↓' : '↑'}
               </button>
-              <div className="flex">
-                <button
-                  onClick={() => { setExcludeMode('include'); localStorage.setItem('ratingCalc:excludeMode', 'include') }}
-                  className={`text-xs px-2 py-0.5 rounded-l border-r border-gray-600 ${excludeMode === 'include' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >포함</button>
-                <button
-                  onClick={() => { setExcludeMode('exclude'); localStorage.setItem('ratingCalc:excludeMode', 'exclude') }}
-                  className={`text-xs px-2 py-0.5 rounded-r ${excludeMode === 'exclude' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >제외</button>
-              </div>
               <div className="ml-auto flex items-center gap-1.5">
                 <div className="flex">
                   <button
@@ -726,20 +711,6 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
                       <div className="flex items-center justify-between gap-1">
                         <div className="flex items-center gap-1.5 min-w-0 pl-1.5">
                           <p className="text-white text-sm font-bold truncate">{a.name}</p>
-                          <label className="flex items-center gap-0.5 cursor-pointer select-none text-xs text-gray-400 hover:text-gray-200 shrink-0">
-                            <input
-                              type="checkbox"
-                              checked={!!a.score_excluded}
-                              onChange={async (e) => {
-                                const val = e.target.checked ? 1 : 0
-                                await actorsApi.update(a.id, { score_excluded: val })
-                                const data = await actorsApi.physicalData()
-                                setActors(data as ActorPhysicalData[])
-                              }}
-                              className="accent-blue-500"
-                            />
-                            점수제외
-                          </label>
                         </div>
                         <p className="text-yellow-400 text-xs font-bold shrink-0 leading-tight">{avgScore.toFixed(2)}점</p>
                       </div>

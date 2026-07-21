@@ -18,6 +18,7 @@ interface WorkSearchProps {
   actors: Actor[]
   studios: { id: number; name: string; maker_id?: number | null; maker_name?: string | null }[]
   resultCount?: number
+  hideActorDropdown?: boolean
 }
 
 interface ActorSearchProps {
@@ -49,6 +50,7 @@ export default function SearchBar(props: Props) {
   const { type, params, onChange, tags, resultCount } = props
   const actors = type === 'works' ? (props as WorkSearchProps).actors : []
   const studios = type === 'works' ? (props as WorkSearchProps).studios : []
+  const hideActorDropdown = type === 'works' ? (props as WorkSearchProps).hideActorDropdown : false
   const wParams = type === 'works' ? params as WorkSearchParams : null
   const aParams = type === 'actors' ? params as ActorSearchParams : null
 
@@ -349,7 +351,6 @@ export default function SearchBar(props: Props) {
     if (ap.hipFrom !== '' || ap.hipTo !== '') conditions.push({ label: `힙: ${ap.hipFrom !== '' ? ap.hipFrom : '?'}~${ap.hipTo !== '' ? ap.hipTo : '?'}`, onClear: () => onChange({ ...ap, hipFrom: '', hipTo: '' } as never) })
     if (ap.cupNull) conditions.push({ label: '컵없음', onClear: () => onChange({ ...ap, cupNull: false } as never) })
     if (ap.cupFrom || ap.cupTo) conditions.push({ label: `컵: ${ap.cupFrom || '?'}~${ap.cupTo || '?'}`, onClear: () => onChange({ ...ap, cupFrom: '', cupTo: '' } as never) })
-    if (ap.scoreExcluded) conditions.push({ label: '점수제외', onClear: () => onChange({ ...ap, scoreExcluded: false } as never) })
     if (ap.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...ap, favoriteOnly: false } as never) })
     if (ap.commentSearch) conditions.push({ label: `코멘트: ${ap.commentSearch}`, onClear: () => onChange({ ...ap, commentSearch: '' } as never) })
     if (ap.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...ap, commentNull: false } as never) })
@@ -369,7 +370,7 @@ export default function SearchBar(props: Props) {
       />
 
       {/* actor dropdown (works only) */}
-      {type === 'works' && wParams && (
+      {type === 'works' && wParams && !hideActorDropdown && (
         <div className="relative">
           <button
             ref={actorButtonRef}
@@ -431,18 +432,6 @@ export default function SearchBar(props: Props) {
         </div>
       )}
 
-      {/* score_excluded filter (actors only) */}
-      {type === 'actors' && aParams && (
-        <label className="flex items-center gap-1 cursor-pointer select-none shrink-0 bg-gray-700 px-2 py-1.5 rounded">
-          <input
-            type="checkbox"
-            checked={aParams.scoreExcluded}
-            onChange={e => onChange({ ...aParams, scoreExcluded: e.target.checked } as never)}
-            className="accent-blue-500"
-          />
-          <span className="text-sm text-gray-300">제외</span>
-        </label>
-      )}
 
       {/* tag button */}
       <div className="relative">

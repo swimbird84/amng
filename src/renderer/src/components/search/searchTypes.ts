@@ -58,7 +58,6 @@ export interface ActorSearchParams {
   waistNull: boolean
   hipNull: boolean
   cupNull: boolean
-  scoreExcluded: boolean
   favoriteOnly: boolean
   commentSearch: string
   commentNull: boolean
@@ -88,7 +87,6 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   waistFrom: '', waistTo: '', hipFrom: '', hipTo: '',
   cupFrom: '', cupTo: '',
   heightNull: false, bustNull: false, waistNull: false, hipNull: false, cupNull: false,
-  scoreExcluded: false,
   favoriteOnly: false,
   commentSearch: '', commentNull: false,
   deletePending: false,

@@ -8,6 +8,7 @@ import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import RadarChart from '../components/RadarChart'
 import ActorDetailModal from '../components/ActorDetailModal'
+import ActorWorksModal from '../components/ActorWorksModal'
 import PhysicalCorrectionModal, { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from '../components/PhysicalCorrectionModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import { getDivision, DIV_LABEL, DIV_COLOR } from '../components/cup/cupConstants'
@@ -52,6 +53,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [tagCloud, setTagCloud] = useState<{ category_id: number | null; category_name: string | null; category_sort_order: number | null; tag_id: number; tag_name: string; count: number }[] | null>(null)
+  const [worksModalActor, setWorksModalActor] = useState<{ id: number; name: string } | null>(null)
   const isDragging = useRef(false)
   const dragAction = useRef<'add' | 'remove'>('add')
 
@@ -133,7 +135,6 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
       params.sortDir = sortDir
     }
     if (search.favoriteOnly) params.favoriteOnly = true
-    if (search.scoreExcluded) params.scoreExcluded = true
     if (search.commentSearch) params.commentSearch = search.commentSearch
     if (search.commentNull) params.commentNull = true
     if (search.deletePending) params.deletePending = true
@@ -369,7 +370,6 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                     return next
                   })
                 }}
-                onClick={() => { if (!deleteMode) handleSelect(a.id) }}
                 className={`relative cursor-pointer rounded-lg border ring-2 flex flex-col ${
                   deleteMode
                     ? selectedDeleteIds.has(a.id)
@@ -380,7 +380,12 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                       : 'border-gray-700 ring-transparent hover:border-gray-500'
                 }`}
               >
-                <div className="relative rounded-t-lg overflow-hidden" onMouseMove={(e) => !deleteMode && setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
+                <div
+                  className="relative rounded-t-lg overflow-hidden"
+                  onMouseMove={(e) => !deleteMode && setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
+                  onClick={() => { if (!deleteMode) setWorksModalActor({ id: a.id, name: a.name }) }}
+                >
                   <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" objectPosition="center 10%" version={refreshKey} reobserve={masterPointsMap.size} />
                   {deleteMode && selectedDeleteIds.has(a.id) && (
                     <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none">
@@ -394,7 +399,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                     {a.is_favorite ? '♥' : '♡'}
                   </button>
                 </div>
-                <div className="p-2 bg-gray-800 flex-1">
+                <div className="p-2 bg-gray-800 flex-1" onClick={() => { if (!deleteMode) handleSelect(a.id) }}>
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-sm font-bold text-white truncate flex-1">{a.name}</p>
                     <p className="text-sm font-bold text-yellow-400 flex-shrink-0">{(a.avg_score ?? 0).toFixed(2)}점</p>
@@ -449,6 +454,16 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
           )}
         </div>
       </div>
+
+      {/* 작품 목록 모달 */}
+      {worksModalActor && (
+        <ActorWorksModal
+          actorId={worksModalActor.id}
+          actorName={worksModalActor.name}
+          onClose={() => setWorksModalActor(null)}
+          onNavigateToActor={onNavigateToActor}
+        />
+      )}
 
       {/* 상세 모달 */}
       {selected && (

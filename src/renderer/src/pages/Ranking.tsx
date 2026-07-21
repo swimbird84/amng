@@ -12,7 +12,6 @@ type RankBy =
   | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions'
   | 'masterRanking'
 
-type ExcludeMode = 'include' | 'exclude'
 
 const RANK_ITEMS: { value: RankBy; label: string }[] = [
   { value: 'masterRanking',  label: '마스터랭킹' },
@@ -99,9 +98,6 @@ export default function Ranking({ onNavigateToActor }: Props) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     () => (localStorage.getItem('ranking:sortDir') as 'asc' | 'desc') || 'desc'
   )
-  const [excludeMode, setExcludeMode] = useState<ExcludeMode>(
-    () => (localStorage.getItem('ranking:excludeMode') as ExcludeMode) || 'include'
-  )
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [masterRanks, setMasterRanks] = useState<Map<number, { total_points: number; rank: number }>>(new Map())
   const [masterTrends, setMasterTrends] = useState<Map<number, number | null>>(new Map())
@@ -142,7 +138,6 @@ export default function Ranking({ onNavigateToActor }: Props) {
   const ranked = useMemo((): ScoredActor[] => {
     const base = actors
       .map(a => ({ ...a, physScore: calcPhysicalScore(a, settings, stats) }))
-      .filter(a => excludeMode === 'include' || !a.score_excluded)
 
     if (rankBy === 'masterRanking') {
       return base.sort((a, b) => {
@@ -189,7 +184,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
         if (secondary !== 0) return secondary
         return sortDir === 'desc' ? b.work_count - a.work_count : a.work_count - b.work_count
       })
-  }, [actors, settings, stats, rankBy, sortDir, excludeMode, masterRanks])
+  }, [actors, settings, stats, rankBy, sortDir, masterRanks])
 
   const getSubtitle = (a: ScoredActor): string => {
     if (rankBy === 'work_count')     return `${a.work_count}편`
@@ -252,16 +247,6 @@ export default function Ranking({ onNavigateToActor }: Props) {
               <option key={item.value} value={item.value}>{item.label}</option>
             ))}
           </select>
-          <div className="flex">
-            <button
-              onClick={() => { setExcludeMode('include'); localStorage.setItem('ranking:excludeMode', 'include') }}
-              className={`text-sm px-3 py-1.5 rounded-l border-r border-gray-600 ${excludeMode === 'include' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >포함</button>
-            <button
-              onClick={() => { setExcludeMode('exclude'); localStorage.setItem('ranking:excludeMode', 'exclude') }}
-              className={`text-sm px-3 py-1.5 rounded-r ${excludeMode === 'exclude' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >제외</button>
-          </div>
           <button
             onClick={() => {
               const next = sortDir === 'desc' ? 'asc' : 'desc'

@@ -5,11 +5,8 @@ import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodes
 import SearchBar, { type WorkSearchParams, DEFAULT_WORK_SEARCH } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import WorkDetailModal from '../components/WorkDetailModal'
-import ImagePreview from '../components/ImagePreview'
-import Rating from '../components/Rating'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
-import { hashColor, studioColor } from '../utils/colorHelpers'
-import { getDivision, DIV_LABEL, DIV_COLOR } from '../components/cup/cupConstants'
+import WorkCard from '../components/WorkCard'
 
 const BATCH_SIZE = 100
 
@@ -56,6 +53,11 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const hasMoreRef = useRef(true)
   const isLoadingMoreRef = useRef(false)
   const worksCountRef = useRef(0)
+
+  // play button file status
+  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string }>>({})
+  const [playable, setPlayable] = useState<Record<number, boolean>>({})
+  const playCheckedRef = useRef(new Set<number>())
 
   const fetchWorks = useCallback(async (offset: number, replace: boolean, limit = BATCH_SIZE) => {
     const params: Record<string, unknown> = {}
@@ -123,10 +125,36 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     hasMoreRef.current = true
     setIsLoadingMore(true)
     isLoadingMoreRef.current = true
+    playCheckedRef.current.clear()
+    setPlayFiles({})
+    setPlayable({})
     fetchWorks(0, true)
   }, [fetchWorks])
 
   useEffect(() => { worksCountRef.current = works.length }, [works.length])
+
+  // check file play status for new works
+  useEffect(() => {
+    const newIds = works.map(w => w.id).filter(id => !playCheckedRef.current.has(id))
+    if (newIds.length === 0) return
+    newIds.forEach(id => playCheckedRef.current.add(id))
+    workFilesApi.firstByWorkIds(newIds).then(async (files) => {
+      const newPF: Record<number, { file_path: string; type: string }> = {}
+      const newP: Record<number, boolean> = {}
+      for (const f of files) {
+        newPF[f.work_id] = { file_path: f.file_path, type: f.type }
+        if (f.type === 'url') newP[f.work_id] = true
+      }
+      for (const id of newIds) { if (!(id in newPF)) newP[id] = false }
+      const localFiles = files.filter(f => f.type === 'local')
+      if (localFiles.length > 0) {
+        const results = await Promise.all(localFiles.map(f => shellApi.fileExists(f.file_path)))
+        localFiles.forEach((f, i) => { newP[f.work_id] = results[i] })
+      }
+      setPlayFiles(prev => ({ ...prev, ...newPF }))
+      setPlayable(prev => ({ ...prev, ...newP }))
+    })
+  }, [works])
 
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -296,6 +324,13 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     setDeleteConfirm(false)
   }
 
+  const handlePlay = (workId: number) => {
+    const f = playFiles[workId]
+    if (!f) return
+    if (f.type === 'url') shellApi.openExternal(f.file_path)
+    else shellApi.openPath(f.file_path)
+  }
+
   const handleToggleFavorite = async (id: number, current: number, e?: React.MouseEvent) => {
     e?.stopPropagation()
     const next = current ? 0 : 1
@@ -408,8 +443,15 @@ export default function Works({ onNavigateToActor }: WorksProps) {
         <div className="flex-1 overflow-y-auto p-4 pt-0">
           <div className="grid grid-cols-5 gap-3">
             {works.map((w) => (
-              <div
+              <WorkCard
                 key={w.id}
+                work={w}
+                refreshKey={refreshKey}
+                selected={selected?.id === w.id}
+                deleteMode={deleteMode}
+                deleteSelected={selectedDeleteIds.has(w.id)}
+                filePlayable={playable[w.id]}
+                masterPoints={masterPointsMap.get(w.id)}
                 onMouseDown={(e) => {
                   if (!deleteMode) return
                   e.preventDefault()
@@ -431,86 +473,11 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                   })
                 }}
                 onClick={() => { if (!deleteMode) handleSelect(w.id) }}
-                className={`relative cursor-pointer rounded-lg border ring-2 flex flex-col ${
-                  deleteMode
-                    ? selectedDeleteIds.has(w.id)
-                      ? 'border-red-500 ring-red-500'
-                      : 'border-gray-700 ring-transparent hover:border-red-400'
-                    : selected?.id === w.id
-                      ? 'border-blue-500 ring-blue-500'
-                      : 'border-gray-700 ring-transparent hover:border-gray-500'
-                }`}
-              >
-                <div className="relative rounded-t-lg overflow-hidden" onMouseMove={(e) => !deleteMode && setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
-                  <ImagePreview path={w.cover_path} alt={w.title || '표지'} className="w-full h-40" version={refreshKey} />
-                  {deleteMode && selectedDeleteIds.has(w.id) && (
-                    <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none">
-                      <span className="text-white text-4xl font-bold drop-shadow">✓</span>
-                    </div>
-                  )}
-                  {w.studio_name && (
-                    <div className="absolute top-1 left-1 max-w-[70%]" style={{ lineHeight: 0 }}>
-                      <span
-                        className="text-white text-xs px-1.5 rounded"
-                        style={{ backgroundColor: studioColor(w.studio_name, w.studio_color), display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', lineHeight: '1.5', verticalAlign: 'top' } as any}
-                      >
-                        {w.studio_maker_name && w.studio_maker_name !== w.studio_name
-                          ? <><span style={{ whiteSpace: 'nowrap' }}>{w.studio_maker_name}</span>{' '}<span style={{ whiteSpace: 'nowrap' }}>{w.studio_name}</span></>
-                          : w.studio_name}
-                      </span>
-                    </div>
-                  )}
-                  <button
-                    onClick={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
-                    className="absolute top-1 right-1 text-lg leading-none drop-shadow"
-                  >
-                    {w.is_favorite ? '♥' : '♡'}
-                  </button>
-                </div>
-                <div className="p-2 bg-gray-800 flex-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className="text-sm font-bold text-white truncate flex-1">{w.product_number || '-'}</p>
-                    <div className="flex-shrink-0">
-                      <Rating value={w.rating} readonly small />
-                    </div>
-                  </div>
-                  {(() => {
-                    const mp = masterPointsMap.get(w.id)
-                    if (!mp) return null
-                    const div = getDivision(mp.rank, mp.master_run_count, 'work')
-                    const isUnranked = mp.master_run_count === 0
-                    return (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1">
-                          <span className={`text-[10px] px-1 py-0.5 rounded ${DIV_COLOR[div]}`}>{DIV_LABEL[div]}</span>
-                          <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>#{isUnranked ? '-' : `${mp.rank}위`}</span>
-                        </div>
-                        <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>{isUnranked ? '-' : mp.total_points.toFixed(1)}pt</span>
-                      </div>
-                    )
-                  })()}
-                  <p className="text-xs text-gray-500">발매일:{w.release_date || '-'} 등록일:{w.created_at?.slice(0, 10) || '-'}</p>
-                  {w.rep_actors && w.rep_actors.length > 0 && (
-                    <div className="flex flex-wrap gap-0.5 mt-0.5">
-                      {w.rep_actors.map((a) => (
-                        <span key={a.id} className="bg-purple-900/50 text-purple-300 text-xs px-1.5 py-0.5 rounded">
-                          {a.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {w.rep_tags && w.rep_tags.length > 0 && (
-                    <div className="flex flex-wrap gap-0.5 mt-0.5">
-                      {w.rep_tags.map((t) => (
-                        <span key={t.id} className="bg-blue-900/50 text-blue-300 text-xs px-1.5 py-0.5 rounded">
-                          {t.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {w.title && <p className="text-xs text-gray-400 truncate">{w.title}</p>}
-                </div>
-              </div>
+                onTooltipMove={(e) => !deleteMode && setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
+                onTooltipLeave={() => setTooltip(null)}
+                onToggleFavorite={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
+                onPlay={() => handlePlay(w.id)}
+              />
             ))}
           </div>
           {works.length === 0 && !isLoadingMore && (

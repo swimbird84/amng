@@ -15,7 +15,6 @@ export type ActorFilter = {
   waistFrom?: number; waistTo?: number
   hipFrom?: number; hipTo?: number
   cupFrom?: string; cupTo?: string
-  scoreExcluded?: boolean
 }
 
 export type WorkFilter = {
@@ -46,7 +45,6 @@ export function countActiveFilters(filter: WcFilter | null): number {
   if (af.waistFrom !== undefined || af.waistTo !== undefined) count++
   if (af.hipFrom !== undefined || af.hipTo !== undefined) count++
   if (af.cupFrom || af.cupTo) count++
-  if (af.scoreExcluded) count++
   if ((wf.studioIds?.length ?? 0) > 0) count++
   return count
 }
@@ -91,7 +89,6 @@ export default function WorldcupFilterModal({ type, filter, onSave, onClose }: P
   const [hipTo, setHipTo] = useState(af?.hipTo !== undefined ? String(af.hipTo) : '')
   const [cupFrom, setCupFrom] = useState(af?.cupFrom ?? '')
   const [cupTo, setCupTo] = useState(af?.cupTo ?? '')
-  const [scoreExcluded, setScoreExcluded] = useState<boolean>(af?.scoreExcluded ?? false)
 
   // Work-only
   const [studioIds, setStudioIds] = useState<number[]>(wf?.studioIds ?? [])
@@ -153,7 +150,6 @@ export default function WorldcupFilterModal({ type, filter, onSave, onClose }: P
       if (hipTo !== '') base.hipTo = parseInt(hipTo)
       if (cupFrom) base.cupFrom = cupFrom
       if (cupTo) base.cupTo = cupTo
-      if (scoreExcluded) base.scoreExcluded = true
     } else {
       if (studioIds.length > 0) base.studioIds = studioIds
     }
@@ -395,22 +391,6 @@ export default function WorldcupFilterModal({ type, filter, onSave, onClose }: P
               </div>
             </div>
 
-            {/* 점수제외 배우 */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-gray-400 text-xs">점수제외 배우</label>
-              <div className="flex">
-                {([
-                  { value: false, label: '포함' },
-                  { value: true, label: '제외' },
-                ] as const).map((opt, i) => (
-                  <button
-                    key={String(opt.value)}
-                    onClick={() => setScoreExcluded(opt.value)}
-                    className={`flex-1 text-sm py-1.5 border-gray-600 ${i === 0 ? 'rounded-l border-r' : 'rounded-r'} ${scoreExcluded === opt.value ? (opt.value ? 'bg-red-700 text-white' : 'bg-blue-600 text-white') : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >{opt.label}</button>
-                ))}
-              </div>
-            </div>
           </>
         )}
 

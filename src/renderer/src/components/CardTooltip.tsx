@@ -78,14 +78,16 @@ function WorkContent({ work }: { work: Work }) {
         <div>
           <span className="text-gray-400">
             발매일 : {work.release_date || '-'}  등록일 : {work.created_at?.slice(0, 10) || '-'}
-            {!!work.is_favorite && <span className="ml-1 text-pink-500">♥</span>}
-            {!!work.delete_pending && <span className="ml-1 text-red-500">삭제예정</span>}
           </span>
         </div>
       )}
       {work.product_number && (
         <div className="flex items-center justify-between">
-          <p className="font-bold text-gray-300">{work.product_number}</p>
+          <p className="font-bold text-gray-300">
+            {work.product_number}
+            {!!work.is_favorite && <span className="ml-1 text-pink-500 font-normal">♥</span>}
+            {!!work.delete_pending && <span className="ml-1 text-red-500 font-normal text-[11px]">삭제예정</span>}
+          </p>
           <span className="text-yellow-400">{ratingStars(work.rating ?? 0)}</span>
         </div>
       )}

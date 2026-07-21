@@ -642,7 +642,6 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
       if (filter.hipTo !== undefined) { extraConditions.push('a.hip <= ?'); extraBindings.push(filter.hipTo) }
       if (filter.cupFrom) { extraConditions.push('a.cup >= ?'); extraBindings.push(filter.cupFrom) }
       if (filter.cupTo) { extraConditions.push('a.cup <= ?'); extraBindings.push(filter.cupTo) }
-      if (filter.scoreExcluded) { extraConditions.push('COALESCE(a.score_excluded, 0) = 0') }
       if (filter.favoriteOnly) extraConditions.push('a.is_favorite = 1')
     } else {
       const workActorIds = filter.actorIds as number[] | undefined
@@ -1549,8 +1548,7 @@ export function registerCupHandlers(): void {
         if (filter.hipTo !== undefined) { extraConditions.push('a.hip <= ?'); extraBindings.push(filter.hipTo) }
         if (filter.cupFrom) { extraConditions.push('a.cup >= ?'); extraBindings.push(filter.cupFrom) }
         if (filter.cupTo) { extraConditions.push('a.cup <= ?'); extraBindings.push(filter.cupTo) }
-        if (filter.scoreExcluded) { extraConditions.push('COALESCE(a.score_excluded, 0) = 0') }
-      }
+        }
       const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
       items = db().prepare(`SELECT DISTINCT a.id FROM actors a ${extraJoins} WHERE 1=1${filterWhere}`).all(...extraBindings) as { id: number }[]
     } else {

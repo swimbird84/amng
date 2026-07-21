@@ -397,6 +397,14 @@ export function registerWorksHandlers(): void {
     return db().prepare(`SELECT work_id, file_path, type FROM work_files WHERE work_id IN (${ph}) AND type = 'local' ORDER BY work_id`).all(...workIds) as { work_id: number; file_path: string; type: string }[]
   })
 
+  ipcMain.handle('work-files:firstByWorkIds', (_e, workIds: number[]) => {
+    if (workIds.length === 0) return []
+    const ph = workIds.map(() => '?').join(',')
+    const all = db().prepare(`SELECT work_id, file_path, type FROM work_files WHERE work_id IN (${ph}) ORDER BY work_id, sort_order`).all(...workIds) as { work_id: number; file_path: string; type: string }[]
+    const seen = new Set<number>()
+    return all.filter(f => { if (seen.has(f.work_id)) return false; seen.add(f.work_id); return true })
+  })
+
   ipcMain.handle('work-files:add', (_e, workId: number, filePath: string, type: 'local' | 'url' = 'local') => {
     const row = db().prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM work_files WHERE work_id = ?').get(workId) as { m: number }
     const result = db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, ?)').run(workId, filePath, type, row.m + 1)

@@ -302,7 +302,7 @@ export function registerDashboardHandlers(): void {
   ipcMain.handle('dashboard:actor-physical-dist', () => {
     return db().prepare(`
       SELECT
-        a.id, a.name, a.photo_path, a.score_excluded,
+        a.id, a.name, a.photo_path,
         a.height, a.bust, a.waist, a.hip, a.cup,
         COALESCE(s.face, 0)        AS face,
         COALESCE(s.bust, 0)        AS score_bust,

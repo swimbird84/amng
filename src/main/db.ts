@@ -210,9 +210,6 @@ export function initDatabase(): void {
   if (!actorCols.includes('cup')) {
     db.prepare('ALTER TABLE actors ADD COLUMN cup TEXT').run()
   }
-  if (!actorCols.includes('score_excluded')) {
-    db.prepare('ALTER TABLE actors ADD COLUMN score_excluded INTEGER DEFAULT 0').run()
-  }
   if (!actorCols.includes('delete_pending')) {
     db.prepare('ALTER TABLE actors ADD COLUMN delete_pending INTEGER DEFAULT 0').run()
   }

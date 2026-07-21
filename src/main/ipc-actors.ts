@@ -44,7 +44,6 @@ export function registerActorsHandlers(): void {
     waistNull?: boolean
     hipNull?: boolean
     cupNull?: boolean
-    scoreExcluded?: boolean
     commentSearch?: string
     commentNull?: boolean
     deletePending?: boolean
@@ -165,7 +164,6 @@ export function registerActorsHandlers(): void {
     if (params?.waistNull) { conditions.push('a.waist IS NULL') }
     if (params?.hipNull) { conditions.push('a.hip IS NULL') }
     if (params?.cupNull) { conditions.push("(a.cup IS NULL OR TRIM(a.cup) = '')") }
-    if (params?.scoreExcluded) { conditions.push('COALESCE(a.score_excluded, 0) = 0') }
     if (params?.commentSearch) { conditions.push('a.comment LIKE ?'); bindings.push(`%${params.commentSearch}%`) }
     if (params?.commentNull) { conditions.push("(a.comment IS NULL OR TRIM(a.comment) = '')") }
     if (params?.deletePending) { conditions.push('COALESCE(a.delete_pending, 0) = 1') }
@@ -325,16 +323,15 @@ export function registerActorsHandlers(): void {
     cup?: string | null
     phys_arbitrary?: string | null
     comment?: string | null
-    score_excluded?: number
     scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
     const result = db().prepare(`
-      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, comment, score_excluded)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, comment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(data.name, data.photo_path || null, data.birthday || null, data.debut_date || null,
-      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.comment || null, data.score_excluded ?? 0)
+      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.comment || null)
     const actorId = result.lastInsertRowid
 
     const s = data.scores
@@ -376,7 +373,6 @@ export function registerActorsHandlers(): void {
     birthday?: string
     debut_date?: string | null
     is_favorite?: number
-    score_excluded?: number
     delete_pending?: number
     height?: number | null
     bust?: number | null
@@ -397,7 +393,6 @@ export function registerActorsHandlers(): void {
     if (data.birthday !== undefined) { fields.push('birthday = ?'); values.push(data.birthday) }
     if (data.debut_date !== undefined) { fields.push('debut_date = ?'); values.push(data.debut_date) }
     if (data.is_favorite !== undefined) { fields.push('is_favorite = ?'); values.push(data.is_favorite) }
-    if (data.score_excluded !== undefined) { fields.push('score_excluded = ?'); values.push(data.score_excluded) }
     if (data.delete_pending !== undefined) { fields.push('delete_pending = ?'); values.push(data.delete_pending) }
     if (data.height !== undefined) { fields.push('height = ?'); values.push(data.height) }
     if (data.bust !== undefined) { fields.push('bust = ?'); values.push(data.bust) }
@@ -510,7 +505,7 @@ export function registerActorsHandlers(): void {
     return db().prepare(`
       SELECT
         a.id, a.name, a.photo_path,
-        a.height, a.bust, a.waist, a.hip, a.cup, a.phys_arbitrary, a.score_excluded,
+        a.height, a.bust, a.waist, a.hip, a.cup, a.phys_arbitrary,
         COALESCE(s.face, 0)        AS face,
         COALESCE(s.bust, 0)        AS score_bust,
         COALESCE(s.hip, 0)         AS score_hip,

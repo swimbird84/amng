@@ -170,7 +170,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 // ===== 배우 분포 차트 =====
-type DistBinActor = { id: number; name: string; photo_path: string | null; avg_score: number; value: number; displayValue: string; score_excluded: number }
+type DistBinActor = { id: number; name: string; photo_path: string | null; avg_score: number; value: number; displayValue: string }
 const CUP_ORDER_CHART = ['A','B','C','D','E','F','G','H','I','J','K','L','M']
 const DIST_ITEMS = [
   { key: 'avg_score',    label: '평점평균' },
@@ -234,7 +234,6 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   useDataChanged(() => setRefreshKey(k => k + 1))
 
   const [distItem, setDistItem] = useState<DistItemKey>(() => (localStorage.getItem('dashboard:distItem') as DistItemKey) || 'avg_score')
-  const [distExcludeMode, setDistExcludeMode] = useState<'include' | 'exclude'>(() => (localStorage.getItem('dashboard:distExcludeMode') as 'include' | 'exclude') || 'include')
   const [distActorPopup, setDistActorPopup] = useState<{ label: string; actors: DistBinActor[] } | null>(null)
 
   useEffect(() => {
@@ -364,11 +363,11 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
     let actors: DistBinActor[] = []
     if (isAvgScore) {
-      actors = scoreDist.map(a => ({ id: a.id, name: a.name, photo_path: (a as any).photo_path ?? null, avg_score: a.avg_score, value: a.avg_score, displayValue: a.avg_score.toFixed(2), score_excluded: a.score_excluded }))
+      actors = scoreDist.map(a => ({ id: a.id, name: a.name, photo_path: (a as any).photo_path ?? null, avg_score: a.avg_score, value: a.avg_score, displayValue: a.avg_score.toFixed(2) }))
     } else if (isPhysScore) {
-      actors = (physicalDist as PhysActor[]).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: a.physScore, displayValue: a.physScore.toFixed(2), score_excluded: a.score_excluded }))
+      actors = (physicalDist as PhysActor[]).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: a.physScore, displayValue: a.physScore.toFixed(2) }))
     } else if (isCup) {
-      actors = (physicalDist as PhysActor[]).filter(a => a.cup && CUP_ORDER_CHART.includes(a.cup)).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: CUP_ORDER_CHART.indexOf(a.cup!), displayValue: a.cup!, score_excluded: a.score_excluded }))
+      actors = (physicalDist as PhysActor[]).filter(a => a.cup && CUP_ORDER_CHART.includes(a.cup)).map(a => ({ id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value: CUP_ORDER_CHART.indexOf(a.cup!), displayValue: a.cup! }))
     } else {
       const getVal = (a: PhysActor): number | null => {
         if (distItem === 'face') return a.face; if (distItem === 'score_bust') return a.score_bust; if (distItem === 'score_hip') return a.score_hip
@@ -379,12 +378,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
       }
       actors = (physicalDist as PhysActor[]).filter(a => getVal(a) !== null).map(a => {
         const value = getVal(a)!
-        return { id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value, displayValue: isProfileCm ? `${value}cm` : String(value), score_excluded: a.score_excluded }
+        return { id: a.id, name: a.name, photo_path: a.photo_path, avg_score: a.avg_score, value, displayValue: isProfileCm ? `${value}cm` : String(value) }
       })
-    }
-
-    if (distExcludeMode === 'exclude') {
-      actors = actors.filter(a => !a.score_excluded)
     }
 
     if (actors.length === 0) return { distBins: [], distAvg: null, distTotal: 0, maxCount: 0, distAvgPercent: null }
@@ -416,7 +411,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     const maxCount = Math.max(...bins.map(b => b.actors.length), 1)
     const distAvgPercent = !isCup && bins.length > 0 ? Math.max(0, Math.min(1, (avg - bins[0].lo) / (bins[bins.length - 1].hi - bins[0].lo))) : null
     return { distBins: bins, distAvg: avg, distTotal: actors.length, maxCount, distAvgPercent }
-  }, [distItem, scoreDist, physicalDist, distExcludeMode])
+  }, [distItem, scoreDist, physicalDist])
 
   const ratingBuckets = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
   const ratingCountMap = new Map(ratingDist.map((r) => [r.bucket, r.count]))
@@ -516,16 +511,6 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             >
               {DIST_ITEMS.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
             </select>
-            <div className="flex">
-              <button
-                onClick={() => { setDistExcludeMode('include'); localStorage.setItem('dashboard:distExcludeMode', 'include') }}
-                className={`text-xs px-2 py-0.5 rounded-l border-r border-gray-600 ${distExcludeMode === 'include' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-              >포함</button>
-              <button
-                onClick={() => { setDistExcludeMode('exclude'); localStorage.setItem('dashboard:distExcludeMode', 'exclude') }}
-                className={`text-xs px-2 py-0.5 rounded-r ${distExcludeMode === 'exclude' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-              >제외</button>
-            </div>
             <span className="text-xs text-gray-500">집계 대상 {distTotal}명</span>
             {distAvg !== null && <span className="text-xs text-yellow-400">평균 {distAvg.toFixed(2)}</span>}
           </div>
