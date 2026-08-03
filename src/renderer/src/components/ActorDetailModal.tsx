@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useEscHandler } from '../escManager'
 import type { Actor, Tag, Work } from '../types'
 import { actorsApi, actorTagsApi, shellApi } from '../api'
@@ -11,6 +11,7 @@ import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData }
 import { getAge, getDebutAge } from '../utils/dateHelpers'
 import { emitDataChanged } from '../dataEvents'
 import MasterRecordModal from './cup/MasterRecordModal'
+import ActorWorksModal from './ActorWorksModal'
 
 interface Props {
   actorId: number
@@ -35,6 +36,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   const [editActor, setEditActor] = useState<(Actor & { tags?: Tag[] }) | undefined>(undefined)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showMasterRecord, setShowMasterRecord] = useState(false)
+  const [showWorksModal, setShowWorksModal] = useState(false)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -153,6 +155,13 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                   <h3 className="text-white font-bold text-lg">{actor.name}</h3>
                   {!!actor.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                   <button
+                    onClick={() => setShowWorksModal(true)}
+                    className="text-lg leading-none text-gray-400 hover:text-white"
+                    title="전체 출연작"
+                  >
+                    📁
+                  </button>
+                  <button
                     onClick={handleToggleFavorite}
                     className={`text-2xl leading-none ${actor.is_favorite ? 'text-red-500' : 'text-gray-500 hover:text-red-400'}`}
                   >
@@ -239,6 +248,17 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               </div>
             )}
 
+            {actor.aliases && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">다른이름</p>
+                <div className="flex flex-wrap gap-1">
+                  {actor.aliases.split(',').map((a) => a.trim()).filter(Boolean).map((alias) => (
+                    <span key={alias} className="text-xs px-2 py-0.5 rounded bg-fuchsia-700 text-fuchsia-200">{alias}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {actor.tags && actor.tags.length > 0 && (() => {
               type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof actor.tags }
               const catMap = new Map<number | null, Group>()
@@ -264,10 +284,10 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               return (
                 <div>
                   <p className="text-xs text-gray-500 mb-1">태그</p>
-                  <div className="space-y-1">
+                  <div className="grid grid-cols-[auto_1fr] gap-y-1 gap-x-2 items-start">
                     {groups.map((g) => (
-                      <div key={g.catId ?? 'none'}>
-                        <p className="text-xs text-gray-600 mb-0.5">{g.catName ?? '미분류'}</p>
+                      <React.Fragment key={g.catId ?? 'none'}>
+                        <span className="text-xs text-gray-600 leading-5 text-right">{g.catName ?? '미분류'}</span>
                         <div className="flex flex-wrap gap-1">
                           {g.tags.map((t) => {
                             const isRep = actor.rep_tags?.some((r) => r.id === t.id)
@@ -285,7 +305,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                             )
                           })}
                         </div>
-                      </div>
+                      </React.Fragment>
                     ))}
                   </div>
                 </div>
@@ -460,6 +480,15 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
           itemImage={actor.photo_path ?? null}
           onClose={() => setShowMasterRecord(false)}
         />
+      )}
+      {showWorksModal && actor && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: (zIndex ?? 60) + 10 }}>
+          <ActorWorksModal
+            actorId={actor.id}
+            actorName={actor.name}
+            onClose={() => setShowWorksModal(false)}
+          />
+        </div>
       )}
     </>
   )

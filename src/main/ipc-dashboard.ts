@@ -55,7 +55,7 @@ export function registerDashboardHandlers(): void {
         ), 0) AS actor_avg_score
       FROM works w
       WHERE w.created_at IS NOT NULL
-        AND w.created_at >= datetime('now', '-14 days')
+        AND w.created_at >= datetime('now', '-1 months')
       ORDER BY w.created_at DESC, w.rating DESC, actor_avg_score DESC
     `).all() as Array<Record<string, unknown>>
     if (works.length === 0) return []

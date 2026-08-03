@@ -74,6 +74,7 @@ export interface Actor {
   hip: number | null
   cup: string | null
   phys_arbitrary: string | null
+  aliases: string | null
   comment: string | null
   avg_score?: number
   work_count?: number

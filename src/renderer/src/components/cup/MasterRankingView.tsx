@@ -248,32 +248,26 @@ export default function MasterRankingView({
             ))}
           </select>
 
-          {/* 설정 (현재 시즌만) */}
-          {isCurrentSeason && (
-            <button
-              onClick={() => setShowSettings(true)}
-              className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-400 hover:text-gray-200 text-sm transition"
-            >
-              ⚙ 설정
-            </button>
-          )}
-          {/* 시즌 종료 (현재 시즌만) */}
-          {isCurrentSeason && (
-            <>
-              <button
-                onClick={() => setShowResetConfirm('actor')}
-                className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
-              >
-                배우 시즌 종료
-              </button>
-              <button
-                onClick={() => setShowResetConfirm('work')}
-                className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
-              >
-                작품 시즌 종료
-              </button>
-            </>
-          )}
+          {/* 설정 */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-400 hover:text-gray-200 text-sm transition"
+          >
+            ⚙ 설정
+          </button>
+          {/* 시즌 종료 */}
+          <button
+            onClick={() => setShowResetConfirm('actor')}
+            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
+          >
+            배우 시즌 종료
+          </button>
+          <button
+            onClick={() => setShowResetConfirm('work')}
+            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
+          >
+            작품 시즌 종료
+          </button>
         </div>
 
         {/* 시즌 선택 + 부별 필터 */}

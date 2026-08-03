@@ -153,8 +153,10 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         if (studioId === null) {
           const filename = parts[parts.length - 1] ?? ''
           const codeMatch = filename.match(/^(.+)-\d/)
-          if (codeMatch) {
-            studioCodesApi.lookup(codeMatch[1]).then((sid) => {
+          const suffixMatch = filename.match(/^\d[\d-]*-([A-Za-z]+)(?:\.[^.]+)?$/)
+          const studioCode = suffixMatch ? suffixMatch[1] : codeMatch ? codeMatch[1] : null
+          if (studioCode) {
+            studioCodesApi.lookup(studioCode).then((sid) => {
               if (sid !== null) setStudioId(sid)
             })
           }
@@ -352,7 +354,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100]">
-      <div className="bg-gray-800 rounded-lg w-[840px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-800 rounded-lg w-[1000px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => { if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel() }}
           className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10"
@@ -743,7 +745,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                 </div>
                 <div className="border-t border-gray-700" />
                 <div className="flex flex-wrap gap-1.5">
-                  {allActors.filter((a) => !newActor || a.name.toLowerCase().includes(newActor.toLowerCase())).map((actor) => {
+                  {allActors.filter((a) => !newActor || a.name.toLowerCase().includes(newActor.toLowerCase()) || (a.aliases && a.aliases.toLowerCase().includes(newActor.toLowerCase()))).map((actor) => {
                     const isRep = repActorIds.includes(actor.id)
                     return (<button
                       key={actor.id}
@@ -782,7 +784,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         </div>
 
         {/* 우측 - 타이틀 + 태그 */}
-        <div className="w-[330px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4">
+        <div className="w-[500px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4">
           <div>
             <label className="text-sm text-gray-400 block mb-1">타이틀</label>
             <textarea

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import type { Tag } from '../types'
 
 interface Props {
@@ -103,10 +103,10 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
           catMap.get(key)!.tags.push(tag)
         }
         return (
-          <div className="space-y-1 mb-1.5">
+          <div className="grid grid-cols-[auto_1fr] gap-y-1 gap-x-2 items-start mb-1.5">
             {groups.map((g) => (
-              <div key={g.catId ?? 'none'}>
-                <p className="text-xs text-gray-600 mb-0.5">{g.catName ?? '미분류'}</p>
+              <React.Fragment key={g.catId ?? 'none'}>
+                <span className="text-xs text-gray-600 leading-5 text-right">{g.catName ?? '미분류'}</span>
                 <div className="flex flex-wrap gap-1">
                   {g.tags.map((t) => {
                     const isRep = repTagIds?.includes(t.id)
@@ -124,7 +124,7 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
                     )
                   })}
                 </div>
-              </div>
+              </React.Fragment>
             ))}
           </div>
         )

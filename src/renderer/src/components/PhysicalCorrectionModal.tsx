@@ -37,6 +37,7 @@ export interface PhysicalSettings {
 export interface ActorPhysicalData {
   id: number
   name: string
+  aliases: string | null
   photo_path: string | null
   height: number | null
   bust: number | null
@@ -697,7 +698,7 @@ export default function PhysicalCorrectionModal({ onClose, onViewActor }: { onCl
             <div ref={listRef} className="flex-1 overflow-y-auto space-y-1 [scrollbar-gutter:stable]">
               {ranked
                 .map((a, i) => ({ ...a, _rank: i }))
-                .filter(a => !nameSearch || a.name.toLowerCase().includes(nameSearch.toLowerCase()))
+                .filter(a => !nameSearch || a.name.toLowerCase().includes(nameSearch.toLowerCase()) || (a.aliases && a.aliases.toLowerCase().includes(nameSearch.toLowerCase())))
                 .map((a) => {
                 const avgScore = (a.face + a.score_bust + a.score_hip + a.physical + a.skin + a.acting + a.sexy + a.charm + a.technique + a.proportions) / 13
                 const _ar = new Set((a.phys_arbitrary ?? '').split('|').filter(Boolean))

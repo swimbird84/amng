@@ -96,8 +96,8 @@ export function registerActorsHandlers(): void {
     }
 
     if (params?.keyword) {
-      conditions.push('a.name LIKE ?')
-      bindings.push(`%${params.keyword}%`)
+      conditions.push('(a.name LIKE ? OR a.aliases LIKE ?)')
+      bindings.push(`%${params.keyword}%`, `%${params.keyword}%`)
     }
     if (params?.ageFrom !== undefined) {
       conditions.push("(julianday('now') - julianday(a.birthday)) / 365.25 >= ?")
@@ -322,16 +322,17 @@ export function registerActorsHandlers(): void {
     hip?: number | null
     cup?: string | null
     phys_arbitrary?: string | null
+    aliases?: string | null
     comment?: string | null
     scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
     const result = db().prepare(`
-      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, comment)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, aliases, comment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(data.name, data.photo_path || null, data.birthday || null, data.debut_date || null,
-      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.comment || null)
+      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.aliases || null, data.comment || null)
     const actorId = result.lastInsertRowid
 
     const s = data.scores
@@ -351,10 +352,10 @@ export function registerActorsHandlers(): void {
   })
 
   ipcMain.handle('actors:findOrCreate', (_e, name: string, birthday?: string) => {
-    const matches = db().prepare('SELECT id FROM actors WHERE name = ?').all(name) as { id: number }[]
+    const matches = db().prepare("SELECT id FROM actors WHERE name = ? OR (',' || REPLACE(aliases, ', ', ',') || ',') LIKE '%,' || ? || ',%'").all(name, name) as { id: number }[]
     if (matches.length === 1) return matches[0].id
     if (matches.length > 1 && birthday) {
-      const exact = db().prepare('SELECT id FROM actors WHERE name = ? AND birthday = ?').get(name, birthday) as { id: number } | undefined
+      const exact = db().prepare("SELECT id FROM actors WHERE (name = ? OR (',' || REPLACE(aliases, ', ', ',') || ',') LIKE '%,' || ? || ',%') AND birthday = ?").get(name, name, birthday) as { id: number } | undefined
       if (exact) return exact.id
     }
     if (matches.length > 1 && !birthday) return matches[0].id
@@ -380,6 +381,7 @@ export function registerActorsHandlers(): void {
     hip?: number | null
     cup?: string | null
     phys_arbitrary?: string | null
+    aliases?: string | null
     comment?: string | null
     scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
@@ -400,6 +402,7 @@ export function registerActorsHandlers(): void {
     if (data.hip !== undefined) { fields.push('hip = ?'); values.push(data.hip) }
     if (data.cup !== undefined) { fields.push('cup = ?'); values.push(data.cup) }
     if (data.phys_arbitrary !== undefined) { fields.push('phys_arbitrary = ?'); values.push(data.phys_arbitrary) }
+    if (data.aliases !== undefined) { fields.push('aliases = ?'); values.push(data.aliases) }
     if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
 
     if (fields.length > 0) {
@@ -504,7 +507,7 @@ export function registerActorsHandlers(): void {
   ipcMain.handle('actors:physical-data', () => {
     return db().prepare(`
       SELECT
-        a.id, a.name, a.photo_path,
+        a.id, a.name, a.aliases, a.photo_path,
         a.height, a.bust, a.waist, a.hip, a.cup, a.phys_arbitrary,
         COALESCE(s.face, 0)        AS face,
         COALESCE(s.bust, 0)        AS score_bust,

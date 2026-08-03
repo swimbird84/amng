@@ -937,8 +937,8 @@ export function registerCupHandlers(): void {
           : ` AND master_run_count > 0 AND rank BETWEEN ${lo} AND ${hi}`
       }
     }
-    const searchWhere = search ? (type === 'actor' ? ` AND name LIKE ?` : ` AND (title LIKE ? OR product_number LIKE ?)`) : ''
-    const searchBindings: unknown[] = search ? (type === 'work' ? [`%${search}%`, `%${search}%`] : [`%${search}%`]) : []
+    const searchWhere = search ? (type === 'actor' ? ` AND (name LIKE ? OR aliases LIKE ?)` : ` AND (title LIKE ? OR product_number LIKE ?)`) : ''
+    const searchBindings: unknown[] = search ? [`%${search}%`, `%${search}%`] : []
     const rl = getRecentRunLimit(db(), type)
     const ptsCte = buildPointsCte(type, rl, 'pts', true, seasonId)
     const seasonFilter = buildSeasonFilter('mh.season_id', seasonId)
@@ -2073,10 +2073,10 @@ export function registerCupHandlers(): void {
     const sortColMap: Record<string, string> = { win_rate: 'win_rate', match_win_rate: 'match_win_rate', run_wins: 'run_wins', total_runs: 'total_runs', total_pts: 'total_pts' }
     const sortCol = sortColMap[sortBy] ?? 'win_rate'
     const searchWhere = search
-      ? (type === 'actor' ? 'AND a.name LIKE ?' : 'AND (w.title LIKE ? OR w.product_number LIKE ?)')
+      ? (type === 'actor' ? 'AND (a.name LIKE ? OR a.aliases LIKE ?)' : 'AND (w.title LIKE ? OR w.product_number LIKE ?)')
       : ''
     const searchBindings: unknown[] = search
-      ? (type === 'work' ? [`%${search}%`, `%${search}%`] : [`%${search}%`])
+      ? [`%${search}%`, `%${search}%`]
       : []
     const baseCte = `
       WITH entry_stats AS (

@@ -44,6 +44,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   const toggleArbitrary = (field: string) => setPhysArbitrary(prev => {
     const next = new Set(prev); next.has(field) ? next.delete(field) : next.add(field); return next
   })
+  const [aliases, setAliases] = useState(actor?.aliases || '')
   const [comment, setComment] = useState(actor?.comment || '')
   const [scores, setScores] = useState<ActorScores>(
     actor?.scores ? { ...actor.scores, charm: actor.scores.charm ?? 0, technique: actor.scores.technique ?? 0, proportions: actor.scores.proportions ?? 0 } : { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
@@ -132,6 +133,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
       hip: hip ? Number(hip) : null,
       cup: cup.trim() || null,
       phys_arbitrary: physArbitrary.size > 0 ? [...physArbitrary].join('|') : null,
+      aliases: aliases.trim() || null,
       comment: comment.trim() || null,
       delete_pending: deletePending,
       scores,
@@ -174,7 +176,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
   return (
     <>
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100]">
-      <div className="bg-gray-800 rounded-lg w-[840px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-800 rounded-lg w-[1000px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => { if (confirm('작성 중인 내용이 사라집니다. 계속하시겠습니까?')) onCancel() }}
           className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl leading-none z-10"
@@ -243,6 +245,16 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">별명 <span className="text-xs text-gray-500">(쉼표로 구분)</span></label>
+              <input
+                value={aliases}
+                onChange={(e) => setAliases(e.target.value)}
+                placeholder="예: 이름2, 이름3"
                 className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
               />
             </div>
@@ -381,7 +393,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
         </div>
 
         {/* 우측 - 코멘트 + 태그 */}
-        <div className="w-[330px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4">
+        <div className="w-[500px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4">
           <div>
             <label className="text-sm text-gray-400 block mb-1">코멘트</label>
             <textarea

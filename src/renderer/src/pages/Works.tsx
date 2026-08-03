@@ -241,7 +241,9 @@ export default function Works({ onNavigateToActor }: WorksProps) {
         const parentFolder = parts.length >= 3 ? parts[parts.length - 3] : ''
         const productNumber = fileName.replace(/\.[^.]+$/, '')
         const codeMatch = productNumber.match(/^(.+)-\d/)
-        const studioId = codeMatch ? await studioCodesApi.lookup(codeMatch[1]) : null
+        const suffixMatch = !codeMatch ? null : productNumber.match(/^\d[\d-]*-([A-Za-z]+)$/)
+        const studioCode = suffixMatch ? suffixMatch[1] : codeMatch ? codeMatch[1] : null
+        const studioId = studioCode ? await studioCodesApi.lookup(studioCode) : null
         const dateMatch = folderName.match(/^(\d{4}-\d{2}-\d{2})[\s_]/)
         const releaseDate = dateMatch ? dateMatch[1] : undefined
         const actorMatch = parentFolder.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)

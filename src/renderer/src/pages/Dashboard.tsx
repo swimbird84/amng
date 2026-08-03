@@ -448,8 +448,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 등록 */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-white font-bold text-base">등록</h2>
-            <span className="text-xs text-gray-500">({today} 기준 2주)</span>
+            <h2 className="text-white font-bold text-base">신규 등록</h2>
+            <span className="text-xs text-gray-500">({today} 기준 1개월)</span>
             <button
               onClick={() => setExpandedRecent((v) => !v)}
               className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"

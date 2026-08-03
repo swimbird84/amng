@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useEscHandler } from '../escManager'
 import type { Work, Tag, Actor } from '../types'
 import { worksApi, shellApi } from '../api'
@@ -91,7 +91,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
   return (
     <>
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center" style={{ zIndex }} onClick={onClose}>
-        <div className="bg-gray-800 rounded-lg w-[840px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-gray-800 rounded-lg w-[1000px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-white text-xl leading-none z-10">✕</button>
 
           {/* 좌측 */}
@@ -254,7 +254,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
           </div>
 
           {/* 우측 - 타이틀 + 태그 */}
-          <div className="w-[330px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-3">
+          <div className="w-[500px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-3">
             {work.title && (
               <div>
                 <p className="text-xs text-gray-500 mb-1">타이틀</p>
@@ -287,10 +287,10 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
               return (
                 <div>
                   <p className="text-xs text-gray-500 mb-1">태그</p>
-                  <div className="space-y-1">
+                  <div className="grid grid-cols-[auto_1fr] gap-y-1 gap-x-2 items-start">
                     {groups.map((g) => (
-                      <div key={g.catId ?? 'none'}>
-                        <p className="text-xs text-gray-600 mb-0.5">{g.catName ?? '미분류'}</p>
+                      <React.Fragment key={g.catId ?? 'none'}>
+                        <span className="text-xs text-gray-600 leading-5 text-right">{g.catName ?? '미분류'}</span>
                         <div className="flex flex-wrap gap-1">
                           {g.tags.map((t) => {
                             const isRep = work.rep_tags?.some((r) => r.id === t.id)
@@ -308,7 +308,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                             )
                           })}
                         </div>
-                      </div>
+                      </React.Fragment>
                     ))}
                   </div>
                 </div>

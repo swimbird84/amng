@@ -266,7 +266,7 @@ export default function SearchBar(props: Props) {
     : sortedStudios
 
   const filteredActors = actorFilter
-    ? actors.filter(a => a.name.toLowerCase().includes(actorFilter.toLowerCase()))
+    ? actors.filter(a => a.name.toLowerCase().includes(actorFilter.toLowerCase()) || (a.aliases && a.aliases.toLowerCase().includes(actorFilter.toLowerCase())))
     : actors
 
   const selectedStudio = studios.find(s => s.id === studioId)

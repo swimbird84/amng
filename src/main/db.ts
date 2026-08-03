@@ -213,6 +213,9 @@ export function initDatabase(): void {
   if (!actorCols.includes('delete_pending')) {
     db.prepare('ALTER TABLE actors ADD COLUMN delete_pending INTEGER DEFAULT 0').run()
   }
+  if (!actorCols.includes('aliases')) {
+    db.prepare('ALTER TABLE actors ADD COLUMN aliases TEXT').run()
+  }
   if (!workCols.includes('delete_pending')) {
     db.prepare('ALTER TABLE works ADD COLUMN delete_pending INTEGER DEFAULT 0').run()
   }

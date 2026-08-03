@@ -384,7 +384,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                   className="relative rounded-t-lg overflow-hidden"
                   onMouseMove={(e) => !deleteMode && setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
                   onMouseLeave={() => setTooltip(null)}
-                  onClick={() => { if (!deleteMode) setWorksModalActor({ id: a.id, name: a.name }) }}
+                  onClick={() => { if (!deleteMode) handleSelect(a.id) }}
                 >
                   <ImagePreview path={a.photo_path} alt={a.name} className="w-full h-40" objectPosition="center 10%" version={refreshKey} reobserve={masterPointsMap.size} />
                   {deleteMode && selectedDeleteIds.has(a.id) && (
@@ -392,6 +392,12 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                       <span className="text-white text-4xl font-bold drop-shadow">✓</span>
                     </div>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); if (!deleteMode) setWorksModalActor({ id: a.id, name: a.name }) }}
+                    className="absolute bottom-1 right-1 text-xl leading-none drop-shadow bg-black/50 hover:bg-blue-600 rounded p-0.5 text-gray-300 hover:text-white cursor-pointer transition"
+                  >
+                    📁
+                  </button>
                   <button
                     onClick={(e) => handleToggleFavorite(a.id, a.is_favorite, e)}
                     className="absolute top-1 right-1 text-lg leading-none drop-shadow"

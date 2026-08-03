@@ -161,7 +161,7 @@ export default function WorldcupFilterModal({ type, filter, onSave, onClose }: P
   const numInputCls = `${inputCls} w-20`
 
   const filteredActors = allActors.filter(a =>
-    !actorSearch || a.name.toLowerCase().includes(actorSearch.toLowerCase())
+    !actorSearch || a.name.toLowerCase().includes(actorSearch.toLowerCase()) || (a.aliases && a.aliases.toLowerCase().includes(actorSearch.toLowerCase()))
   )
   const selectedActors = allActors.filter(a => actorIds.includes(a.id))
 
