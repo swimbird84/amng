@@ -152,7 +152,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               <ImagePreview path={actor.photo_path} alt={actor.name} className="w-28 h-28 rounded flex-shrink-0" version={refreshKey} />
               <div className="flex-1 pt-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-white font-bold text-lg">{actor.name}{!!actor.is_retired && <span className="text-gray-400 font-normal text-sm ml-1">[은퇴]</span>}</h3>
+                  <h3 className="text-white font-bold text-lg">{actor.name}</h3>
                   {!!actor.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                   <button
                     onClick={() => setShowWorksModal(true)}

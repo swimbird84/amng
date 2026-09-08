@@ -377,7 +377,6 @@ export function registerActorsHandlers(): void {
     debut_date?: string | null
     is_favorite?: number
     delete_pending?: number
-    is_retired?: number
     height?: number | null
     bust?: number | null
     waist?: number | null
@@ -399,7 +398,6 @@ export function registerActorsHandlers(): void {
     if (data.debut_date !== undefined) { fields.push('debut_date = ?'); values.push(data.debut_date) }
     if (data.is_favorite !== undefined) { fields.push('is_favorite = ?'); values.push(data.is_favorite) }
     if (data.delete_pending !== undefined) { fields.push('delete_pending = ?'); values.push(data.delete_pending) }
-    if (data.is_retired !== undefined) { fields.push('is_retired = ?'); values.push(data.is_retired) }
     if (data.height !== undefined) { fields.push('height = ?'); values.push(data.height) }
     if (data.bust !== undefined) { fields.push('bust = ?'); values.push(data.bust) }
     if (data.waist !== undefined) { fields.push('waist = ?'); values.push(data.waist) }
