@@ -5,6 +5,7 @@ import CardTooltip, { type TooltipState } from '../CardTooltip'
 import Rating from '../Rating'
 import type { ItemInfo } from './cupTypes'
 import { itemLabel, itemImagePath, DIV_COLOR } from './cupConstants'
+import ActorWorksModal from '../ActorWorksModal'
 
 export default function MatchCard({
   item, type, tournamentId, onClick, onNavigate, onEdit, disabled, division, isMaster,
@@ -26,6 +27,7 @@ export default function MatchCard({
   const [workRating, setWorkRating] = useState<number>(item.rating ?? 0)
   const [isFavorite, setIsFavorite] = useState(!!(item.is_favorite))
   const [isDeletePending, setIsDeletePending] = useState(!!(item.delete_pending))
+  const [showWorksModal, setShowWorksModal] = useState(false)
 
   useEffect(() => {
     setWorkRating(item.rating ?? 0)
@@ -121,6 +123,13 @@ export default function MatchCard({
               onClick={onNavigate}
             >{item.name ?? '...'}{item.avg_score != null && item.avg_score > 0 && <span className="text-yellow-400 text-xs font-normal ml-1">{item.avg_score.toFixed(2)}</span>}</p>
             <button
+              onClick={(e) => { e.stopPropagation(); setShowWorksModal(true) }}
+              className="shrink-0 w-7 h-7 rounded flex items-center justify-center cursor-pointer hover:border hover:border-gray-500 transition"
+              title="전체 출연작"
+            >
+              📁
+            </button>
+            <button
               onClick={handleEditClick}
               className="shrink-0 w-7 h-7 rounded flex items-center justify-center cursor-pointer hover:border hover:border-gray-500 transition"
               title="수정"
@@ -183,6 +192,13 @@ export default function MatchCard({
         )}
       </div>
       {tooltip && <CardTooltip tooltip={tooltip} />}
+      {showWorksModal && type === 'actor' && (
+        <ActorWorksModal
+          actorId={item.id}
+          actorName={item.name ?? ''}
+          onClose={() => setShowWorksModal(false)}
+        />
+      )}
     </div>
   )
 }

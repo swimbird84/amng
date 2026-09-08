@@ -225,8 +225,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
 
   const currentLabel = RANK_ITEMS.find(i => i.value === rankBy)?.label ?? ''
   const title = `${currentLabel === '마스터랭킹' ? '마스터' : currentLabel} 랭킹`
-  const top5 = ranked.slice(0, 5)
-  const rest = ranked.slice(5)
+  const top10 = ranked.slice(0, 10)
+  const rest = ranked.slice(10)
 
   return (
     <div className="h-full flex flex-col">
@@ -285,10 +285,10 @@ export default function Ranking({ onNavigateToActor }: Props) {
         {ranked.length === 0 && (
           <p className="text-gray-500 text-sm">데이터가 없습니다</p>
         )}
-        {/* 1~5위: 5-grid */}
-        {top5.length > 0 && (
+        {/* 1~10위: 5-grid */}
+        {top10.length > 0 && (
           <div className="grid grid-cols-5 gap-2">
-            {top5.map((a, i) => (
+            {top10.map((a, i) => (
               <ActorRankCard
                 key={a.id}
                 actor={a}
@@ -303,14 +303,14 @@ export default function Ranking({ onNavigateToActor }: Props) {
             ))}
           </div>
         )}
-        {/* 6위~: 10-grid */}
+        {/* 11위~: 10-grid */}
         {rest.length > 0 && (
           <div className="grid grid-cols-10 gap-2">
             {rest.map((a, i) => (
               <ActorRankCard
                 key={a.id}
                 actor={a}
-                rank={rankBy === 'masterRanking' ? (masterRanks.get(a.id)?.rank ?? i + 6) : i + 6}
+                rank={rankBy === 'masterRanking' ? (masterRanks.get(a.id)?.rank ?? i + 11) : i + 11}
                 subtitle={rankBy !== 'masterRanking' ? getSubtitle(a) : undefined}
                 subtitleNode={rankBy === 'masterRanking' ? getMasterSubtitleNode(a) : undefined}
                 onClick={() => onNavigateToActor(a.id)}
