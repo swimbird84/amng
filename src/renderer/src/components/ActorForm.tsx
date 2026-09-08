@@ -50,6 +50,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     actor?.scores ? { ...actor.scores, charm: actor.scores.charm ?? 0, technique: actor.scores.technique ?? 0, proportions: actor.scores.proportions ?? 0 } : { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
   )
   const [deletePending, setDeletePending] = useState(actor?.delete_pending ?? 0)
+  const [isRetired, setIsRetired] = useState(actor?.is_retired ?? 0)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(actor?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(actor?.rep_tags?.map((t) => t.id) || [])
   const [allTags, setAllTags] = useState<Tag[]>([])
@@ -136,6 +137,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
       aliases: aliases.trim() || null,
       comment: comment.trim() || null,
       delete_pending: deletePending,
+      is_retired: isRetired,
       scores,
       tag_ids: selectedTagIds,
       rep_tag_ids: repTagIds,
@@ -377,6 +379,15 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                 ))}
               </div>
               <div className="flex items-center gap-4 mt-2">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none w-fit">
+                  <input
+                    type="checkbox"
+                    checked={!!isRetired}
+                    onChange={e => setIsRetired(e.target.checked ? 1 : 0)}
+                    className="accent-gray-500"
+                  />
+                  <span className="text-xs text-gray-400">은퇴</span>
+                </label>
                 <label className="flex items-center gap-1.5 cursor-pointer select-none w-fit">
                   <input
                     type="checkbox"

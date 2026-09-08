@@ -216,6 +216,9 @@ export function initDatabase(): void {
   if (!actorCols.includes('is_deleted')) {
     db.prepare('ALTER TABLE actors ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0').run()
   }
+  if (!actorCols.includes('is_retired')) {
+    db.prepare('ALTER TABLE actors ADD COLUMN is_retired INTEGER NOT NULL DEFAULT 0').run()
+  }
   if (!actorCols.includes('aliases')) {
     db.prepare('ALTER TABLE actors ADD COLUMN aliases TEXT').run()
   }

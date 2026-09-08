@@ -393,6 +393,9 @@ export function registerDashboardHandlers(): void {
 
     // 3) 각 run 시점의 순위 계산 (recentRunLimit 반영)
     // 각 run의 completed_at 시점까지의 포인트로 순위 계산
+    const deletedActorIds = type === 'actor'
+      ? new Set((db().prepare('SELECT id FROM actors WHERE is_deleted = 1').all() as { id: number }[]).map(r => r.id))
+      : new Set<number>()
     const runRanks = new Map<number, Map<number, number>>()
     const runDisplayRanks = new Map<number, Map<number, number>>()
     for (const run of runs) {
@@ -414,7 +417,8 @@ export function registerDashboardHandlers(): void {
           WHERE mh.type = ? AND r.completed_at <= ? ${seasonFilterMh}
         ) WHERE rn <= ${recentRunLimit} GROUP BY item_id`
       }
-      const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
+      const allPtsRaw = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
+      const allPts = allPtsRaw.filter(r => !deletedActorIds.has(r.item_id))
       allPts.sort((a, b) => b.total - a.total)
       // rowNum: 위치용 (ROW_NUMBER 방식), displayRank: 표시용 (RANK 방식 - 동점 동순위)
       const rowNumMap = new Map<number, number>()

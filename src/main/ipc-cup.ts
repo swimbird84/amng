@@ -949,7 +949,7 @@ export function registerCupHandlers(): void {
         WITH ranked AS (
           SELECT
             RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank,
-            a.id, a.name, a.photo_path,
+            a.id, a.name, a.aliases, a.photo_path,
             COALESCE(pts.total_points, 0) AS total_points,
             COALESCE(mrc.master_run_count, 0) AS master_run_count,
             COALESCE((sc.face + sc.bust + sc.hip + sc.physical + sc.skin + sc.acting + sc.sexy + sc.charm + sc.technique + sc.proportions) / 13.0, 0) AS avg_score,
@@ -1138,8 +1138,11 @@ export function registerCupHandlers(): void {
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
         WHERE mh.type = ? AND r.completed_at < ? ${seasonFilter}
       ) WHERE rn <= ${rl} GROUP BY item_id`
-    const prevRows = db().prepare(prevPtsSql).all(type, latestRun.completed_at) as { item_id: number; total: number }[]
-    const prevMapped = prevRows.map(r => ({ item_id: r.item_id, pts: r.total }))
+    const prevRowsRaw = db().prepare(prevPtsSql).all(type, latestRun.completed_at) as { item_id: number; total: number }[]
+    const deletedIds = type === 'actor'
+      ? new Set((db().prepare('SELECT id FROM actors WHERE is_deleted = 1').all() as { id: number }[]).map(r => r.id))
+      : new Set<number>()
+    const prevMapped = prevRowsRaw.filter(r => !deletedIds.has(r.item_id)).map(r => ({ item_id: r.item_id, pts: r.total }))
 
     // Assign previous ranks (sorted desc by pts)
     const sortedPrev = [...prevMapped].sort((a, b) => b.pts - a.pts)
@@ -1167,11 +1170,16 @@ export function registerCupHandlers(): void {
     runs.reverse()
     const rl = getRecentRunLimit(db(), type)
     const atTimeSql = buildPointsAtTimeSql(type, rl, seasonId)
+    const deletedIds = type === 'actor'
+      ? new Set((db().prepare('SELECT id FROM actors WHERE is_deleted = 1').all() as { id: number }[]).map(r => r.id))
+      : new Set<number>()
     const result: { rank: number; recorded_at: string; tournament_name: string }[] = []
     for (const run of runs) {
-      const allPts = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
-      const itemPts = allPts.find(r => r.item_id === itemId)?.total ?? 0
-      const rank = allPts.filter(r => r.total > itemPts).length + 1
+      const allPtsRaw = db().prepare(atTimeSql).all(type, run.completed_at) as { item_id: number; total: number }[]
+      const allPts = allPtsRaw.filter(r => !deletedIds.has(r.item_id))
+      const itemEntry = allPts.find(r => r.item_id === itemId)
+      if (!itemEntry) continue
+      const rank = allPts.filter(r => r.total > itemEntry.total).length + 1
       result.push({ rank, recorded_at: run.completed_at, tournament_name: run.tournament_name })
     }
     return result

@@ -3,6 +3,7 @@ release/
 out/
 .idea/
 .claude/
+img/
 CLAUDE.md
 develop.MD
 install.MD
