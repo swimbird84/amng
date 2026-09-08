@@ -53,7 +53,7 @@ export function cleanupOrphanImages(): { works: number; actors: number; actorPho
   const actorsDir = path.join(app.getPath('userData'), 'images', 'actors')
   if (fs.existsSync(actorsDir)) {
     const actorIds = new Set(
-      (db.prepare('SELECT id FROM actors').all() as { id: number }[]).map(r => r.id)
+      (db.prepare('SELECT id FROM actors WHERE is_deleted = 0').all() as { id: number }[]).map(r => r.id)
     )
     for (const file of fs.readdirSync(actorsDir)) {
       const m = file.match(/^(\d+)\./)

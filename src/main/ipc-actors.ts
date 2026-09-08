@@ -57,6 +57,7 @@ export function registerActorsHandlers(): void {
           MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
         FROM actors
         WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+          AND is_deleted = 0
       )
       SELECT DISTINCT a.*,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
@@ -77,7 +78,7 @@ export function registerActorsHandlers(): void {
       CROSS JOIN stats
       LEFT JOIN actor_scores s ON s.actor_id = a.id
     `
-    const conditions: string[] = []
+    const conditions: string[] = ['a.is_deleted = 0']
     const bindings: unknown[] = []
 
     if (params?.tagIds?.length) {
@@ -222,6 +223,7 @@ export function registerActorsHandlers(): void {
           MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
         FROM actors
         WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+          AND is_deleted = 0
       )
       SELECT a.*,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
@@ -241,7 +243,7 @@ export function registerActorsHandlers(): void {
       FROM actors a
       CROSS JOIN stats
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.id = ?
+      WHERE a.id = ? AND a.is_deleted = 0
     `).get(id)
     if (!actor) return null
 
@@ -352,10 +354,10 @@ export function registerActorsHandlers(): void {
   })
 
   ipcMain.handle('actors:findOrCreate', (_e, name: string, birthday?: string) => {
-    const matches = db().prepare("SELECT id FROM actors WHERE name = ? OR (',' || REPLACE(aliases, ', ', ',') || ',') LIKE '%,' || ? || ',%'").all(name, name) as { id: number }[]
+    const matches = db().prepare("SELECT id FROM actors WHERE is_deleted = 0 AND (name = ? OR (',' || REPLACE(aliases, ', ', ',') || ',') LIKE '%,' || ? || ',%')").all(name, name) as { id: number }[]
     if (matches.length === 1) return matches[0].id
     if (matches.length > 1 && birthday) {
-      const exact = db().prepare("SELECT id FROM actors WHERE (name = ? OR (',' || REPLACE(aliases, ', ', ',') || ',') LIKE '%,' || ? || ',%') AND birthday = ?").get(name, name, birthday) as { id: number } | undefined
+      const exact = db().prepare("SELECT id FROM actors WHERE is_deleted = 0 AND (name = ? OR (',' || REPLACE(aliases, ', ', ',') || ',') LIKE '%,' || ? || ',%') AND birthday = ?").get(name, name, birthday) as { id: number } | undefined
       if (exact) return exact.id
     }
     if (matches.length > 1 && !birthday) return matches[0].id
@@ -444,16 +446,7 @@ export function registerActorsHandlers(): void {
       LIMIT 1
     `).get(id)
     if (blocked) return { blocked: true }
-    // 추가 사진 파일 삭제
-    const photos = db().prepare('SELECT photo_path FROM actor_photos WHERE actor_id = ?').all(id) as { photo_path: string }[]
-    for (const p of photos) deleteImageFile(p.photo_path)
-    // 메인 사진 파일 삭제
-    deleteImagesByPattern('actors', id)
-    db().prepare('DELETE FROM actors WHERE id = ?').run(id)
-    db().prepare(`DELETE FROM master_ranking_history WHERE type = 'actor' AND item_id = ?`).run(id)
-    db().prepare(`DELETE FROM cup_entries WHERE item_id = ? AND run_id IN (SELECT r.id FROM cup_runs r JOIN cup_tournaments t ON t.id = r.tournament_id WHERE t.type = 'actor')`).run(id)
-    db().prepare(`DELETE FROM cup_stats WHERE type = 'actor' AND item_id = ?`).run(id)
-    db().prepare(`DELETE FROM cup_rank_snapshots WHERE item_id = ? AND tournament_id IN (SELECT id FROM cup_tournaments WHERE type = 'actor')`).run(id)
+    db().prepare('UPDATE actors SET is_deleted = 1 WHERE id = ?').run(id)
     return { blocked: false }
   })
 
@@ -480,7 +473,7 @@ export function registerActorsHandlers(): void {
     const rows = db().prepare(`
       SELECT a.name, s.face, s.bust, s.hip, s.physical, s.skin, s.acting, s.sexy, s.charm, s.technique, s.proportions
       FROM actor_scores s
-      JOIN actors a ON a.id = s.actor_id
+      JOIN actors a ON a.id = s.actor_id AND a.is_deleted = 0
       WHERE (s.face >= 11 OR s.bust >= 11 OR s.hip >= 11 OR s.physical >= 11 OR s.skin >= 11
              OR s.acting >= 11 OR s.sexy >= 11 OR s.charm >= 11 OR s.technique >= 11 OR s.proportions >= 11)
         AND (${excludeId != null ? 's.actor_id != ?' : '1=1'})
@@ -523,6 +516,7 @@ export function registerActorsHandlers(): void {
         (SELECT COUNT(*) FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id AND w2.is_favorite = 1 WHERE wa2.actor_id = a.id) AS fav_work_count
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
+      WHERE a.is_deleted = 0
     `).all()
   })
 

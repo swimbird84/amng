@@ -134,7 +134,7 @@ export function registerTagsHandlers(): void {
           SUM(CASE WHEN at2.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count,
           c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
         FROM actor_tags_master t
-        LEFT JOIN actor_tags at2 ON at2.tag_id = t.id
+        LEFT JOIN (actor_tags at2 JOIN actors a ON a.id = at2.actor_id AND a.is_deleted = 0) ON at2.tag_id = t.id
         LEFT JOIN actor_tag_categories c ON c.id = t.category_id
         GROUP BY t.id ORDER BY t.name
       `).all()

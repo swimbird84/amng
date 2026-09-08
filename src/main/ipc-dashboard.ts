@@ -33,7 +33,7 @@ export function registerDashboardHandlers(): void {
     }
     const repActorRows2 = db().prepare(`
       SELECT wa.work_id, a.id, a.name FROM work_actors wa
-      JOIN actors a ON a.id = wa.actor_id
+      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0
       WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
     `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
     const repActorMap2 = new Map<number, Array<{ id: number; name: string }>>()
@@ -73,7 +73,7 @@ export function registerDashboardHandlers(): void {
     }
     const repActorRows = db().prepare(`
       SELECT wa.work_id, a.id, a.name FROM work_actors wa
-      JOIN actors a ON a.id = wa.actor_id
+      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0
       WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
     `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
     const repActorMap = new Map<number, Array<{ id: number; name: string }>>()
@@ -133,7 +133,7 @@ export function registerDashboardHandlers(): void {
     }
     const repActorRows3 = db().prepare(`
       SELECT wa.work_id, a.id, a.name FROM work_actors wa
-      JOIN actors a ON a.id = wa.actor_id
+      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0
       WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
     `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
     const repActorMap3 = new Map<number, Array<{ id: number; name: string }>>()
@@ -161,7 +161,7 @@ export function registerDashboardHandlers(): void {
         COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.debut_date IS NOT NULL AND a.debut_date != ''
+      WHERE a.is_deleted = 0 AND a.debut_date IS NOT NULL AND a.debut_date != ''
         AND a.debut_date >= date('now', '-3 years')
       ORDER BY a.debut_date DESC, avg_score DESC
     `).all()
@@ -173,7 +173,7 @@ export function registerDashboardHandlers(): void {
         CAST((julianday('now') - julianday(a.birthday)) / 365.25 AS INTEGER) AS age,
         COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.birthday IS NOT NULL AND a.birthday != ''
+      WHERE a.is_deleted = 0 AND a.birthday IS NOT NULL AND a.birthday != ''
       ORDER BY a.birthday DESC, a.debut_date DESC
     `).all()
   })
@@ -184,7 +184,7 @@ export function registerDashboardHandlers(): void {
         CAST((julianday(a.debut_date) - julianday(a.birthday)) / 365.25 AS INTEGER) AS debut_age,
         COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score
       FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.birthday IS NOT NULL AND a.birthday != ''
+      WHERE a.is_deleted = 0 AND a.birthday IS NOT NULL AND a.birthday != ''
         AND a.debut_date IS NOT NULL AND a.debut_date != ''
       ORDER BY debut_age ASC
     `).all()
@@ -193,7 +193,7 @@ export function registerDashboardHandlers(): void {
   ipcMain.handle('dashboard:debut-years', () => {
     return db().prepare(`
       SELECT strftime('%Y', debut_date) AS year, COUNT(*) AS count
-      FROM actors WHERE debut_date IS NOT NULL AND debut_date != ''
+      FROM actors WHERE is_deleted = 0 AND debut_date IS NOT NULL AND debut_date != ''
       GROUP BY year ORDER BY year DESC
     `).all()
   })
@@ -201,7 +201,7 @@ export function registerDashboardHandlers(): void {
   ipcMain.handle('dashboard:debut-months', (_e, year: string) => {
     const rows = db().prepare(`
       SELECT CAST(strftime('%m', debut_date) AS INTEGER) AS month, COUNT(*) AS count
-      FROM actors WHERE debut_date IS NOT NULL AND debut_date != ''
+      FROM actors WHERE is_deleted = 0 AND debut_date IS NOT NULL AND debut_date != ''
       AND strftime('%Y', debut_date) = ?
       GROUP BY month ORDER BY month
     `).all(year) as Array<{ month: number; count: number }>
@@ -221,6 +221,7 @@ export function registerDashboardHandlers(): void {
           MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
         FROM actors
         WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+          AND is_deleted = 0
       )
       SELECT a.*,
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count,
@@ -240,7 +241,7 @@ export function registerDashboardHandlers(): void {
       FROM actors a
       CROSS JOIN stats
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.debut_date IS NOT NULL AND a.debut_date != ''
+      WHERE a.is_deleted = 0 AND a.debut_date IS NOT NULL AND a.debut_date != ''
         AND strftime('%Y', a.debut_date) = ?
         AND CAST(strftime('%m', a.debut_date) AS INTEGER) = ?
       ORDER BY a.debut_date ASC, avg_score DESC
@@ -275,6 +276,7 @@ export function registerDashboardHandlers(): void {
           MIN(hip)    AS min_hip, MAX(hip)  AS max_hip
         FROM actors
         WHERE height IS NOT NULL AND bust IS NOT NULL AND waist IS NOT NULL AND hip IS NOT NULL
+          AND is_deleted = 0
       )
       SELECT a.*,
         COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
@@ -294,7 +296,7 @@ export function registerDashboardHandlers(): void {
       FROM actors a
       LEFT OUTER JOIN stats ON 1=1
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      ${where}
+      WHERE a.is_deleted = 0
       ORDER BY avg_score ASC, ratio_score ASC
     `).all()
   })
@@ -318,7 +320,7 @@ export function registerDashboardHandlers(): void {
         (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
+      WHERE a.is_deleted = 0 AND a.height IS NOT NULL AND a.bust IS NOT NULL AND a.waist IS NOT NULL AND a.hip IS NOT NULL
     `).all()
   })
 
@@ -367,7 +369,7 @@ export function registerDashboardHandlers(): void {
         FROM ${fromClause}
         LEFT JOIN pts ON pts.item_id = ${idCol}
         LEFT JOIN mrc ON mrc.item_id = ${idCol}
-        WHERE COALESCE(mrc.run_count, 0) > 0
+        WHERE COALESCE(mrc.run_count, 0) > 0${type === 'actor' ? ' AND a.is_deleted = 0' : ''}
       )
       SELECT * FROM ranked WHERE row_num >= ? AND row_num <= ?
     `).all(rankFrom, rankTo) as { id: number; name: string; photo_path: string | null; total_points: number; rank: number; row_num: number }[]
@@ -470,7 +472,7 @@ export function registerDashboardHandlers(): void {
     }
     const repActorRows4 = db().prepare(`
       SELECT wa.work_id, a.id, a.name FROM work_actors wa
-      JOIN actors a ON a.id = wa.actor_id
+      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0
       WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
     `).all(...ids) as Array<{ work_id: number; id: number; name: string }>
     const repActorMap4 = new Map<number, Array<{ id: number; name: string }>>()

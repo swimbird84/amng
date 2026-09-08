@@ -141,7 +141,7 @@ export function registerWorksHandlers(): void {
     } else if (params?.sortBy === 'actor') {
       sql += ` ORDER BY (
         SELECT a.name FROM work_actors wa3
-        JOIN actors a ON a.id = wa3.actor_id
+        JOIN actors a ON a.id = wa3.actor_id AND a.is_deleted = 0
         LEFT JOIN actor_scores sc ON sc.actor_id = a.id
         WHERE wa3.work_id = w.id AND wa3.is_rep = 1
         ORDER BY (COALESCE(sc.face,0)+COALESCE(sc.bust,0)+COALESCE(sc.hip,0)+COALESCE(sc.physical,0)+COALESCE(sc.skin,0)+COALESCE(sc.acting,0)+COALESCE(sc.sexy,0)+COALESCE(sc.charm,0)+COALESCE(sc.technique,0)+COALESCE(sc.proportions,0)) DESC, a.name ASC LIMIT 1
@@ -188,7 +188,7 @@ export function registerWorksHandlers(): void {
     const repActorRows = db().prepare(`
       SELECT wa.work_id, a.id, a.name
       FROM work_actors wa
-      JOIN actors a ON a.id = wa.actor_id
+      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0
       WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
       ORDER BY a.name
     `).all(...workIds) as Array<{ work_id: number; id: number; name: string }>
@@ -214,7 +214,7 @@ export function registerWorksHandlers(): void {
     const actors = db().prepare(`
       SELECT a.* FROM actors a
       JOIN work_actors wa ON wa.actor_id = a.id
-      WHERE wa.work_id = ?
+      WHERE wa.work_id = ? AND a.is_deleted = 0
     `).all(id)
 
     const tags = db().prepare(`
@@ -238,7 +238,7 @@ export function registerWorksHandlers(): void {
     const rep_actors = db().prepare(`
       SELECT a.id, a.name FROM actors a
       JOIN work_actors wa ON wa.actor_id = a.id
-      WHERE wa.work_id = ? AND wa.is_rep = 1
+      WHERE wa.work_id = ? AND wa.is_rep = 1 AND a.is_deleted = 0
       ORDER BY a.name
     `).all(id) as Array<{ id: number; name: string }>
 
