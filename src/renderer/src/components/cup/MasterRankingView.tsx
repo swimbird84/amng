@@ -196,7 +196,6 @@ export default function MasterRankingView({
   const openDetailModal = (itemId: number, lbl: string, img: string | null) => {
     setDetailModal({ itemId, lbl, img })
     setTrendHistory(null)
-    setDivHistData(null)
   }
 
   return (
