@@ -59,6 +59,14 @@ function buildTree(rows: { id: number; work_id: number; file_path: string; produ
       workLabel: row.product_number || row.title || `#${row.work_id}`,
       exists: false,
     })
+    // Ensure all ancestor folders exist in allNodes
+    let ancestor = path.dirname(dir)
+    while (ancestor !== dir && ancestor !== path.dirname(ancestor)) {
+      getOrCreateNode(ancestor, allNodes)
+      const next = path.dirname(ancestor)
+      if (next === ancestor) break
+      ancestor = next
+    }
   }
 
   // Check existence
