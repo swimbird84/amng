@@ -5,6 +5,7 @@ import { registerStudiosHandlers } from './ipc-studios'
 import { registerSystemHandlers } from './ipc-system'
 import { registerDashboardHandlers } from './ipc-dashboard'
 import { registerCupHandlers } from './ipc-cup'
+import { registerFilesHandlers } from './ipc-files'
 
 export function registerIpcHandlers(): void {
   registerWorksHandlers()
@@ -14,4 +15,5 @@ export function registerIpcHandlers(): void {
   registerSystemHandlers()
   registerDashboardHandlers()
   registerCupHandlers()
+  registerFilesHandlers()
 }

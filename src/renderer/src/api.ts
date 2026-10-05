@@ -117,6 +117,13 @@ export const scanApi = {
 }
 
 // 작품 파일
+export const folderApi = {
+  tree: () => api.invoke('folder:tree'),
+  renameFolder: (oldPath: string, newPath: string) => api.invoke('folder:rename', oldPath, newPath),
+  renameFile: (oldPath: string, newPath: string) => api.invoke('file:rename', oldPath, newPath),
+  deleteFolder: (folderPath: string) => api.invoke('folder:delete', folderPath),
+}
+
 export const workFilesApi = {
   listByWorkIds: (workIds: number[]) => api.invoke('work-files:listByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string }[]>,
   firstByWorkIds: (workIds: number[]) => api.invoke('work-files:firstByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string }[]>,
