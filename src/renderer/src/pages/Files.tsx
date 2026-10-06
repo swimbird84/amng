@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { folderApi } from '../api'
+import { folderApi, tempApi } from '../api'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
+import TempFolder from '../components/TempFolder'
 
 interface FileInfo {
   id: number
@@ -49,8 +50,16 @@ function saveOpenFolders(set: Set<string>) {
   localStorage.setItem(OPEN_FOLDERS_KEY, JSON.stringify([...set]))
 }
 
-function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWork }: { node: FolderNode; depth: number; onRefresh: () => void; onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void }) {
+interface TempFileRef {
+  fileName: string
+  baseName: string
+  videoPath: string
+  thumbPath: string | null
+}
+
+function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWork, onDrop }: { node: FolderNode; depth: number; onRefresh: () => void; onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void; onDrop?: (actorFolder: string, actorName: string) => void }) {
   const [open, setOpen] = useState(() => getOpenFolders().has(node.path))
+  const [dragOver, setDragOver] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState(node.name)
   const [fileRenaming, setFileRenaming] = useState<number | null>(null)
@@ -141,8 +150,11 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
     <div>
       {/* Folder row */}
       <div
-        className="flex items-center gap-1 py-1 hover:bg-gray-800/50 rounded group"
+        className={`flex items-center gap-1 py-1 hover:bg-gray-800/50 rounded group ${dragOver ? 'bg-blue-900/30 ring-1 ring-blue-500' : ''}`}
         style={{ paddingLeft: depth * 20 + 8 }}
+        onDragOver={node.matchedActorId ? (e) => { e.preventDefault(); setDragOver(true) } : undefined}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={node.matchedActorId ? (e) => { e.preventDefault(); setDragOver(false); onDrop?.(node.path, node.matchedActorName ?? node.name) } : undefined}
       >
         <button
           onClick={handleToggle}
@@ -194,7 +206,7 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
       {open && (
         <>
           {node.children.map(child => (
-            <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} />
+            <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={onDrop} />
           ))}
           {node.files.map(file => (
             <div key={file.id}>
@@ -240,15 +252,10 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
 }
 
 const SCROLL_KEY = 'files:scrollTop'
-const SORT_KEY = 'files:sortBy'
+const SORT_BY_KEY = 'files:sortBy'
+const SORT_DIR_KEY = 'files:sortDir'
 
-type SortBy = 'name_asc' | 'name_desc' | 'count_desc' | 'count_asc'
-const SORT_OPTIONS: { value: SortBy; label: string }[] = [
-  { value: 'name_asc', label: '이름 ▲' },
-  { value: 'name_desc', label: '이름 ▼' },
-  { value: 'count_desc', label: '항목 수 ▼' },
-  { value: 'count_asc', label: '항목 수 ▲' },
-]
+type SortField = 'name' | 'count'
 
 function filterTree(nodes: FolderNode[], query: string): FolderNode[] {
   const q = query.toLowerCase()
@@ -272,16 +279,13 @@ function filterTree(nodes: FolderNode[], query: string): FolderNode[] {
   return filter(nodes)
 }
 
-function sortTree(nodes: FolderNode[], sortBy: SortBy): FolderNode[] {
+function sortTree(nodes: FolderNode[], field: SortField, dir: 'asc' | 'desc'): FolderNode[] {
+  const m = dir === 'asc' ? 1 : -1
   const comparator = (a: FolderNode, b: FolderNode): number => {
-    switch (sortBy) {
-      case 'name_asc': return a.name.localeCompare(b.name)
-      case 'name_desc': return b.name.localeCompare(a.name)
-      case 'count_desc': return (b.children.length + b.files.length) - (a.children.length + a.files.length)
-      case 'count_asc': return (a.children.length + a.files.length) - (b.children.length + b.files.length)
-    }
+    if (field === 'count') return m * ((a.children.length + a.files.length) - (b.children.length + b.files.length))
+    return m * a.name.localeCompare(b.name)
   }
-  return [...nodes].sort(comparator).map(n => ({ ...n, children: sortTree(n.children, sortBy) }))
+  return [...nodes].sort(comparator).map(n => ({ ...n, children: sortTree(n.children, field, dir) }))
 }
 
 export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void }) {
@@ -289,9 +293,13 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
   const [loading, setLoading] = useState(true)
   const [toggleKey, setToggleKey] = useState(0)
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<SortBy>(() => (localStorage.getItem(SORT_KEY) as SortBy) || 'name_asc')
+  const [sortField, setSortField] = useState<SortField>(() => (localStorage.getItem(SORT_BY_KEY) as SortField) || 'name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem(SORT_DIR_KEY) as 'asc' | 'desc') || 'asc')
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [dragFiles, setDragFiles] = useState<TempFileRef[]>([])
+  const [dropModal, setDropModal] = useState<{ actorFolder: string; actorName: string } | null>(null)
+  const [releaseDate, setReleaseDate] = useState('')
 
   const loadTree = useCallback(async () => {
     setLoading(true)
@@ -302,7 +310,6 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
 
   useEffect(() => { loadTree() }, [loadTree])
 
-  // Restore scroll position after tree loads
   useEffect(() => {
     if (!loading && scrollRef.current) {
       const saved = localStorage.getItem(SCROLL_KEY)
@@ -317,17 +324,12 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
     }, 200)
   }
 
-  const handleSortChange = (value: SortBy) => {
-    setSortBy(value)
-    localStorage.setItem(SORT_KEY, value)
-  }
-
   const displayTree = useMemo(() => {
     let result = tree
     if (search.trim()) result = filterTree(result, search.trim())
-    result = sortTree(result, sortBy)
+    result = sortTree(result, sortField, sortDir)
     return result
-  }, [tree, search, sortBy])
+  }, [tree, search, sortField, sortDir])
 
   const totalFolders = countAllFolders(tree)
 
@@ -342,41 +344,114 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
     setToggleKey(k => k + 1)
   }
 
+  const handleDrop = (actorFolder: string, actorName: string) => {
+    if (dragFiles.length === 0) return
+    setDropModal({ actorFolder, actorName })
+    setReleaseDate('')
+  }
+
+  const handleMoveConfirm = async () => {
+    if (!dropModal || !releaseDate) return
+    // Normalize YYYYMMDD → YYYY-MM-DD
+    let date = releaseDate.trim()
+    if (/^\d{8}$/.test(date)) date = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('날짜 형식이 올바르지 않습니다 (YYYY-MM-DD 또는 YYYYMMDD)'); return }
+
+    const srcFolder = localStorage.getItem('files:tempFolder') || ''
+    const res = await tempApi.moveToTree(srcFolder, dragFiles.map(f => f.fileName), dropModal.actorFolder, date)
+    if (res.ok) {
+      alert(`${res.moved.length}개 파일이 이동되었습니다`)
+      loadTree()
+    }
+    setDropModal(null)
+    setDragFiles([])
+  }
+
   return (
-    <div className="h-full flex flex-col p-4 overflow-hidden cursor-default">
-      <div className="flex items-center gap-3 mb-3 shrink-0 flex-wrap">
-        <button
-          onClick={loadTree}
-          className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded"
-        >새로고침</button>
-        <button onClick={handleExpandAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 펼치기</button>
-        <button onClick={handleCollapseAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 접기</button>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="검색 (폴더명, 파일명, 배우, 작품)"
-          className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
-        />
-        <select
-          value={sortBy}
-          onChange={e => handleSortChange(e.target.value as SortBy)}
-          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded focus:outline-none"
-        >
-          {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <span className="text-gray-500 text-sm">총 {totalFolders}개 폴더{search.trim() && ` (검색 결과: ${countAllFolders(displayTree)}개)`}</span>
+    <div className="h-full flex gap-2 p-4 overflow-hidden cursor-default">
+      {/* Left: Folder Tree */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex items-center gap-3 mb-2 shrink-0">
+          <button
+            onClick={loadTree}
+            className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded"
+          >새로고침</button>
+          <button onClick={handleExpandAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 펼치기</button>
+          <button onClick={handleCollapseAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 접기</button>
+          <span className="text-gray-500 text-sm">총 {totalFolders}개 폴더</span>
+        </div>
+        <div className="flex items-center gap-3 mb-3 shrink-0">
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="검색 (폴더명, 파일명, 배우, 작품)"
+            className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+          />
+          <div className="flex items-center gap-1">
+            <select
+              value={sortField}
+              onChange={e => { const v = e.target.value as SortField; setSortField(v); localStorage.setItem(SORT_BY_KEY, v) }}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded focus:outline-none"
+            >
+              <option value="name">이름</option>
+              <option value="count">항목 수</option>
+            </select>
+            <button
+              onClick={() => setSortDir(d => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem(SORT_DIR_KEY, next); return next })}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-2 py-1.5 rounded"
+            >{sortDir === 'asc' ? '↑' : '↓'}</button>
+          </div>
+          {search.trim() && <span className="text-gray-500 text-sm">검색 결과: {countAllFolders(displayTree)}개</span>}
+        </div>
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+          {loading ? (
+            <p className="text-gray-500 text-sm">로딩 중...</p>
+          ) : displayTree.length === 0 ? (
+            <p className="text-gray-500 text-sm">{search.trim() ? '검색 결과가 없습니다' : '등록된 로컬 파일이 없습니다'}</p>
+          ) : (
+            displayTree.map(node => (
+              <FolderItem key={`${node.path}_${toggleKey}`} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={handleDrop} />
+            ))
+          )}
+        </div>
       </div>
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-        {loading ? (
-          <p className="text-gray-500 text-sm">로딩 중...</p>
-        ) : displayTree.length === 0 ? (
-          <p className="text-gray-500 text-sm">{search.trim() ? '검색 결과가 없습니다' : '등록된 로컬 파일이 없습니다'}</p>
-        ) : (
-          displayTree.map(node => (
-            <FolderItem key={`${node.path}_${toggleKey}`} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} />
-          ))
-        )}
+
+      {/* Divider */}
+      <div className="w-px bg-gray-700 shrink-0" />
+
+      {/* Right: Temp Folder */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TempFolder onDragFiles={setDragFiles} />
       </div>
+
+      {/* Release Date Modal */}
+      {dropModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setDropModal(null)}>
+          <div className="bg-gray-800 rounded-lg p-5 w-80" onClick={e => e.stopPropagation()}>
+            <p className="text-white text-sm font-bold mb-4">발매일 입력</p>
+            <input
+              type="date"
+              autoFocus
+              value={releaseDate.length === 10 ? releaseDate : ''}
+              onChange={e => setReleaseDate(e.target.value)}
+              className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 mb-2"
+            />
+            <input
+              value={releaseDate}
+              onChange={e => setReleaseDate(e.target.value)}
+              placeholder="또는 YYYYMMDD 직접 입력"
+              onKeyDown={e => { if (e.key === 'Enter') handleMoveConfirm() }}
+              className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 mb-3"
+            />
+            <p className="text-gray-400 text-xs mb-1">품번: {dragFiles.map(f => f.baseName).join(', ')}</p>
+            <p className="text-gray-400 text-xs mb-4">대상: {dropModal.actorName}</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDropModal(null)} className="text-sm text-gray-300 bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded">취소</button>
+              <button onClick={handleMoveConfirm} className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded">생성</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

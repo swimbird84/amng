@@ -1,0 +1,275 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { tempApi, dialogApi, shellApi, imageApi } from '../api'
+
+interface TempFile {
+  fileName: string
+  baseName: string
+  videoPath: string
+  thumbPath: string | null
+}
+
+interface Props {
+  onDragFiles: (files: TempFile[]) => void
+}
+
+const TEMP_FOLDER_KEY = 'files:tempFolder'
+
+export default function TempFolder({ onDragFiles }: Props) {
+  const [folderPath, setFolderPath] = useState(() => localStorage.getItem(TEMP_FOLDER_KEY) || '')
+  const [files, setFiles] = useState<TempFile[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [lastClicked, setLastClicked] = useState<number | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileName: string } | null>(null)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [newName, setNewName] = useState('')
+  const [thumbCache, setThumbCache] = useState<Map<string, string>>(new Map())
+
+  // Drag selection state
+  const [dragSelecting, setDragSelecting] = useState(false)
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
+  const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  const loadFiles = useCallback(async () => {
+    if (!folderPath) return
+    setLoading(true)
+    setError(null)
+    const res = await tempApi.listFiles(folderPath)
+    if (res.ok) {
+      setFiles(res.files)
+      // Load thumbnails via image:read
+      const cache = new Map<string, string>()
+      for (const f of res.files) {
+        if (f.thumbPath) {
+          try {
+            const base64 = await imageApi.read(f.thumbPath) as string
+            if (base64) cache.set(f.fileName, base64)
+          } catch { /* skip */ }
+        }
+      }
+      setThumbCache(cache)
+    } else {
+      setError(res.error || '폴더를 읽을 수 없습니다')
+      setFiles([])
+    }
+    setLoading(false)
+  }, [folderPath])
+
+  useEffect(() => { if (folderPath) loadFiles() }, [folderPath, loadFiles])
+
+  const handleSelectFolder = async () => {
+    const result = await dialogApi.openFolder() as string | null
+    if (result) {
+      setFolderPath(result)
+      localStorage.setItem(TEMP_FOLDER_KEY, result)
+    }
+  }
+
+  // Selection logic
+  const handleClick = (index: number, e: React.MouseEvent) => {
+    const fileName = files[index].fileName
+    if (e.shiftKey && lastClicked !== null) {
+      const start = Math.min(lastClicked, index)
+      const end = Math.max(lastClicked, index)
+      const newSet = new Set(selected)
+      for (let i = start; i <= end; i++) newSet.add(files[i].fileName)
+      setSelected(newSet)
+    } else if (e.ctrlKey || e.metaKey) {
+      const newSet = new Set(selected)
+      if (newSet.has(fileName)) newSet.delete(fileName); else newSet.add(fileName)
+      setSelected(newSet)
+    } else {
+      setSelected(new Set([fileName]))
+    }
+    setLastClicked(index)
+  }
+
+  const handleDoubleClick = (file: TempFile) => {
+    shellApi.openPath(file.videoPath)
+  }
+
+  const handleContextMenu = (e: React.MouseEvent, fileName: string) => {
+    e.preventDefault()
+    if (!selected.has(fileName)) setSelected(new Set([fileName]))
+    setContextMenu({ x: e.clientX, y: e.clientY, fileName })
+  }
+
+  const handleRename = async () => {
+    if (!renaming || !newName.trim()) { setRenaming(null); return }
+    const ext = renaming.substring(renaming.lastIndexOf('.'))
+    const fullNewName = newName.trim().endsWith(ext) ? newName.trim() : newName.trim() + ext
+    const res = await tempApi.renameFile(folderPath, renaming, fullNewName)
+    if (res.ok) {
+      loadFiles()
+    } else {
+      alert(res.error || '이름 변경 실패')
+    }
+    setRenaming(null)
+  }
+
+  const handleDelete = async () => {
+    const targets = [...selected]
+    if (targets.length === 0) return
+    if (!confirm(`${targets.length}개 파일을 삭제하시겠습니까?`)) return
+    await tempApi.deleteFile(folderPath, targets)
+    setSelected(new Set())
+    loadFiles()
+  }
+
+  // Drag selection
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0 || e.target !== gridRef.current) return
+    setDragSelecting(true)
+    setDragStart({ x: e.clientX, y: e.clientY })
+    setDragCurrent({ x: e.clientX, y: e.clientY })
+    if (!e.ctrlKey && !e.shiftKey) setSelected(new Set())
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragSelecting) return
+    setDragCurrent({ x: e.clientX, y: e.clientY })
+    // Check which items intersect drag rect
+    if (!dragStart) return
+    const rect = {
+      left: Math.min(dragStart.x, e.clientX),
+      top: Math.min(dragStart.y, e.clientY),
+      right: Math.max(dragStart.x, e.clientX),
+      bottom: Math.max(dragStart.y, e.clientY),
+    }
+    const newSet = new Set<string>()
+    itemRefs.current.forEach((el, fileName) => {
+      const r = el.getBoundingClientRect()
+      if (r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom) {
+        newSet.add(fileName)
+      }
+    })
+    setSelected(newSet)
+  }
+
+  const handleMouseUp = () => {
+    setDragSelecting(false)
+    setDragStart(null)
+    setDragCurrent(null)
+  }
+
+  // Drag to tree
+  const handleDragStart = (e: React.DragEvent) => {
+    const dragFiles = files.filter(f => selected.has(f.fileName))
+    if (dragFiles.length === 0) return
+    e.dataTransfer.setData('text/plain', JSON.stringify(dragFiles.map(f => f.fileName)))
+    e.dataTransfer.effectAllowed = 'move'
+    onDragFiles(dragFiles)
+  }
+
+  const dragRect = dragSelecting && dragStart && dragCurrent ? {
+    left: Math.min(dragStart.x, dragCurrent.x),
+    top: Math.min(dragStart.y, dragCurrent.y),
+    width: Math.abs(dragCurrent.x - dragStart.x),
+    height: Math.abs(dragCurrent.y - dragStart.y),
+  } : null
+
+  return (
+    <div className="h-full flex flex-col" onClick={() => setContextMenu(null)}>
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-2 shrink-0">
+        <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
+        {folderPath && <span className="text-gray-500 text-xs truncate">{folderPath}</span>}
+        {folderPath && <button onClick={loadFiles} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded ml-auto">새로고침</button>}
+      </div>
+
+      {/* File grid */}
+      {!folderPath ? (
+        <p className="text-gray-500 text-sm">임시 폴더를 선택하세요</p>
+      ) : loading ? (
+        <p className="text-gray-500 text-sm">로딩 중...</p>
+      ) : error ? (
+        <p className="text-red-400 text-sm">{error}</p>
+      ) : files.length === 0 ? (
+        <p className="text-gray-500 text-sm">동영상 파일이 없습니다</p>
+      ) : (
+        <div
+          ref={gridRef}
+          className="flex-1 overflow-y-auto [scrollbar-gutter:stable] relative select-none"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
+          <div className="grid grid-cols-4 gap-2 p-1">
+            {files.map((file, index) => (
+              <div
+                key={file.fileName}
+                ref={el => { if (el) itemRefs.current.set(file.fileName, el); else itemRefs.current.delete(file.fileName) }}
+                className={`flex flex-col items-center p-2 rounded cursor-pointer transition ${selected.has(file.fileName) ? 'bg-blue-600/30 ring-1 ring-blue-500' : 'hover:bg-gray-800'}`}
+                onClick={e => { e.stopPropagation(); handleClick(index, e) }}
+                onDoubleClick={() => handleDoubleClick(file)}
+                onContextMenu={e => handleContextMenu(e, file.fileName)}
+                draggable={selected.has(file.fileName)}
+                onDragStart={handleDragStart}
+              >
+                <div className="w-full aspect-[4/3] rounded overflow-hidden bg-gray-800 flex items-center justify-center mb-1">
+                  {thumbCache.has(file.fileName) ? (
+                    <img src={thumbCache.get(file.fileName)} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-3xl">📹</span>
+                  )}
+                </div>
+                <span className="text-xs text-gray-300 text-center truncate w-full">{file.baseName}</span>
+              </div>
+            ))}
+          </div>
+          {/* Drag selection rectangle */}
+          {dragRect && (
+            <div
+              className="fixed border border-blue-400 bg-blue-400/10 pointer-events-none z-50"
+              style={{ left: dragRect.left, top: dragRect.top, width: dragRect.width, height: dragRect.height }}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-gray-800 border border-gray-600 rounded shadow-lg py-1 z-50"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          {selected.size === 1 && (
+            <button
+              onClick={() => { setRenaming(contextMenu.fileName); setNewName(contextMenu.fileName.replace(/\.[^.]+$/, '')); setContextMenu(null) }}
+              className="w-full text-left text-sm text-gray-300 hover:bg-gray-700 px-4 py-1.5"
+            >수정</button>
+          )}
+          <button
+            onClick={() => { handleDelete(); setContextMenu(null) }}
+            className="w-full text-left text-sm text-red-400 hover:bg-gray-700 px-4 py-1.5"
+          >삭제 ({selected.size}개)</button>
+        </div>
+      )}
+
+      {/* Rename modal */}
+      {renaming && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setRenaming(null)}>
+          <div className="bg-gray-800 rounded-lg p-4 w-80" onClick={e => e.stopPropagation()}>
+            <p className="text-white text-sm mb-3">파일명 변경</p>
+            <input
+              autoFocus
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setRenaming(null) }}
+              className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 mb-3"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setRenaming(null)} className="text-sm text-gray-300 bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded">취소</button>
+              <button onClick={handleRename} className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded">변경</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

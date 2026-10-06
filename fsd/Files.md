@@ -6,6 +6,10 @@ DB에 등록된 작품 파일 경로(DB 기반)를 트리 구조로 시각화하
 실제 드라이브를 탐색하지 않고, DB에 저장된 경로만으로 트리를 구성한다.
 탭 위치: 대회 다음 (홈 / 대시보드 / 작품 / 배우 / 레이블 / 대회 / **파일**)
 
+**레이아웃**: 좌우 반분할
+- 왼쪽: 폴더 트리 (기존 기능)
+- 오른쪽: 임시 폴더 영역
+
 ---
 
 ## 폴더 구성 기준
@@ -38,7 +42,7 @@ DB에 등록된 작품 파일 경로(DB 기반)를 트리 구조로 시각화하
 
 ---
 
-## 구현 완료 기능
+## 구현 완료 기능 (왼쪽 — 폴더 트리)
 
 ### 1. 폴더 트리 보기 (DB 기반)
 - `work_files` 테이블에서 `type = 'local'`인 `file_path` 전체 조회
@@ -77,25 +81,118 @@ DB에 등록된 작품 파일 경로(DB 기반)를 트리 구조로 시각화하
 - 없는 항목은 빨간 텍스트 + ⚠️ 표시, 수정/삭제 비활성화
 
 ### 8. 상태 유지 (localStorage)
-- 열린 폴더 목록: `files:openFolders` — 탭 전환/재시작 후 유지
-- 스크롤 위치: `files:scrollTop` — 200ms 디바운스로 저장, 트리 로딩 후 복원
+- 열린 폴더 목록: `files:openFolders`
+- 스크롤 위치: `files:scrollTop`
+- 정렬 기준/방향: `files:sortBy`, `files:sortDir`
 
 ### 9. UI 기본 설정
 - 전체 `cursor-default`, 매칭 텍스트만 `cursor-pointer`
 - [수정] / [삭제] 텍스트 버튼 (아이콘 사용 안 함)
 - 파일에는 [삭제] 버튼 없음 — 폴더 단위로만 삭제
+- 상단 1줄: 새로고침 / 전체 펼치기 / 전체 접기 / 총 N개 폴더
+- 상단 2줄: 검색 입력 / 정렬 셀렉트+↑↓ 버튼
 
 ### 10. 검색
-- 상단에 검색 입력창
 - 프론트에서 트리 데이터 필터링 (백엔드 호출 불필요)
 - 검색 대상: 폴더명, 파일명, 매칭된 배우명, 매칭된 작품 품번/제목
 - 매칭된 노드 + 상위 경로 유지하여 트리 구조 보존
-- 검색 중 매칭된 폴더 자동 펼침
 
 ### 11. 정렬
-- 상단에 정렬 드롭다운
+- 셀렉트 박스 (이름 / 항목 수) + ↑↓ 방향 버튼 (다른 탭과 동일 패턴)
 - 프론트에서 `FolderNode.children` 재정렬 (같은 depth의 형제 노드끼리)
-- 정렬 기준: 폴더명 (가나다/역순), 하위 항목 수 (많은/적은 순)
+
+---
+
+## 구현 예정 기능 (오른쪽 — 임시 폴더)
+
+### 12. 임시 폴더 지정
+- 임시 폴더 경로를 사용자가 선택 (폴더 선택 다이얼로그)
+- 선택된 경로는 `localStorage`에 저장 (`files:tempFolder`)
+- 탭 재진입/프로그램 재시작 시 유지
+
+### 13. 임시 폴더 파일 목록 보기
+- 지정된 임시 폴더에서 동영상 파일을 스캔하여 아이콘으로 표시
+- 같은 파일명의 이미지 파일이 있으면 아이콘의 썸네일로 사용
+  - 예: `ABF-991.mp4` + `ABF-991.jpg` → 썸네일은 `ABF-991.jpg`
+- 이미지가 없으면 기본 동영상 아이콘 표시
+
+### 14. 파일 다중 선택
+- **클릭**: 단일 선택 (기존 선택 해제)
+- **Ctrl + 클릭**: 개별 토글 (기존 선택 유지하면서 추가/해제)
+- **Shift + 클릭**: 범위 선택 (마지막 클릭~현재 클릭 사이 전체 선택)
+- **마우스 드래그**: 드래그 영역에 걸친 파일 전체 선택 (영역 선택)
+- 선택된 파일은 시각적으로 하이라이트 표시
+
+### 15. 임시 폴더 파일 조작
+- **더블클릭**: 동영상 재생 (`shell.openPath`)
+- **우클릭**: 컨텍스트 메뉴 표시 (다중 선택 시 선택된 파일 전체에 적용)
+  - **수정**: 파일명 변경 — 단일 선택 시에만 활성화 (동일 파일명 이미지도 함께 변경)
+  - **삭제**: 파일 삭제 — 다중 선택 가능 (동일 파일명 이미지도 함께 삭제)
+
+### 16. 드래그 앤 드롭 — 임시 폴더 → 트리 배우 폴더
+- 선택된 파일(단일 또는 다중)을 드래그하여 왼쪽 트리의 **배우 폴더**에 드롭
+- 드롭 시 발매일 입력 모달 표시:
+  - datepicker로 날짜 선택 또는 YYYYMMDD 형식 직접 입력
+- 새 폴더 생성: `YYYY-MM-DD 파일명(품번)` 형식으로 배우 폴더 아래에 작품 폴더 생성
+- 동영상 파일 + 동일 파일명 이미지를 새 폴더로 이동
+
+**단일 파일 드롭 흐름:**
+```
+1. ABF-991.mp4 를 "스즈무라 아이리 1996-01-01" 폴더에 드롭
+2. 발매일 입력 모달: [2026-10-05] 또는 datepicker
+3. 폴더 생성: 스즈무라 아이리 1996-01-01\2026-10-05 ABF-991\
+4. 파일 이동: ABF-991.mp4, ABF-991.jpg → 새 폴더
+```
+
+**다중 파일 드롭 흐름:**
+```
+1. ABF-991.mp4, CDE-123.mp4 를 선택하여 "스즈무라 아이리 1996-01-01" 폴더에 드롭
+2. 각 파일별 발매일 입력 모달 표시 (또는 일괄 발매일 입력)
+3. 각 파일별 작품 폴더 생성 + 파일 이동
+```
+
+---
+
+## UI 구조
+
+```
+┌──────────────────────────────────┬──────────────────────────────────┐
+│         왼쪽: 폴더 트리           │       오른쪽: 임시 폴더          │
+│                                  │                                  │
+│  새로고침  전체펼치기  전체접기    │  [폴더 선택]  D:\Temp\Videos     │
+│  총 48개 폴더                    │                                  │
+│  [검색________] [이름 v] [↑]     │  ┌──────┐ ┌──────┐ ┌──────┐    │
+│                                  │  │ 썸네일 │ │ 썸네일 │ │  📹  │    │
+│  ▼ 📁 D:\Videos                 │  │      │ │      │ │      │    │
+│    ▼ 📁 스즈무라.. 배우: 스즈..  │  │ABF-  │ │CDE-  │ │GHI-  │    │
+│      ▶ 📁 2026-10.. 작품: AB..  │  │991   │ │123   │ │456   │    │
+│      ▶ 📁 2026-09.. 작품: CD..  │  └──────┘ └──────┘ └──────┘    │
+│    ▶ 📁 다른배우..              │                                  │
+│                                  │  ┌──────┐ ┌──────┐              │
+│         ← 드롭 대상 →           │  │ 썸네일 │ │  📹  │  ← 드래그   │
+│                                  │  │JKL-  │ │MNO-  │              │
+│                                  │  │789   │ │012   │              │
+│                                  │  └──────┘ └──────┘              │
+│                                  │                                  │
+│                                  │  우클릭 → [수정] [삭제]          │
+│                                  │  더블클릭 → 재생                 │
+└──────────────────────────────────┴──────────────────────────────────┘
+```
+
+**드롭 시 발매일 입력 모달:**
+```
+┌─────────────────────────────┐
+│  발매일 입력                 │
+│                             │
+│  📅 [2026-10-05        ]    │
+│  또는 YYYYMMDD 직접 입력     │
+│                             │
+│  품번: ABF-991 (파일명 기준)  │
+│  대상: 스즈무라 아이리        │
+│                             │
+│       [취소]  [생성]         │
+└─────────────────────────────┘
+```
 
 ---
 
@@ -110,6 +207,10 @@ DB에 등록된 작품 파일 경로(DB 기반)를 트리 구조로 시각화하
 | `folder:rename` | `oldPath`, `newPath` | `fs.renameSync` → 성공 시 DB 경로 일괄 REPLACE |
 | `folder:delete` | `folderPath` | 하위 작품 삭제 + 배우 폴더면 soft delete + 휴지통 이동 |
 | `file:rename` | `oldPath`, `newPath` | `fs.renameSync` → 성공 시 해당 work_files/works UPDATE |
+| `temp:listFiles` | `folderPath` | 임시 폴더 스캔 → 동영상+이미지 매칭 목록 반환 |
+| `temp:renameFile` | `folderPath`, `oldName`, `newName` | 동영상+이미지 파일명 함께 변경 |
+| `temp:deleteFile` | `folderPath`, `fileName` | 동영상+이미지 파일 함께 삭제 |
+| `temp:moveToTree` | `srcFolder`, `fileName`, `targetActorFolder`, `releaseDate` | 새 작품 폴더 생성 + 파일 이동 |
 
 ### API 함수 (`api.ts`)
 
@@ -121,14 +222,22 @@ export const folderApi = {
   renameFile: (oldPath: string, newPath: string) => api.invoke('file:rename', oldPath, newPath),
   deleteFolder: (folderPath: string) => api.invoke('folder:delete', folderPath),
 }
+
+export const tempApi = {
+  listFiles: (folderPath: string) => api.invoke('temp:listFiles', folderPath),
+  renameFile: (folderPath: string, oldName: string, newName: string) => api.invoke('temp:renameFile', folderPath, oldName, newName),
+  deleteFile: (folderPath: string, fileName: string) => api.invoke('temp:deleteFile', folderPath, fileName),
+  moveToTree: (srcFolder: string, fileName: string, targetActorFolder: string, releaseDate: string) => api.invoke('temp:moveToTree', srcFolder, fileName, targetActorFolder, releaseDate),
+}
 ```
 
-### 프론트엔드 (`Files.tsx`)
+### 프론트엔드
 
-- 트리 UI + 파일 목록 + 이름 변경/삭제 + 검색/정렬
-- 배우/작품 매칭 표시 + 클릭 네비게이션 + 호버 툴팁
-- localStorage: 열린 폴더, 스크롤 위치
-- 전체 펼치기/접기
+| 파일 | 용도 |
+|------|------|
+| `Files.tsx` | 좌우 반분할 레이아웃으로 변경, 왼쪽 트리 유지 |
+| `TempFolder.tsx` (신규) | 오른쪽 임시 폴더 영역 — 파일 목록, 우클릭 메뉴, 드래그 |
+| `ReleaseDateModal.tsx` (신규) | 드롭 시 발매일 입력 모달 |
 
 ### 기존 파일 수정
 
@@ -163,15 +272,15 @@ interface FolderNode {
   matchedWorkId?: number
   matchedWorkLabel?: string
 }
+
+// 임시 폴더 파일
+interface TempFile {
+  fileName: string       // 동영상 파일명 (확장자 포함)
+  baseName: string       // 확장자 제외 파일명 (= 품번)
+  videoPath: string      // 동영상 전체 경로
+  thumbPath: string | null  // 동일 파일명 이미지 경로 (없으면 null)
+}
 ```
-
----
-
-## 추가 예정 기능
-
-### 12. 임시 폴더 파일 정리 (상세 설계 필요)
-- 지정된 임시 폴더에 있는 영상/이미지 파일을 새 폴더를 만들어서 이동하는 기능
-- 상세 동작 흐름은 추후 정의 필요
 
 ---
 
@@ -187,3 +296,6 @@ interface FolderNode {
 - 경로 구분자: `\` → `/` 정규화 처리
 - 삭제 시 진행 중 대회 참가 여부 체크 필수 (blocked 판단)
 - 검색/정렬은 프론트에서 처리 (백엔드 추가 호출 불필요)
+- **임시 폴더 파일 수정/삭제 시 동일 파일명 이미지 연동 처리**
+- **드래그 앤 드롭**: 임시 폴더 → 배우 폴더 드롭 시 발매일 입력 후 작품 폴더 자동 생성
+- **임시 폴더 비동기 로딩**: `temp:listFiles`는 `fs.promises.readdir` 사용. 외장 HDD 미로드 등으로 폴더 접근 지연/실패 시 프로그램이 멈추지 않도록 비동기 처리. 프론트에서 로딩 상태 표시, 실패 시 에러 메시지 표시.

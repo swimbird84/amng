@@ -276,4 +276,106 @@ export function registerFilesHandlers(): void {
 
     return { ok: true, deletedWorks: workIds.length }
   })
+
+  // ========== 임시 폴더 핸들러 ==========
+
+  const VIDEO_EXTS = new Set(['.mp4', '.avi', '.mkv', '.wmv', '.mov', '.flv', '.webm', '.m4v', '.ts', '.rmvb'])
+  const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'])
+
+  ipcMain.handle('temp:listFiles', async (_e, folderPath: string) => {
+    try {
+      const entries = await fs.promises.readdir(folderPath, { withFileTypes: true })
+      const fileNames = entries.filter(e => e.isFile()).map(e => e.name)
+
+      const imageMap = new Map<string, string>()
+      for (const name of fileNames) {
+        const ext = path.extname(name).toLowerCase()
+        if (IMAGE_EXTS.has(ext)) {
+          const base = path.basename(name, ext)
+          imageMap.set(base.toLowerCase(), path.join(folderPath, name))
+        }
+      }
+
+      const result: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null }[] = []
+      for (const name of fileNames) {
+        const ext = path.extname(name).toLowerCase()
+        if (!VIDEO_EXTS.has(ext)) continue
+        const base = path.basename(name, ext)
+        const thumb = imageMap.get(base.toLowerCase()) ?? null
+        result.push({ fileName: name, baseName: base, videoPath: path.join(folderPath, name), thumbPath: thumb })
+      }
+      result.sort((a, b) => a.fileName.localeCompare(b.fileName))
+      return { ok: true, files: result }
+    } catch (err: unknown) {
+      return { ok: false, error: (err as Error).message, files: [] }
+    }
+  })
+
+  ipcMain.handle('temp:renameFile', async (_e, folderPath: string, oldName: string, newName: string) => {
+    const oldBase = path.basename(oldName, path.extname(oldName))
+    const newBase = path.basename(newName, path.extname(newName))
+    try {
+      // Rename video
+      await fs.promises.rename(path.join(folderPath, oldName), path.join(folderPath, newName))
+      // Rename matching image if exists
+      const entries = await fs.promises.readdir(folderPath)
+      for (const entry of entries) {
+        const ext = path.extname(entry).toLowerCase()
+        if (IMAGE_EXTS.has(ext) && path.basename(entry, ext).toLowerCase() === oldBase.toLowerCase()) {
+          await fs.promises.rename(path.join(folderPath, entry), path.join(folderPath, newBase + ext))
+          break
+        }
+      }
+      return { ok: true }
+    } catch (err: unknown) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('temp:deleteFile', async (_e, folderPath: string, fileNames: string[]) => {
+    let deleted = 0
+    for (const fileName of fileNames) {
+      const base = path.basename(fileName, path.extname(fileName))
+      try {
+        // Delete video
+        const videoPath = path.join(folderPath, fileName)
+        if (fs.existsSync(videoPath)) { await shell.trashItem(videoPath); deleted++ }
+        // Delete matching image
+        const entries = await fs.promises.readdir(folderPath).catch(() => [] as string[])
+        for (const entry of (entries as unknown as string[])) {
+          const ext = path.extname(entry).toLowerCase()
+          if (IMAGE_EXTS.has(ext) && path.basename(entry, ext).toLowerCase() === base.toLowerCase()) {
+            await shell.trashItem(path.join(folderPath, entry))
+            break
+          }
+        }
+      } catch { /* skip */ }
+    }
+    return { ok: true, deleted }
+  })
+
+  ipcMain.handle('temp:moveToTree', async (_e, srcFolder: string, fileNames: string[], targetActorFolder: string, releaseDate: string) => {
+    const moved: string[] = []
+    for (const fileName of fileNames) {
+      const base = path.basename(fileName, path.extname(fileName))
+      const workFolderName = `${releaseDate} ${base}`
+      const workFolderPath = path.join(targetActorFolder, workFolderName)
+      try {
+        await fs.promises.mkdir(workFolderPath, { recursive: true })
+        // Move video
+        await fs.promises.rename(path.join(srcFolder, fileName), path.join(workFolderPath, fileName))
+        // Move matching image
+        const entries = await fs.promises.readdir(srcFolder).catch(() => [] as string[])
+        for (const entry of (entries as unknown as string[])) {
+          const ext = path.extname(entry).toLowerCase()
+          if (IMAGE_EXTS.has(ext) && path.basename(entry, ext).toLowerCase() === base.toLowerCase()) {
+            await fs.promises.rename(path.join(srcFolder, entry), path.join(workFolderPath, entry))
+            break
+          }
+        }
+        moved.push(fileName)
+      } catch { /* skip failed files */ }
+    }
+    return { ok: true, moved }
+  })
 }
