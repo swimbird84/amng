@@ -137,8 +137,6 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
       <div
         className="flex items-center gap-1 py-1 hover:bg-gray-800/50 rounded group"
         style={{ paddingLeft: depth * 20 + 8 }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
       >
         <button
           onClick={handleToggle}
@@ -150,8 +148,8 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
           {folderExists ? '📁' : '📁⚠️'} {node.name}
         </span>
         <span className="text-gray-500 text-xs ml-1">({node.children.length + node.files.length})</span>
-        {node.matchedActorName && <span className="text-blue-400 text-xs ml-2 cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); onNavigateToActor(node.matchedActorId!) }}>배우: {node.matchedActorName}</span>}
-        {node.matchedWorkLabel && <span className="text-green-400 text-xs ml-2 cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); onNavigateToWork(node.matchedWorkId!) }}>작품: {node.matchedWorkLabel}</span>}
+        {node.matchedActorName && <span className="text-blue-400 text-xs ml-2 cursor-pointer hover:underline" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onClick={(e) => { e.stopPropagation(); onNavigateToActor(node.matchedActorId!) }}>배우: {node.matchedActorName}</span>}
+        {node.matchedWorkLabel && <span className="text-green-400 text-xs ml-2 cursor-pointer hover:underline" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onClick={(e) => { e.stopPropagation(); onNavigateToWork(node.matchedWorkId!) }}>작품: {node.matchedWorkLabel}</span>}
         <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
           {folderExists ? (
             <>
