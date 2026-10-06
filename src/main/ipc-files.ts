@@ -20,6 +20,10 @@ interface FolderNode {
   exists: boolean
   files: FileInfo[]
   children: FolderNode[]
+  matchedActorId?: number
+  matchedActorName?: string
+  matchedWorkId?: number
+  matchedWorkLabel?: string
 }
 
 function normalizePath(p: string): string {
@@ -124,7 +128,49 @@ export function registerFilesHandlers(): void {
       JOIN works w ON w.id = wf.work_id
       WHERE wf.type = 'local'
     `).all() as { id: number; work_id: number; file_path: string; product_number: string | null; title: string | null }[]
-    return buildTree(rows)
+    const tree = buildTree(rows)
+
+    // Match folders to actors/works
+    const actors = db().prepare('SELECT id, name, aliases, birthday FROM actors WHERE is_deleted = 0').all() as { id: number; name: string; aliases: string | null; birthday: string | null }[]
+    const actorPattern = /^(.+)\s+(\d{4}-\d{2}-\d{2})$/
+    const workPattern = /^(\d{4}-\d{2}-\d{2})\s+(.+)$/
+
+    const matchFolder = (node: FolderNode) => {
+      const folderName = node.name
+      // Try actor match
+      const am = folderName.match(actorPattern)
+      if (am) {
+        const nameInFolder = am[1].trim()
+        const birthday = am[2]
+        const actor = actors.find(a => {
+          if (a.birthday !== birthday) return false
+          if (a.name === nameInFolder) return true
+          if (a.aliases) {
+            const aliasList = a.aliases.split(',').map(s => s.trim())
+            return aliasList.includes(nameInFolder)
+          }
+          return false
+        })
+        if (actor) {
+          node.matchedActorId = actor.id
+          node.matchedActorName = actor.name
+        }
+      }
+      // Try work match
+      const wm = folderName.match(workPattern)
+      if (wm) {
+        const productNumber = wm[2].trim()
+        const work = db().prepare('SELECT id, product_number, title FROM works WHERE product_number = ?').get(productNumber) as { id: number; product_number: string | null; title: string | null } | undefined
+        if (work) {
+          node.matchedWorkId = work.id
+          node.matchedWorkLabel = work.product_number || work.title || `#${work.id}`
+        }
+      }
+      for (const child of node.children) matchFolder(child)
+    }
+    for (const node of tree) matchFolder(node)
+
+    return tree
   })
 
   ipcMain.handle('folder:rename', (_e, oldPath: string, newPath: string) => {

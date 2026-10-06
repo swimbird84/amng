@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { folderApi } from '../api'
+import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
 interface FileInfo {
   id: number
@@ -17,6 +18,10 @@ interface FolderNode {
   exists: boolean
   files: FileInfo[]
   children: FolderNode[]
+  matchedActorId?: number
+  matchedActorName?: string
+  matchedWorkId?: number
+  matchedWorkLabel?: string
 }
 
 function countAllFolders(nodes: FolderNode[]): number {
@@ -31,8 +36,23 @@ function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: numbe
   const [newName, setNewName] = useState(node.name)
   const [fileRenaming, setFileRenaming] = useState<number | null>(null)
   const [fileNewName, setFileNewName] = useState('')
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const hasChildren = node.children.length > 0 || node.files.length > 0
+  const matchedId = node.matchedActorId ?? node.matchedWorkId
+  const matchedType = node.matchedActorId ? 'actor' as const : node.matchedWorkId ? 'work' as const : null
+
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    if (!matchedType || !matchedId) return
+    hoverTimer.current = setTimeout(() => {
+      setTooltip({ type: matchedType, id: matchedId, x: e.clientX, y: e.clientY })
+    }, 400)
+  }
+  const handleMouseLeave = () => {
+    if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null }
+    setTooltip(null)
+  }
 
   const handleRenameFolder = async () => {
     if (!newName.trim() || newName === node.name) { setRenaming(false); return }
@@ -86,6 +106,8 @@ function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: numbe
       <div
         className="flex items-center gap-1 py-1 hover:bg-gray-800/50 rounded group"
         style={{ paddingLeft: depth * 20 + 8 }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         <button
           onClick={() => setOpen(!open)}
@@ -96,7 +118,9 @@ function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: numbe
         <span className={`text-sm ${node.exists ? 'text-gray-300' : 'text-red-400'}`}>
           {node.exists ? '📁' : '📁⚠️'} {node.name}
         </span>
-        <span className="text-gray-500 text-xs ml-1">({node.fileCount})</span>
+        <span className="text-gray-500 text-xs ml-1">({node.children.length + node.files.length})</span>
+        {node.matchedActorName && <span className="text-blue-400 text-xs ml-2">배우: {node.matchedActorName}</span>}
+        {node.matchedWorkLabel && <span className="text-green-400 text-xs ml-2">작품: {node.matchedWorkLabel}</span>}
         <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
           {node.exists ? (
             <>
@@ -114,6 +138,7 @@ function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: numbe
           )}
         </div>
       </div>
+      {tooltip && <CardTooltip tooltip={tooltip} />}
 
       {/* Rename input */}
       {renaming && (
