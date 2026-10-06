@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { folderApi } from '../api'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 
@@ -28,6 +28,12 @@ function countAllFolders(nodes: FolderNode[]): number {
   let count = nodes.length
   for (const n of nodes) count += countAllFolders(n.children)
   return count
+}
+
+function collectAllPaths(nodes: FolderNode[]): string[] {
+  const paths: string[] = []
+  for (const n of nodes) { paths.push(n.path); paths.push(...collectAllPaths(n.children)) }
+  return paths
 }
 
 const OPEN_FOLDERS_KEY = 'files:openFolders'
@@ -233,9 +239,59 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
   )
 }
 
+const SCROLL_KEY = 'files:scrollTop'
+const SORT_KEY = 'files:sortBy'
+
+type SortBy = 'name_asc' | 'name_desc' | 'count_desc' | 'count_asc'
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: 'name_asc', label: '이름 ▲' },
+  { value: 'name_desc', label: '이름 ▼' },
+  { value: 'count_desc', label: '항목 수 ▼' },
+  { value: 'count_asc', label: '항목 수 ▲' },
+]
+
+function filterTree(nodes: FolderNode[], query: string): FolderNode[] {
+  const q = query.toLowerCase()
+  const matches = (node: FolderNode): boolean => {
+    if (node.name.toLowerCase().includes(q)) return true
+    if (node.matchedActorName?.toLowerCase().includes(q)) return true
+    if (node.matchedWorkLabel?.toLowerCase().includes(q)) return true
+    if (node.files.some(f => f.fileName.toLowerCase().includes(q) || f.workLabel.toLowerCase().includes(q))) return true
+    return false
+  }
+  const filter = (nodes: FolderNode[]): FolderNode[] => {
+    const result: FolderNode[] = []
+    for (const node of nodes) {
+      const filteredChildren = filter(node.children)
+      if (matches(node) || filteredChildren.length > 0) {
+        result.push({ ...node, children: filteredChildren })
+      }
+    }
+    return result
+  }
+  return filter(nodes)
+}
+
+function sortTree(nodes: FolderNode[], sortBy: SortBy): FolderNode[] {
+  const comparator = (a: FolderNode, b: FolderNode): number => {
+    switch (sortBy) {
+      case 'name_asc': return a.name.localeCompare(b.name)
+      case 'name_desc': return b.name.localeCompare(a.name)
+      case 'count_desc': return (b.children.length + b.files.length) - (a.children.length + a.files.length)
+      case 'count_asc': return (a.children.length + a.files.length) - (b.children.length + b.files.length)
+    }
+  }
+  return [...nodes].sort(comparator).map(n => ({ ...n, children: sortTree(n.children, sortBy) }))
+}
+
 export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void }) {
   const [tree, setTree] = useState<FolderNode[]>([])
   const [loading, setLoading] = useState(true)
+  const [toggleKey, setToggleKey] = useState(0)
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<SortBy>(() => (localStorage.getItem(SORT_KEY) as SortBy) || 'name_asc')
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadTree = useCallback(async () => {
     setLoading(true)
@@ -246,25 +302,78 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
 
   useEffect(() => { loadTree() }, [loadTree])
 
+  // Restore scroll position after tree loads
+  useEffect(() => {
+    if (!loading && scrollRef.current) {
+      const saved = localStorage.getItem(SCROLL_KEY)
+      if (saved) scrollRef.current.scrollTop = Number(saved)
+    }
+  }, [loading])
+
+  const handleScroll = () => {
+    if (scrollTimer.current) clearTimeout(scrollTimer.current)
+    scrollTimer.current = setTimeout(() => {
+      if (scrollRef.current) localStorage.setItem(SCROLL_KEY, String(scrollRef.current.scrollTop))
+    }, 200)
+  }
+
+  const handleSortChange = (value: SortBy) => {
+    setSortBy(value)
+    localStorage.setItem(SORT_KEY, value)
+  }
+
+  const displayTree = useMemo(() => {
+    let result = tree
+    if (search.trim()) result = filterTree(result, search.trim())
+    result = sortTree(result, sortBy)
+    return result
+  }, [tree, search, sortBy])
+
   const totalFolders = countAllFolders(tree)
+
+  const handleExpandAll = () => {
+    const allPaths = collectAllPaths(displayTree)
+    saveOpenFolders(new Set(allPaths))
+    setToggleKey(k => k + 1)
+  }
+
+  const handleCollapseAll = () => {
+    saveOpenFolders(new Set())
+    setToggleKey(k => k + 1)
+  }
 
   return (
     <div className="h-full flex flex-col p-4 overflow-hidden cursor-default">
-      <div className="flex items-center gap-3 mb-3 shrink-0">
+      <div className="flex items-center gap-3 mb-3 shrink-0 flex-wrap">
         <button
           onClick={loadTree}
           className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded"
         >새로고침</button>
-        <span className="text-gray-500 text-sm">총 {totalFolders}개 폴더</span>
+        <button onClick={handleExpandAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 펼치기</button>
+        <button onClick={handleCollapseAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 접기</button>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="검색 (폴더명, 파일명, 배우, 작품)"
+          className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+        />
+        <select
+          value={sortBy}
+          onChange={e => handleSortChange(e.target.value as SortBy)}
+          className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded focus:outline-none"
+        >
+          {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <span className="text-gray-500 text-sm">총 {totalFolders}개 폴더{search.trim() && ` (검색 결과: ${countAllFolders(displayTree)}개)`}</span>
       </div>
-      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         {loading ? (
           <p className="text-gray-500 text-sm">로딩 중...</p>
-        ) : tree.length === 0 ? (
-          <p className="text-gray-500 text-sm">등록된 로컬 파일이 없습니다</p>
+        ) : displayTree.length === 0 ? (
+          <p className="text-gray-500 text-sm">{search.trim() ? '검색 결과가 없습니다' : '등록된 로컬 파일이 없습니다'}</p>
         ) : (
-          tree.map(node => (
-            <FolderItem key={node.path} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} />
+          displayTree.map(node => (
+            <FolderItem key={`${node.path}_${toggleKey}`} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} />
           ))
         )}
       </div>

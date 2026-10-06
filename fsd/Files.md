@@ -38,128 +38,103 @@ DB에 등록된 작품 파일 경로(DB 기반)를 트리 구조로 시각화하
 
 ---
 
-## 기능
+## 구현 완료 기능
 
 ### 1. 폴더 트리 보기 (DB 기반)
 - `work_files` 테이블에서 `type = 'local'`인 `file_path` 전체 조회
 - 폴더 경로를 추출하여 드라이브별/폴더별 계층 트리 구조로 표시
-- 각 폴더 노드에 하위 파일 수 표시
+- 괄호 안 숫자: 직계 하위 폴더 수 + 직접 파일 수
 - 폴더 펼침/접기 가능
+- 전체 펼치기 / 전체 접기 버튼
 
 ### 2. 파일 목록 보기 (DB 등록 파일만)
-- 폴더 클릭(또는 펼침) 시 해당 폴더에 직접 속한 DB 등록 파일 표시
+- 폴더 펼침 시 해당 폴더에 직접 속한 DB 등록 파일 표시
 - 표시 정보: 파일명, 연결된 작품 (product_number 또는 title)
-- DB에 등록되지 않은 실제 디스크 파일은 표시하지 않음
 
-### 3. 폴더명 변경
-- 트리에서 폴더 선택 → 새 이름 입력 → 변경 실행
-- 실제 파일시스템의 폴더명 변경 (`fs.renameSync`)
-- DB의 관련 경로 일괄 업데이트:
-  - `work_files.file_path` — `REPLACE(file_path, oldPrefix, newPrefix)`
-  - `works.file_path` — 동일 패턴
-  - `works.cover_path` — 해당 경로 포함 시 동일 패턴
+### 3. 폴더/파일 이름 변경
+- 폴더/파일 행의 [수정] 버튼 → 인라인 입력 → Enter/변경 버튼으로 실행
+- `fs.renameSync` → 성공 시 DB 경로 일괄 업데이트
 
-### 4. 파일명 변경
-- 파일 목록에서 파일 선택 → 새 이름 입력 → 변경 실행
-- 실제 파일시스템의 파일명 변경 (`fs.renameSync`)
-- DB 업데이트:
-  - `work_files.file_path` — 해당 행의 경로를 새 경로로 UPDATE
-  - `works.file_path` — 해당 작품의 대표 경로가 변경된 파일이면 함께 UPDATE
+### 4. 폴더 삭제 (레벨별 동작)
+- 작품 폴더 삭제: 휴지통 이동 + works/work_files 삭제 + 대회 연관 데이터 정리
+- 배우 폴더 삭제: 휴지통 이동 + 하위 작품 전체 삭제 + 배우 soft delete
+- 진행 중 대회 참가 여부 체크 (blocked 판단)
 
-### 5. 존재하지 않는 폴더/파일 체크
-- 트리 구성 시 각 폴더 경로의 실제 존재 여부를 `fs.existsSync`로 확인
-- 파일 목록에서도 각 파일의 존재 여부 확인
-- 존재하지 않는 항목은 시각적으로 구분 (빨간 텍스트 또는 경고 아이콘)
-- 없는 폴더/파일은 이름 변경/삭제 불가 (버튼 비활성화)
+### 5. 배우/작품 매칭
+- 폴더명에서 배우(`배우명 YYYY-MM-DD`) / 작품(`YYYY-MM-DD 품번`) 패턴 추출
+- 배우 매칭: `actors.name` + `actors.aliases` 모두 검색 → 현재 이름으로 표시
+- 작품 매칭: `works.product_number`로 검색
+- 매칭 텍스트에 `cursor-pointer hover:underline` 적용
+- 클릭 시 해당 배우/작품 상세 모달 표시
 
-### 6. 폴더 삭제 (폴더 레벨별 동작)
+### 6. 호버 툴팁
+- 매칭된 배우/작품 텍스트 위에 400ms 호버 시 `CardTooltip` 표시 (showCover 포함)
+- 툴팁 범위 = 클릭 범위 (매칭 텍스트에만 적용)
 
-폴더 구조가 데이터 모델과 1:1 매핑되므로, 삭제도 레벨별로 동작이 다름.
-개별 파일 삭제 버튼은 없음 — 폴더 단위로만 삭제.
+### 7. 존재하지 않는 폴더/파일 체크 (지연 로딩)
+- 초기 로딩 시 존재 여부 체크 안 함 (성능)
+- 폴더 펼칠 때 해당 폴더 + 파일 경로만 `folder:checkExists`로 체크
+- 없는 항목은 빨간 텍스트 + ⚠️ 표시, 수정/삭제 비활성화
 
-**작품 폴더 삭제** (Level 2 — `발매일 품번`):
-- 디스크: 해당 폴더를 휴지통으로 이동 (`shell.trashItem`)
-- DB: `works` 삭제 + `work_files` 삭제 + 대회 연관 데이터 정리
-- 기존 `works:delete` + `shell:trashFolders` 로직 통합
+### 8. 상태 유지 (localStorage)
+- 열린 폴더 목록: `files:openFolders` — 탭 전환/재시작 후 유지
+- 스크롤 위치: `files:scrollTop` — 200ms 디바운스로 저장, 트리 로딩 후 복원
 
-**배우 폴더 삭제** (Level 1 — `배우명 배우생일`):
-- 디스크: 배우 폴더 전체를 휴지통으로 이동 (하위 작품 폴더 포함)
-- DB: 하위 모든 작품 삭제 + 배우 soft delete (`is_deleted = 1`)
-- 영향 범위가 크므로 확인 모달 필수
+### 9. UI 기본 설정
+- 전체 `cursor-default`, 매칭 텍스트만 `cursor-pointer`
+- [수정] / [삭제] 텍스트 버튼 (아이콘 사용 안 함)
+- 파일에는 [삭제] 버튼 없음 — 폴더 단위로만 삭제
+
+### 10. 검색
+- 상단에 검색 입력창
+- 프론트에서 트리 데이터 필터링 (백엔드 호출 불필요)
+- 검색 대상: 폴더명, 파일명, 매칭된 배우명, 매칭된 작품 품번/제목
+- 매칭된 노드 + 상위 경로 유지하여 트리 구조 보존
+- 검색 중 매칭된 폴더 자동 펼침
+
+### 11. 정렬
+- 상단에 정렬 드롭다운
+- 프론트에서 `FolderNode.children` 재정렬 (같은 depth의 형제 노드끼리)
+- 정렬 기준: 폴더명 (가나다/역순), 하위 항목 수 (많은/적은 순)
 
 ---
 
 ## 수정 범위
 
-### 백엔드 — IPC 핸들러 신규 (`ipc-files.ts`)
+### 백엔드 — IPC 핸들러 (`ipc-files.ts`)
 
 | 핸들러 | 파라미터 | 동작 |
 |--------|---------|------|
-| `folder:tree` | 없음 | DB에서 로컬 파일 경로 전체 조회 → 트리 구조 반환 (폴더별 파일 목록 + 존재 여부 포함) |
+| `folder:tree` | 없음 | DB 조회 → 트리 구조 반환 (배우/작품 매칭 포함, 존재 여부는 기본 true) |
+| `folder:checkExists` | `paths: string[]` | 전달받은 경로 배열의 존재 여부 체크 반환 |
 | `folder:rename` | `oldPath`, `newPath` | `fs.renameSync` → 성공 시 DB 경로 일괄 REPLACE |
-| `folder:delete` | `folderPath`, `level` | level에 따라 작품 폴더 삭제 또는 배우 폴더+작품 일괄 삭제 |
-| `file:rename` | `oldPath`, `newPath` | `fs.renameSync` → 성공 시 해당 `work_files` 행 + `works.file_path` UPDATE |
-
-**`folder:tree` 상세 흐름**:
-1. `SELECT wf.id, wf.work_id, wf.file_path, w.product_number, w.title FROM work_files wf JOIN works w ON w.id = wf.work_id WHERE wf.type = 'local'` 전체 조회
-2. 각 `file_path`에서 디렉토리 부분 추출 (`path.dirname`), 파일명 추출 (`path.basename`)
-3. 중복 제거 후 계층 트리 구조로 변환
-4. 각 폴더 노드마다 `fs.existsSync(path)`로 존재 여부 체크
-5. 각 파일마다 `fs.existsSync(file_path)`로 존재 여부 체크
-6. 폴더별 파일 수 집계 + 파일 목록 포함
-
-**`folder:rename` 상세 흐름**:
-1. `fs.renameSync(oldPath, newPath)` — 파일시스템 변경
-2. 실패 시 에러 반환, DB 변경 없음
-3. 성공 시:
-   - `UPDATE work_files SET file_path = REPLACE(file_path, ?, ?) WHERE file_path LIKE ?||'%'`
-   - `UPDATE works SET file_path = REPLACE(file_path, ?, ?) WHERE file_path LIKE ?||'%'`
-   - `UPDATE works SET cover_path = REPLACE(cover_path, ?, ?) WHERE cover_path LIKE ?||'%'`
-
-**`folder:delete` 상세 흐름**:
-
-작품 폴더 삭제 (level 2):
-1. 해당 폴더 경로에 매칭되는 `work_files` 조회 → `work_id` 추출
-2. 진행 중 대회 참가 여부 체크 (blocked 판단)
-3. `shell.trashItem(folderPath)` — 디스크에서 휴지통 이동
-4. 성공 시: `works` 삭제 + 연관 데이터 정리 (기존 `works:delete` 로직 재사용)
-
-배우 폴더 삭제 (level 1):
-1. 하위 모든 작품 폴더의 `work_id` 추출
-2. 각 작품에 대해 진행 중 대회 참가 여부 체크
-3. `shell.trashItem(folderPath)` — 배우 폴더 전체 휴지통 이동
-4. 성공 시: 하위 모든 `works` 삭제 + 배우 soft delete
-5. 확인 모달에서 삭제 대상 작품 수 표시 필수
-
-**`file:rename` 상세 흐름**:
-1. `fs.renameSync(oldPath, newPath)` — 파일시스템 변경
-2. 실패 시 에러 반환, DB 변경 없음
-3. 성공 시:
-   - `UPDATE work_files SET file_path = ? WHERE file_path = ?`
-   - `UPDATE works SET file_path = ? WHERE file_path = ?` (대표 경로인 경우)
+| `folder:delete` | `folderPath` | 하위 작품 삭제 + 배우 폴더면 soft delete + 휴지통 이동 |
+| `file:rename` | `oldPath`, `newPath` | `fs.renameSync` → 성공 시 해당 work_files/works UPDATE |
 
 ### API 함수 (`api.ts`)
 
 ```ts
 export const folderApi = {
   tree: () => api.invoke('folder:tree'),
+  checkExists: (paths: string[]) => api.invoke('folder:checkExists', paths),
   renameFolder: (oldPath: string, newPath: string) => api.invoke('folder:rename', oldPath, newPath),
-  deleteFolder: (folderPath: string, level: 1 | 2) => api.invoke('folder:delete', folderPath, level),
   renameFile: (oldPath: string, newPath: string) => api.invoke('file:rename', oldPath, newPath),
+  deleteFolder: (folderPath: string) => api.invoke('folder:delete', folderPath),
 }
 ```
 
-### 프론트엔드 — 신규 컴포넌트
+### 프론트엔드 (`Files.tsx`)
 
-| 파일 | 용도 |
-|------|------|
-| `src/renderer/src/pages/Files.tsx` | 파일 탭 메인 페이지 (트리 + 파일 목록 + 이름 변경/삭제 UI) |
+- 트리 UI + 파일 목록 + 이름 변경/삭제 + 검색/정렬
+- 배우/작품 매칭 표시 + 클릭 네비게이션 + 호버 툴팁
+- localStorage: 열린 폴더, 스크롤 위치
+- 전체 펼치기/접기
 
 ### 기존 파일 수정
 
 | 파일 | 변경 내용 |
 |------|----------|
-| `App.tsx` | 탭 목록에 `files` 추가 (대회 다음 위치) |
+| `App.tsx` | `files` 탭 추가 (대회 다음), `onNavigateToActor/Work` 전달 |
 | `ipc.ts` | `registerFilesHandlers()` 호출 추가 |
 
 ---
@@ -168,53 +143,35 @@ export const folderApi = {
 
 ```ts
 interface FileInfo {
-  id: number              // work_files.id
-  workId: number           // 연결된 작품 ID
-  fileName: string         // 파일명 (path.basename)
-  filePath: string         // 전체 경로
-  workLabel: string        // 작품 표시명 (product_number || title)
-  exists: boolean          // 실제 파일시스템에 존재하는지
+  id: number
+  workId: number
+  fileName: string
+  filePath: string
+  workLabel: string
+  exists: boolean
 }
 
 interface FolderNode {
-  name: string             // 폴더명
-  path: string             // 전체 경로
-  fileCount: number        // 이 폴더에 직접 속한 파일 수
-  exists: boolean          // 실제 파일시스템에 존재하는지
-  files: FileInfo[]        // 이 폴더에 속한 파일 목록
-  children: FolderNode[]   // 하위 폴더
+  name: string
+  path: string
+  fileCount: number
+  exists: boolean
+  files: FileInfo[]
+  children: FolderNode[]
+  matchedActorId?: number
+  matchedActorName?: string
+  matchedWorkId?: number
+  matchedWorkLabel?: string
 }
 ```
 
-`folder:tree` 반환값: `FolderNode[]` (루트 레벨 = 드라이브 or 최상위 폴더)
-
 ---
 
-## UI 구조 (간략)
+## 추가 예정 기능
 
-```
-┌───────────────────────────────────────────────────────────────┐
-│  🔄 새로고침                                    총 48개 폴더  │
-│                                                               │
-│  ▼ 📁 D:\Videos                                              │
-│    ▼ 📁 스즈무라 아이리 1996-01-01 ─── (3) [수정] [삭제]      │
-│      ▼ 📁 2026-10-05 ABF-991 ────── (2) [수정] [삭제]        │
-│        │  ABF-991.mp4  ← ABF-991      [수정]                 │
-│        │  ABF-991.jpg  ← (썸네일)      [수정]                 │
-│      ▶ 📁 2026-09-01 CDE-123 ────── (1) [수정] [삭제]        │
-│    ▶ 📁 다른배우 2000-05-15 ───────── (5) [수정] [삭제]       │
-│    ▶ 📁⚠️ 삭제된폴더 ──────────────── (3) [경로 없음]        │
-│  ▶ 📁 E:\Archive ──────────────────── (5) [수정] [삭제]       │
-└───────────────────────────────────────────────────────────────┘
-```
-
-- 폴더 펼치면 하위 폴더 + 파일 목록 표시
-- 파일 옆에 연결된 작품명 표시
-- `[수정]` — 이름 변경 텍스트 버튼 (폴더/파일 공용, 아이콘 사용 안 함)
-- `[삭제]` — 폴더 삭제 텍스트 버튼 (폴더에만 표시, 파일에는 없음)
-  - 배우 폴더 삭제 시: "하위 N개 작품이 모두 삭제됩니다" 확인 모달
-  - 작품 폴더 삭제 시: "작품과 파일이 삭제됩니다" 확인 모달
-- `⚠️` — 존재하지 않는 폴더/파일 경고 (수정/삭제 비활성화)
+### 12. 임시 폴더 파일 정리 (상세 설계 필요)
+- 지정된 임시 폴더에 있는 영상/이미지 파일을 새 폴더를 만들어서 이동하는 기능
+- 상세 동작 흐름은 추후 정의 필요
 
 ---
 
@@ -222,43 +179,11 @@ interface FolderNode {
 
 - **DB 기반 트리**: 실제 드라이브를 탐색하지 않고 DB에 저장된 경로만으로 트리 구성
 - **조회는 DB 등록 파일만**: 디스크에 있지만 DB에 없는 파일은 표시하지 않음
-- **존재 여부 체크**: `fs.existsSync`로 확인. 없는 항목은 시각적 경고 + 수정/삭제 비활성화
-- **폴더 레벨별 삭제**: 배우 폴더(Level 1) = 배우+작품 일괄 삭제, 작품 폴더(Level 2) = 작품 삭제. 개별 파일 삭제는 없음
+- **존재 여부 지연 체크**: 초기 로딩 시 체크 안 함, 폴더 펼칠 때만 `folder:checkExists` 호출 (성능)
+- **작품 매칭 일괄 로딩**: 개별 DB 쿼리 대신 전체 works를 Map으로 한 번에 로딩 (성능)
+- **중간 경로 생성 제한**: 공통 접두사 기준으로 상위 폴더 생성 범위 제한 (성능)
+- **폴더 레벨별 삭제**: 배우 폴더 = 배우+작품 일괄 삭제, 작품 폴더 = 작품 삭제. 개별 파일 삭제 없음
 - 파일시스템 변경 실패 시 DB는 변경하지 않음 (파일시스템 먼저 → 성공 시 DB)
-- 경로 구분자: Windows 환경이므로 `\` 또는 `/` 혼용 가능성 고려 (정규화 필요)
-- 폴더명 변경 시 하위 모든 경로가 영향받으므로 `LIKE oldPath||'%'` 패턴으로 일괄 처리
+- 경로 구분자: `\` → `/` 정규화 처리
 - 삭제 시 진행 중 대회 참가 여부 체크 필수 (blocked 판단)
-
----
-
-## 추가 예정 기능
-
-### 7. 임시 폴더 파일 정리 (상세 설계 필요)
-- 지정된 임시 폴더에 있는 영상/이미지 파일을 새 폴더를 만들어서 이동하는 기능
-- 상세 동작 흐름은 추후 정의 필요
-
----
-
-## 미결정 사항
-
-### 폴더 옆 괄호 숫자 표시 기준
-현재: 해당 폴더에 직접 속한 파일 수 `(12)`
-
-**후보:**
-- **A안) 파일 수**: 해당 폴더에 직접 속한 DB 등록 파일 수. 작품 폴더(Level 2)에서 의미 있음.
-- **B안) 하위 폴더 수**: 해당 폴더 아래의 직계 하위 폴더 수. 배우 폴더(Level 1)에서 작품 수를 의미하므로 직관적.
-- **C안) 레벨별 다르게**: 배우 폴더는 하위 폴더 수, 작품 폴더는 파일 수. 가장 정보량이 많지만 폴더 레벨 판별 로직 필요.
-- **D안) 둘 다 표시**: `(폴더 3 / 파일 12)` 형태. 정보량 최대지만 UI가 복잡해질 수 있음.
-
-→ 추후 결정
-
----
-
-## 작업량 요약
-
-| 구분 | 파일 수 | 난이도 |
-|------|--------|--------|
-| IPC 핸들러 신규 (`ipc-files.ts`) | 1개 (4개 핸들러) | 중간~높음 |
-| API 함수 (`api.ts`) | 1곳 추가 | 쉬움 |
-| 페이지 컴포넌트 (`Files.tsx`) | 1개 신규 | 중간~높음 (트리 + 파일 목록 + 삭제 UI) |
-| 기존 파일 수정 (`App.tsx`, `ipc.ts`) | 2곳 | 쉬움 |
+- 검색/정렬은 프론트에서 처리 (백엔드 추가 호출 불필요)
