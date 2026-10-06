@@ -356,6 +356,24 @@ export function registerFilesHandlers(): void {
 
   ipcMain.handle('temp:moveToTree', async (_e, srcFolder: string, fileNames: string[], targetActorFolder: string, releaseDate: string) => {
     const moved: string[] = []
+
+    // Find actor from folder name
+    const actorFolderName = path.basename(targetActorFolder)
+    const actorMatch = actorFolderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
+    let actorId: number | null = null
+    if (actorMatch) {
+      const actorName = actorMatch[1].trim()
+      const actorBirthday = actorMatch[2]
+      const actors = db().prepare('SELECT id, name, aliases, birthday FROM actors WHERE is_deleted = 0').all() as { id: number; name: string; aliases: string | null; birthday: string | null }[]
+      const actor = actors.find(a => {
+        if (a.birthday !== actorBirthday) return false
+        if (a.name === actorName) return true
+        if (a.aliases) return a.aliases.split(',').map(s => s.trim()).includes(actorName)
+        return false
+      })
+      actorId = actor?.id ?? null
+    }
+
     for (const fileName of fileNames) {
       const base = path.basename(fileName, path.extname(fileName))
       const workFolderName = `${releaseDate} ${base}`
@@ -363,16 +381,46 @@ export function registerFilesHandlers(): void {
       try {
         await fs.promises.mkdir(workFolderPath, { recursive: true })
         // Move video
-        await fs.promises.rename(path.join(srcFolder, fileName), path.join(workFolderPath, fileName))
+        const videoDestPath = path.join(workFolderPath, fileName)
+        await fs.promises.rename(path.join(srcFolder, fileName), videoDestPath)
         // Move matching image
+        let coverPath: string | null = null
         const entries = await fs.promises.readdir(srcFolder).catch(() => [] as string[])
         for (const entry of (entries as unknown as string[])) {
           const ext = path.extname(entry).toLowerCase()
           if (IMAGE_EXTS.has(ext) && path.basename(entry, ext).toLowerCase() === base.toLowerCase()) {
-            await fs.promises.rename(path.join(srcFolder, entry), path.join(workFolderPath, entry))
+            const imgDest = path.join(workFolderPath, entry)
+            await fs.promises.rename(path.join(srcFolder, entry), imgDest)
+            coverPath = imgDest
             break
           }
         }
+
+        // Lookup studio from product number prefix
+        const codeMatch = base.match(/^(.+)-\d/)
+        const suffixMatch = !codeMatch ? null : base.match(/^\d[\d-]*-([A-Za-z]+)$/)
+        const studioCode = suffixMatch ? suffixMatch[1] : codeMatch ? codeMatch[1] : null
+        let studioId: number | null = null
+        if (studioCode) {
+          const studioRow = db().prepare('SELECT studio_id FROM studio_codes WHERE code = ?').get(studioCode.toUpperCase()) as { studio_id: number } | undefined
+          studioId = studioRow?.studio_id ?? null
+        }
+
+        // Register work in DB
+        const result = db().prepare(`
+          INSERT INTO works (file_path, cover_path, product_number, release_date, rating, comment, studio_id)
+          VALUES (?, ?, ?, ?, 0, NULL, ?)
+        `).run(videoDestPath, coverPath, base, releaseDate, studioId)
+        const workId = result.lastInsertRowid as number
+
+        // Register work file
+        db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, 0)').run(workId, videoDestPath, 'local')
+
+        // Link actor
+        if (actorId) {
+          db().prepare('INSERT OR IGNORE INTO work_actors (work_id, actor_id, is_rep) VALUES (?, ?, 1)').run(workId, actorId)
+        }
+
         moved.push(fileName)
       } catch { /* skip failed files */ }
     }

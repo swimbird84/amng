@@ -50,6 +50,59 @@ function saveOpenFolders(set: Set<string>) {
   localStorage.setItem(OPEN_FOLDERS_KEY, JSON.stringify([...set]))
 }
 
+function formatDateInput(value: string): string {
+  const digits = value.replace(/[^0-9]/g, '').slice(0, 8)
+  if (digits.length <= 4) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`
+}
+
+function DropInlineRow({ file, depth, onConfirm, onCancel }: { file: TempFileRef; depth: number; onConfirm: (fileName: string, date: string) => void; onCancel: (fileName: string) => void }) {
+  const [dateValue, setDateValue] = useState(() => localStorage.getItem('files:lastReleaseDate') || '')
+  const pickerRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <div className="flex items-center gap-2 py-1" style={{ paddingLeft: depth * 20 + 12 }}>
+      <div className="relative">
+        <input
+          value={dateValue}
+          onChange={e => setDateValue(formatDateInput(e.target.value))}
+          onKeyDown={e => { if (e.key === 'Enter') onConfirm(file.fileName, dateValue); if (e.key === 'Escape') onCancel(file.fileName) }}
+          placeholder="YYYY-MM-DD"
+          className="bg-gray-700 text-white text-sm px-2 py-1 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-28"
+          autoFocus
+        />
+        <input
+          ref={pickerRef}
+          type="date"
+          className="absolute inset-0 opacity-0 pointer-events-none"
+          onChange={e => setDateValue(e.target.value)}
+        />
+      </div>
+      <button
+        onClick={() => pickerRef.current?.showPicker()}
+        className="text-sm px-1.5 py-1 rounded bg-gray-700 hover:bg-gray-600"
+        title="달력"
+      >📅</button>
+      <span className="text-gray-300 text-sm">{file.baseName}</span>
+      <div className="ml-auto flex gap-1 pr-2">
+        <button onClick={() => onConfirm(file.fileName, dateValue)} className="text-xs text-white bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded">생성</button>
+        <button onClick={() => onCancel(file.fileName)} className="text-xs text-gray-300 bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded">취소</button>
+      </div>
+    </div>
+  )
+}
+
+function DropInline({ files, depth, onConfirmOne, onCancelOne }: { files: TempFileRef[]; depth: number; onConfirmOne: (fileName: string, date: string) => void; onCancelOne: (fileName: string) => void }) {
+  return (
+    <div>
+      {files.map(file => (
+        <DropInlineRow key={file.fileName} file={file} depth={depth} onConfirm={onConfirmOne} onCancel={onCancelOne} />
+      ))}
+    </div>
+  )
+}
+
 interface TempFileRef {
   fileName: string
   baseName: string
@@ -57,7 +110,15 @@ interface TempFileRef {
   thumbPath: string | null
 }
 
-function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWork, onDrop }: { node: FolderNode; depth: number; onRefresh: () => void; onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void; onDrop?: (actorFolder: string, actorName: string) => void }) {
+function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWork, onDrop, dropTarget, dragFiles: dragFilesProp, onMoveConfirmOne, onMoveCancelOne }: {
+  node: FolderNode; depth: number; onRefresh: () => void
+  onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void
+  onDrop?: (actorFolder: string, actorName: string) => void
+  dropTarget?: { actorFolder: string; actorName: string } | null
+  dragFiles?: TempFileRef[]
+  onMoveConfirmOne?: (fileName: string, date: string) => void
+  onMoveCancelOne?: (fileName: string) => void
+}) {
   const [open, setOpen] = useState(() => getOpenFolders().has(node.path))
   const [dragOver, setDragOver] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -202,11 +263,21 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
         </div>
       )}
 
+      {/* Inline drop UI */}
+      {dropTarget && dropTarget.actorFolder === node.path && dragFilesProp && dragFilesProp.length > 0 && (
+        <DropInline
+          files={dragFilesProp}
+          depth={depth + 1}
+          onConfirmOne={onMoveConfirmOne!}
+          onCancelOne={onMoveCancelOne!}
+        />
+      )}
+
       {/* Children + files */}
       {open && (
         <>
           {node.children.map(child => (
-            <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={onDrop} />
+            <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={onDrop} dropTarget={dropTarget} dragFiles={dragFilesProp} onMoveConfirmOne={onMoveConfirmOne} onMoveCancelOne={onMoveCancelOne} />
           ))}
           {node.files.map(file => (
             <div key={file.id}>
@@ -298,8 +369,7 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dragFiles, setDragFiles] = useState<TempFileRef[]>([])
-  const [dropModal, setDropModal] = useState<{ actorFolder: string; actorName: string } | null>(null)
-  const [releaseDate, setReleaseDate] = useState('')
+  const [dropTarget, setDropTarget] = useState<{ actorFolder: string; actorName: string } | null>(null)
 
   const loadTree = useCallback(async () => {
     setLoading(true)
@@ -346,25 +416,33 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
 
   const handleDrop = (actorFolder: string, actorName: string) => {
     if (dragFiles.length === 0) return
-    setDropModal({ actorFolder, actorName })
-    setReleaseDate('')
+    setDropTarget({ actorFolder, actorName })
   }
 
-  const handleMoveConfirm = async () => {
-    if (!dropModal || !releaseDate) return
-    // Normalize YYYYMMDD → YYYY-MM-DD
-    let date = releaseDate.trim()
-    if (/^\d{8}$/.test(date)) date = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('날짜 형식이 올바르지 않습니다 (YYYY-MM-DD 또는 YYYYMMDD)'); return }
+  const tempRefreshRef = useRef<(() => void) | null>(null)
+
+  const handleMoveConfirmOne = async (fileName: string, releaseDate: string) => {
+    if (!dropTarget) return
+    let date = releaseDate.trim().replace(/[^0-9]/g, '')
+    if (date.length === 8) date = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('날짜 형식이 올바르지 않습니다'); return }
 
     const srcFolder = localStorage.getItem('files:tempFolder') || ''
-    const res = await tempApi.moveToTree(srcFolder, dragFiles.map(f => f.fileName), dropModal.actorFolder, date)
+    const res = await tempApi.moveToTree(srcFolder, [fileName], dropTarget.actorFolder, date)
     if (res.ok) {
-      alert(`${res.moved.length}개 파일이 이동되었습니다`)
+      localStorage.setItem('files:lastReleaseDate', date)
       loadTree()
+      tempRefreshRef.current?.()
     }
-    setDropModal(null)
-    setDragFiles([])
+    const remaining = dragFiles.filter(f => f.fileName !== fileName)
+    setDragFiles(remaining)
+    if (remaining.length === 0) setDropTarget(null)
+  }
+
+  const handleMoveCancelOne = (fileName: string) => {
+    const remaining = dragFiles.filter(f => f.fileName !== fileName)
+    setDragFiles(remaining)
+    if (remaining.length === 0) setDropTarget(null)
   }
 
   return (
@@ -410,7 +488,7 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
             <p className="text-gray-500 text-sm">{search.trim() ? '검색 결과가 없습니다' : '등록된 로컬 파일이 없습니다'}</p>
           ) : (
             displayTree.map(node => (
-              <FolderItem key={`${node.path}_${toggleKey}`} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={handleDrop} />
+              <FolderItem key={`${node.path}_${toggleKey}`} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={handleDrop} dropTarget={dropTarget} dragFiles={dragFiles} onMoveConfirmOne={handleMoveConfirmOne} onMoveCancelOne={handleMoveCancelOne} />
             ))
           )}
         </div>
@@ -421,37 +499,9 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
 
       {/* Right: Temp Folder */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TempFolder onDragFiles={setDragFiles} />
+        <TempFolder onDragFiles={setDragFiles} refreshRef={tempRefreshRef} />
       </div>
 
-      {/* Release Date Modal */}
-      {dropModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setDropModal(null)}>
-          <div className="bg-gray-800 rounded-lg p-5 w-80" onClick={e => e.stopPropagation()}>
-            <p className="text-white text-sm font-bold mb-4">발매일 입력</p>
-            <input
-              type="date"
-              autoFocus
-              value={releaseDate.length === 10 ? releaseDate : ''}
-              onChange={e => setReleaseDate(e.target.value)}
-              className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 mb-2"
-            />
-            <input
-              value={releaseDate}
-              onChange={e => setReleaseDate(e.target.value)}
-              placeholder="또는 YYYYMMDD 직접 입력"
-              onKeyDown={e => { if (e.key === 'Enter') handleMoveConfirm() }}
-              className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 mb-3"
-            />
-            <p className="text-gray-400 text-xs mb-1">품번: {dragFiles.map(f => f.baseName).join(', ')}</p>
-            <p className="text-gray-400 text-xs mb-4">대상: {dropModal.actorName}</p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDropModal(null)} className="text-sm text-gray-300 bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded">취소</button>
-              <button onClick={handleMoveConfirm} className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded">생성</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

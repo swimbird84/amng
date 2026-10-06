@@ -10,11 +10,12 @@ interface TempFile {
 
 interface Props {
   onDragFiles: (files: TempFile[]) => void
+  refreshRef?: React.MutableRefObject<(() => void) | null>
 }
 
 const TEMP_FOLDER_KEY = 'files:tempFolder'
 
-export default function TempFolder({ onDragFiles }: Props) {
+export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   const [folderPath, setFolderPath] = useState(() => localStorage.getItem(TEMP_FOLDER_KEY) || '')
   const [files, setFiles] = useState<TempFile[]>([])
   const [loading, setLoading] = useState(false)
@@ -40,25 +41,28 @@ export default function TempFolder({ onDragFiles }: Props) {
     const res = await tempApi.listFiles(folderPath)
     if (res.ok) {
       setFiles(res.files)
-      // Load thumbnails via image:read
-      const cache = new Map<string, string>()
+      setThumbCache(new Map())
+      setLoading(false)
+      // Load thumbnails in background
       for (const f of res.files) {
         if (f.thumbPath) {
-          try {
-            const base64 = await imageApi.read(f.thumbPath) as string
-            if (base64) cache.set(f.fileName, base64)
-          } catch { /* skip */ }
+          imageApi.read(f.thumbPath).then(base64 => {
+            if (base64) setThumbCache(prev => new Map(prev).set(f.fileName, base64 as string))
+          }).catch(() => {})
         }
       }
-      setThumbCache(cache)
     } else {
       setError(res.error || '폴더를 읽을 수 없습니다')
       setFiles([])
+      setLoading(false)
     }
-    setLoading(false)
   }, [folderPath])
 
   useEffect(() => { if (folderPath) loadFiles() }, [folderPath, loadFiles])
+
+  useEffect(() => {
+    if (refreshRef) refreshRef.current = loadFiles
+  }, [refreshRef, loadFiles])
 
   const handleSelectFolder = async () => {
     const result = await dialogApi.openFolder() as string | null
@@ -156,12 +160,16 @@ export default function TempFolder({ onDragFiles }: Props) {
   }
 
   // Drag to tree
-  const handleDragStart = (e: React.DragEvent) => {
-    const dragFiles = files.filter(f => selected.has(f.fileName))
-    if (dragFiles.length === 0) return
-    e.dataTransfer.setData('text/plain', JSON.stringify(dragFiles.map(f => f.fileName)))
+  const handleDragStart = (e: React.DragEvent, file: TempFile) => {
+    // Auto-select if not already selected
+    if (!selected.has(file.fileName)) {
+      setSelected(new Set([file.fileName]))
+    }
+    const dragSet = selected.has(file.fileName) ? selected : new Set([file.fileName])
+    const dragItems = files.filter(f => dragSet.has(f.fileName))
+    e.dataTransfer.setData('text/plain', JSON.stringify(dragItems.map(f => f.fileName)))
     e.dataTransfer.effectAllowed = 'move'
-    onDragFiles(dragFiles)
+    onDragFiles(dragItems)
   }
 
   const dragRect = dragSelecting && dragStart && dragCurrent ? {
@@ -207,15 +215,20 @@ export default function TempFolder({ onDragFiles }: Props) {
                 onClick={e => { e.stopPropagation(); handleClick(index, e) }}
                 onDoubleClick={() => handleDoubleClick(file)}
                 onContextMenu={e => handleContextMenu(e, file.fileName)}
-                draggable={selected.has(file.fileName)}
-                onDragStart={handleDragStart}
+                draggable
+                onDragStart={e => handleDragStart(e, file)}
               >
-                <div className="w-full aspect-[4/3] rounded overflow-hidden bg-gray-800 flex items-center justify-center mb-1">
+                <div className="w-full aspect-[4/3] rounded overflow-hidden bg-gray-800 flex items-center justify-center mb-1 relative group/thumb">
                   {thumbCache.has(file.fileName) ? (
                     <img src={thumbCache.get(file.fileName)} className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-3xl">📹</span>
                   )}
+                  <button
+                    onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName) }}
+                    className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white text-xs px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
+                    title="파일명 복사"
+                  >📋</button>
                 </div>
                 <span className="text-xs text-gray-300 text-center truncate w-full">{file.baseName}</span>
               </div>
