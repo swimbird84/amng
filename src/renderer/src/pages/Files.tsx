@@ -224,13 +224,31 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
           {hasChildren ? (open ? '▼' : '▶') : ' '}
         </button>
         <span className={`text-sm ${folderExists ? 'text-gray-300' : 'text-red-400'}`}>
-          {folderExists ? '📁' : '📁⚠️'} {node.name}
+          {folderExists ? '📁' : '📁⚠️'}
         </span>
-        <span className="text-gray-500 text-xs ml-1">({node.children.length + node.files.length})</span>
-        {node.matchedActorName && <span className="text-blue-400 text-xs ml-2 cursor-pointer hover:underline" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onClick={(e) => { e.stopPropagation(); onNavigateToActor(node.matchedActorId!) }}>배우: {node.matchedActorName}</span>}
-        {node.matchedWorkLabel && <span className="text-green-400 text-xs ml-2 cursor-pointer hover:underline" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onClick={(e) => { e.stopPropagation(); onNavigateToWork(node.matchedWorkId!) }}>작품: {node.matchedWorkLabel}</span>}
+        {renaming ? (
+          <input
+            autoFocus
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleRenameFolder(); if (e.key === 'Escape') setRenaming(false) }}
+            className="bg-gray-700 text-white text-sm px-2 py-0.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1 min-w-0"
+          />
+        ) : (
+          <>
+            <span className={`text-sm ${folderExists ? 'text-gray-300' : 'text-red-400'}`}>{node.name}</span>
+            <span className="text-gray-500 text-xs ml-1">({node.children.length + node.files.length})</span>
+            {node.matchedActorName && <span className="text-blue-400 text-xs ml-2 cursor-pointer hover:underline" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onClick={(e) => { e.stopPropagation(); onNavigateToActor(node.matchedActorId!) }}>배우: {node.matchedActorName}</span>}
+            {node.matchedWorkLabel && <span className="text-green-400 text-xs ml-2 cursor-pointer hover:underline" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onClick={(e) => { e.stopPropagation(); onNavigateToWork(node.matchedWorkId!) }}>작품: {node.matchedWorkLabel}</span>}
+          </>
+        )}
         <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
-          {folderExists ? (
+          {renaming ? (
+            <>
+              <button onClick={handleRenameFolder} className="text-xs text-white bg-blue-600 hover:bg-blue-500 px-1.5 py-0.5 rounded">변경</button>
+              <button onClick={() => setRenaming(false)} className="text-xs text-gray-300 bg-gray-600 hover:bg-gray-500 px-1.5 py-0.5 rounded">취소</button>
+            </>
+          ) : folderExists ? (
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); setRenaming(true); setNewName(node.name) }}
@@ -248,21 +266,6 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
       </div>
       {tooltip && <CardTooltip tooltip={tooltip} />}
 
-      {/* Rename input */}
-      {renaming && (
-        <div className="flex items-center gap-2 py-1" style={{ paddingLeft: depth * 20 + 32 }}>
-          <input
-            autoFocus
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleRenameFolder(); if (e.key === 'Escape') setRenaming(false) }}
-            className="bg-gray-700 text-white text-sm px-2 py-1 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1"
-          />
-          <button onClick={handleRenameFolder} className="text-xs text-white bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded">변경</button>
-          <button onClick={() => setRenaming(false)} className="text-xs text-gray-300 bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded">취소</button>
-        </div>
-      )}
-
       {/* Inline drop UI */}
       {dropTarget && dropTarget.actorFolder === node.path && dragFilesProp && dragFilesProp.length > 0 && (
         <DropInline
@@ -279,43 +282,48 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
           {node.children.map(child => (
             <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={onDrop} dropTarget={dropTarget} dragFiles={dragFilesProp} onMoveConfirmOne={onMoveConfirmOne} onMoveCancelOne={onMoveCancelOne} />
           ))}
-          {node.files.map(file => (
-            <div key={file.id}>
-              <div
-                className="flex items-center gap-1 py-0.5 hover:bg-gray-800/50 rounded group"
-                style={{ paddingLeft: (depth + 1) * 20 + 12 }}
-              >
-                <span className={`text-sm ${(existsMap ? (existsMap[file.filePath] ?? true) : true) ? 'text-gray-400' : 'text-red-400'}`}>
-                  {file.fileName}
-                </span>
-                <span className="text-gray-600 text-xs mx-1">←</span>
-                <span className="text-gray-500 text-xs">{file.workLabel}</span>
-                <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
-                  {(existsMap ? (existsMap[file.filePath] ?? true) : true) ? (
-                    <button
-                      onClick={() => { setFileRenaming(file.id); setFileNewName(file.fileName) }}
-                      className="text-xs text-gray-400 hover:text-white px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600"
-                    >수정</button>
-                  ) : (
-                    <span className="text-xs text-red-400">파일 없음</span>
-                  )}
-                </div>
-              </div>
-              {fileRenaming === file.id && (
-                <div className="flex items-center gap-2 py-1" style={{ paddingLeft: (depth + 1) * 20 + 32 }}>
-                  <input
-                    autoFocus
-                    value={fileNewName}
-                    onChange={e => setFileNewName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleRenameFile(file); if (e.key === 'Escape') setFileRenaming(null) }}
-                    className="bg-gray-700 text-white text-sm px-2 py-1 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1"
-                  />
-                  <button onClick={() => handleRenameFile(file)} className="text-xs text-white bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded">변경</button>
-                  <button onClick={() => setFileRenaming(null)} className="text-xs text-gray-300 bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded">취소</button>
-                </div>
+          {node.files.map(file => {
+            const fileExists = existsMap ? (existsMap[file.filePath] ?? true) : true
+            const isEditing = fileRenaming === file.id
+            return (
+            <div
+              key={file.id}
+              className="flex items-center gap-1 py-0.5 hover:bg-gray-800/50 rounded group"
+              style={{ paddingLeft: (depth + 1) * 20 + 12 }}
+            >
+              {isEditing ? (
+                <input
+                  autoFocus
+                  value={fileNewName}
+                  onChange={e => setFileNewName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleRenameFile(file); if (e.key === 'Escape') setFileRenaming(null) }}
+                  className="bg-gray-700 text-white text-sm px-2 py-0.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1 min-w-0"
+                />
+              ) : (
+                <>
+                  <span className={`text-sm ${fileExists ? 'text-gray-400' : 'text-red-400'}`}>{file.fileName}</span>
+                  <span className="text-gray-600 text-xs mx-1">←</span>
+                  <span className="text-gray-500 text-xs">{file.workLabel}</span>
+                </>
               )}
+              <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
+                {isEditing ? (
+                  <>
+                    <button onClick={() => handleRenameFile(file)} className="text-xs text-white bg-blue-600 hover:bg-blue-500 px-1.5 py-0.5 rounded">변경</button>
+                    <button onClick={() => setFileRenaming(null)} className="text-xs text-gray-300 bg-gray-600 hover:bg-gray-500 px-1.5 py-0.5 rounded">취소</button>
+                  </>
+                ) : fileExists ? (
+                  <button
+                    onClick={() => { setFileRenaming(file.id); setFileNewName(file.fileName) }}
+                    className="text-xs text-gray-400 hover:text-white px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600"
+                  >수정</button>
+                ) : (
+                  <span className="text-xs text-red-400">파일 없음</span>
+                )}
+              </div>
             </div>
-          ))}
+            )
+          })}
         </>
       )}
     </div>
@@ -327,15 +335,24 @@ const SORT_BY_KEY = 'files:sortBy'
 const SORT_DIR_KEY = 'files:sortDir'
 
 type SortField = 'name' | 'count'
+type SearchField = 'all' | 'actor' | 'product' | 'folder' | 'file'
+const SEARCH_FIELD_KEY = 'files:searchField'
 
-function filterTree(nodes: FolderNode[], query: string): FolderNode[] {
+function filterTree(nodes: FolderNode[], query: string, field: SearchField): FolderNode[] {
   const q = query.toLowerCase()
   const matches = (node: FolderNode): boolean => {
-    if (node.name.toLowerCase().includes(q)) return true
-    if (node.matchedActorName?.toLowerCase().includes(q)) return true
-    if (node.matchedWorkLabel?.toLowerCase().includes(q)) return true
-    if (node.files.some(f => f.fileName.toLowerCase().includes(q) || f.workLabel.toLowerCase().includes(q))) return true
-    return false
+    switch (field) {
+      case 'actor': return !!node.matchedActorName?.toLowerCase().includes(q)
+      case 'product': return !!(node.matchedWorkLabel?.toLowerCase().includes(q) || node.files.some(f => f.workLabel.toLowerCase().includes(q)))
+      case 'folder': return node.name.toLowerCase().includes(q)
+      case 'file': return node.files.some(f => f.fileName.toLowerCase().includes(q))
+      default:
+        if (node.name.toLowerCase().includes(q)) return true
+        if (node.matchedActorName?.toLowerCase().includes(q)) return true
+        if (node.matchedWorkLabel?.toLowerCase().includes(q)) return true
+        if (node.files.some(f => f.fileName.toLowerCase().includes(q) || f.workLabel.toLowerCase().includes(q))) return true
+        return false
+    }
   }
   const filter = (nodes: FolderNode[]): FolderNode[] => {
     const result: FolderNode[] = []
@@ -364,6 +381,7 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
   const [loading, setLoading] = useState(true)
   const [toggleKey, setToggleKey] = useState(0)
   const [search, setSearch] = useState('')
+  const [searchField, setSearchField] = useState<SearchField>(() => (localStorage.getItem(SEARCH_FIELD_KEY) as SearchField) || 'all')
   const [sortField, setSortField] = useState<SortField>(() => (localStorage.getItem(SORT_BY_KEY) as SortField) || 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem(SORT_DIR_KEY) as 'asc' | 'desc') || 'asc')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -396,10 +414,10 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
 
   const displayTree = useMemo(() => {
     let result = tree
-    if (search.trim()) result = filterTree(result, search.trim())
+    if (search.trim()) result = filterTree(result, search.trim(), searchField)
     result = sortTree(result, sortField, sortDir)
     return result
-  }, [tree, search, sortField, sortDir])
+  }, [tree, search, searchField, sortField, sortDir])
 
   const totalFolders = countAllFolders(tree)
 
@@ -452,18 +470,30 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
         <div className="flex items-center gap-3 mb-2 shrink-0">
           <button
             onClick={loadTree}
-            className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded"
-          >새로고침</button>
+            className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
+            title="새로고침"
+          ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>
           <button onClick={handleExpandAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 펼치기</button>
           <button onClick={handleCollapseAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 접기</button>
           <span className="text-gray-500 text-sm">총 {totalFolders}개 폴더</span>
         </div>
         <div className="flex items-center gap-3 mb-3 shrink-0">
+          <select
+            value={searchField}
+            onChange={e => { const v = e.target.value as SearchField; setSearchField(v); localStorage.setItem(SEARCH_FIELD_KEY, v) }}
+            className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded focus:outline-none"
+          >
+            <option value="all">전체</option>
+            <option value="actor">배우</option>
+            <option value="product">품번</option>
+            <option value="folder">폴더</option>
+            <option value="file">파일</option>
+          </select>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="검색 (폴더명, 파일명, 배우, 작품)"
-            className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+            placeholder="검색"
+            className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-44"
           />
           <div className="flex items-center gap-1">
             <select
