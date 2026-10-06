@@ -468,33 +468,17 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
       {/* Left: Folder Tree */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center gap-3 mb-2 shrink-0">
+          <div className="flex items-center gap-1">
+            <button onClick={handleExpandAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 펼치기</button>
+            <button onClick={handleCollapseAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 접기</button>
+          </div>
           <button
             onClick={loadTree}
             className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
-            title="새로고침"
           ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>
-          <button onClick={handleExpandAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 펼치기</button>
-          <button onClick={handleCollapseAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 접기</button>
           <span className="text-gray-500 text-sm">총 {totalFolders}개 폴더</span>
         </div>
         <div className="flex items-center gap-3 mb-3 shrink-0">
-          <select
-            value={searchField}
-            onChange={e => { const v = e.target.value as SearchField; setSearchField(v); localStorage.setItem(SEARCH_FIELD_KEY, v) }}
-            className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded focus:outline-none"
-          >
-            <option value="all">전체</option>
-            <option value="actor">배우</option>
-            <option value="product">품번</option>
-            <option value="folder">폴더</option>
-            <option value="file">파일</option>
-          </select>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="검색"
-            className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-44"
-          />
           <div className="flex items-center gap-1">
             <select
               value={sortField}
@@ -508,6 +492,25 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
               onClick={() => setSortDir(d => { const next = d === 'asc' ? 'desc' : 'asc'; localStorage.setItem(SORT_DIR_KEY, next); return next })}
               className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-2 py-1.5 rounded"
             >{sortDir === 'asc' ? '↑' : '↓'}</button>
+          </div>
+          <div className="flex items-center gap-1">
+            <select
+              value={searchField}
+              onChange={e => { const v = e.target.value as SearchField; setSearchField(v); localStorage.setItem(SEARCH_FIELD_KEY, v) }}
+              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded-l focus:outline-none"
+            >
+              <option value="all">전체</option>
+              <option value="actor">배우</option>
+              <option value="product">품번</option>
+              <option value="folder">폴더</option>
+              <option value="file">파일</option>
+            </select>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="검색"
+              className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded-r focus:outline-none focus:ring-1 focus:ring-blue-500 w-44"
+            />
           </div>
           {search.trim() && <span className="text-gray-500 text-sm">검색 결과: {countAllFolders(displayTree)}개</span>}
         </div>

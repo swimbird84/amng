@@ -185,15 +185,13 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
       {/* Header */}
       <div className="flex items-center gap-2 mb-2 shrink-0">
         <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
-        {folderPath && <span className="text-gray-500 text-xs truncate flex-1 min-w-0">{folderPath}</span>}
-        {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded" title="새로고침"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
-      </div>
-      <div className="flex items-center gap-2 mb-2 shrink-0">
+        {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
+        {folderPath && <span className="text-gray-500 text-xs truncate min-w-0">{folderPath}</span>}
         <input
           value={searchUrl}
           onChange={e => { setSearchUrl(e.target.value); localStorage.setItem('files:searchUrl', e.target.value) }}
-          placeholder="검색 URL (예: https://xxx.com/)"
-          className="bg-gray-700 text-white text-xs px-2 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1"
+          placeholder="검색 URL"
+          className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-56 ml-auto"
         />
       </div>
 
