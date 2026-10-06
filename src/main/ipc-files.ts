@@ -30,12 +30,16 @@ function normalizePath(p: string): string {
   return p.replace(/\\/g, '/')
 }
 
-function buildTree(rows: { id: number; work_id: number; file_path: string; product_number: string | null; title: string | null }[]): FolderNode[] {
-  const root = new Map<string, FolderNode>()
+function buildTree(
+  rows: { id: number; work_id: number; file_path: string; product_number: string | null; title: string | null }[],
+  actors: { id: number; name: string; aliases: string | null; birthday: string | null }[],
+  worksMap: Map<string, { id: number; label: string }>
+): FolderNode[] {
+  const allNodes = new Map<string, FolderNode>()
 
-  const getOrCreateNode = (folderPath: string, nodeMap: Map<string, FolderNode>): FolderNode => {
+  const getOrCreateNode = (folderPath: string): FolderNode => {
     const normalized = normalizePath(folderPath)
-    if (nodeMap.has(normalized)) return nodeMap.get(normalized)!
+    if (allNodes.has(normalized)) return allNodes.get(normalized)!
     const node: FolderNode = {
       name: path.basename(folderPath) || folderPath,
       path: folderPath,
@@ -44,16 +48,38 @@ function buildTree(rows: { id: number; work_id: number; file_path: string; produ
       files: [],
       children: [],
     }
-    nodeMap.set(normalized, node)
+    allNodes.set(normalized, node)
     return node
   }
 
-  // Collect all unique folder paths and build flat map
-  const allNodes = new Map<string, FolderNode>()
+  // Collect all file dirs + ensure ancestors up to common root
+  const allDirs = new Set<string>()
+  for (const row of rows) {
+    const dir = normalizePath(path.dirname(row.file_path))
+    allDirs.add(dir)
+  }
+
+  // Find common prefix depth to avoid creating nodes all the way to drive root
+  const dirList = [...allDirs]
+  let commonPrefix = ''
+  if (dirList.length > 0) {
+    const parts0 = dirList[0].split('/')
+    outer:
+    for (let i = 0; i < parts0.length; i++) {
+      const segment = parts0[i]
+      for (let j = 1; j < dirList.length; j++) {
+        const partsJ = dirList[j].split('/')
+        if (i >= partsJ.length || partsJ[i] !== segment) break outer
+      }
+      commonPrefix += (i > 0 ? '/' : '') + segment
+    }
+  }
+  // Go one level up from common prefix so the common folder itself is visible
+  const stopAt = commonPrefix ? normalizePath(path.dirname(commonPrefix.replace(/\//g, path.sep))) : ''
 
   for (const row of rows) {
     const dir = path.dirname(row.file_path)
-    const node = getOrCreateNode(dir, allNodes)
+    const node = getOrCreateNode(dir)
     node.fileCount++
     node.files.push({
       id: row.id,
@@ -63,25 +89,62 @@ function buildTree(rows: { id: number; work_id: number; file_path: string; produ
       workLabel: row.product_number || row.title || `#${row.work_id}`,
       exists: false,
     })
-    // Ensure all ancestor folders exist in allNodes
-    let ancestor = path.dirname(dir)
-    while (ancestor !== dir && ancestor !== path.dirname(ancestor)) {
-      getOrCreateNode(ancestor, allNodes)
-      const next = path.dirname(ancestor)
-      if (next === ancestor) break
-      ancestor = next
+    // Create ancestors up to stopAt (not all the way to root)
+    let current = normalizePath(dir)
+    let parent = normalizePath(path.dirname(dir))
+    while (parent !== current && parent !== stopAt) {
+      getOrCreateNode(parent.replace(/\//g, path.sep))
+      current = parent
+      parent = normalizePath(path.dirname(current.replace(/\//g, path.sep)))
+    }
+    if (parent !== current) {
+      getOrCreateNode(parent.replace(/\//g, path.sep))
     }
   }
 
-  // Check existence
+  // Existence check is deferred — default to true, check lazily via folder:checkExists
   for (const node of allNodes.values()) {
-    try { node.exists = fs.existsSync(node.path) } catch { node.exists = false }
-    for (const f of node.files) {
-      try { f.exists = fs.existsSync(f.filePath) } catch { f.exists = false }
+    node.exists = true
+    for (const f of node.files) f.exists = true
+  }
+
+  // Match folders to actors/works
+  const actorPattern = /^(.+)\s+(\d{4}-\d{2}-\d{2})$/
+  const workPattern = /^(\d{4}-\d{2}-\d{2})\s+(.+)$/
+
+  for (const node of allNodes.values()) {
+    const folderName = node.name
+    // Actor match
+    const am = folderName.match(actorPattern)
+    if (am) {
+      const nameInFolder = am[1].trim()
+      const birthday = am[2]
+      const actor = actors.find(a => {
+        if (a.birthday !== birthday) return false
+        if (a.name === nameInFolder) return true
+        if (a.aliases) {
+          return a.aliases.split(',').map(s => s.trim()).includes(nameInFolder)
+        }
+        return false
+      })
+      if (actor) {
+        node.matchedActorId = actor.id
+        node.matchedActorName = actor.name
+      }
+    }
+    // Work match (from pre-loaded map)
+    const wm = folderName.match(workPattern)
+    if (wm) {
+      const productNumber = wm[2].trim()
+      const work = worksMap.get(productNumber)
+      if (work) {
+        node.matchedWorkId = work.id
+        node.matchedWorkLabel = work.label
+      }
     }
   }
 
-  // Build hierarchy: link children to parents
+  // Build hierarchy
   const rootNodes: FolderNode[] = []
   for (const node of allNodes.values()) {
     const parentPath = path.dirname(node.path)
@@ -94,7 +157,7 @@ function buildTree(rows: { id: number; work_id: number; file_path: string; produ
     }
   }
 
-  // Sort children and files
+  // Sort
   const sortNodes = (nodes: FolderNode[]) => {
     nodes.sort((a, b) => a.name.localeCompare(b.name))
     for (const n of nodes) {
@@ -104,18 +167,7 @@ function buildTree(rows: { id: number; work_id: number; file_path: string; produ
   }
   sortNodes(rootNodes)
 
-  // Fill in missing intermediate folders for display
-  // (e.g., if we have D:/a/b/c but not D:/a/b, create D:/a/b as empty node)
-  // Already handled by getOrCreateNode — intermediate folders without files just won't exist
-  // We need to create them if there are gaps
-  const ensureIntermediates = (nodes: FolderNode[]): FolderNode[] => {
-    // Group by common prefixes and create intermediate nodes as needed
-    // For simplicity, we rely on the fact that parent dirs are included if they have files
-    // Missing intermediates are handled by re-rooting orphan nodes
-    return nodes
-  }
-
-  return ensureIntermediates(rootNodes)
+  return rootNodes
 }
 
 export function registerFilesHandlers(): void {
@@ -128,49 +180,25 @@ export function registerFilesHandlers(): void {
       JOIN works w ON w.id = wf.work_id
       WHERE wf.type = 'local'
     `).all() as { id: number; work_id: number; file_path: string; product_number: string | null; title: string | null }[]
-    const tree = buildTree(rows)
 
-    // Match folders to actors/works
     const actors = db().prepare('SELECT id, name, aliases, birthday FROM actors WHERE is_deleted = 0').all() as { id: number; name: string; aliases: string | null; birthday: string | null }[]
-    const actorPattern = /^(.+)\s+(\d{4}-\d{2}-\d{2})$/
-    const workPattern = /^(\d{4}-\d{2}-\d{2})\s+(.+)$/
 
-    const matchFolder = (node: FolderNode) => {
-      const folderName = node.name
-      // Try actor match
-      const am = folderName.match(actorPattern)
-      if (am) {
-        const nameInFolder = am[1].trim()
-        const birthday = am[2]
-        const actor = actors.find(a => {
-          if (a.birthday !== birthday) return false
-          if (a.name === nameInFolder) return true
-          if (a.aliases) {
-            const aliasList = a.aliases.split(',').map(s => s.trim())
-            return aliasList.includes(nameInFolder)
-          }
-          return false
-        })
-        if (actor) {
-          node.matchedActorId = actor.id
-          node.matchedActorName = actor.name
-        }
-      }
-      // Try work match
-      const wm = folderName.match(workPattern)
-      if (wm) {
-        const productNumber = wm[2].trim()
-        const work = db().prepare('SELECT id, product_number, title FROM works WHERE product_number = ?').get(productNumber) as { id: number; product_number: string | null; title: string | null } | undefined
-        if (work) {
-          node.matchedWorkId = work.id
-          node.matchedWorkLabel = work.product_number || work.title || `#${work.id}`
-        }
-      }
-      for (const child of node.children) matchFolder(child)
+    // Pre-load all works into a map for O(1) lookup
+    const allWorks = db().prepare('SELECT id, product_number, title FROM works WHERE product_number IS NOT NULL').all() as { id: number; product_number: string; title: string | null }[]
+    const worksMap = new Map<string, { id: number; label: string }>()
+    for (const w of allWorks) {
+      worksMap.set(w.product_number, { id: w.id, label: w.product_number || w.title || `#${w.id}` })
     }
-    for (const node of tree) matchFolder(node)
 
-    return tree
+    return buildTree(rows, actors, worksMap)
+  })
+
+  ipcMain.handle('folder:checkExists', (_e, paths: string[]) => {
+    const result: Record<string, boolean> = {}
+    for (const p of paths) {
+      try { result[p] = fs.existsSync(p) } catch { result[p] = false }
+    }
+    return result
   })
 
   ipcMain.handle('folder:rename', (_e, oldPath: string, newPath: string) => {
@@ -199,7 +227,6 @@ export function registerFilesHandlers(): void {
   })
 
   ipcMain.handle('folder:delete', async (_e, folderPath: string) => {
-    // Find all work_ids that have files under this folder
     const normalizedFolder = folderPath.replace(/\\/g, '/')
     const fileRows = db().prepare(`
       SELECT DISTINCT wf.work_id FROM work_files wf
@@ -209,7 +236,6 @@ export function registerFilesHandlers(): void {
 
     if (workIds.length === 0) return { ok: false, error: '해당 폴더에 등록된 작품이 없습니다' }
 
-    // Check if any work is in an in-progress tournament
     const ph = workIds.map(() => '?').join(',')
     const blocked = db().prepare(`
       SELECT 1 FROM cup_entries e
@@ -220,7 +246,6 @@ export function registerFilesHandlers(): void {
     `).get(...workIds)
     if (blocked) return { ok: false, error: '진행 중인 대회에 참가한 작품이 포함되어 있습니다', blocked: true }
 
-    // Trash the folder
     try {
       if (fs.existsSync(folderPath)) {
         await shell.trashItem(folderPath)
@@ -229,7 +254,6 @@ export function registerFilesHandlers(): void {
       return { ok: false, error: (err as Error).message }
     }
 
-    // Delete works and related data
     for (const workId of workIds) {
       deleteImagesByPattern('works', workId)
       db().prepare('DELETE FROM works WHERE id = ?').run(workId)
@@ -239,8 +263,6 @@ export function registerFilesHandlers(): void {
       db().prepare(`DELETE FROM cup_rank_snapshots WHERE item_id = ? AND tournament_id IN (SELECT id FROM cup_tournaments WHERE type = 'work')`).run(workId)
     }
 
-    // Check if this is an actor folder (parent of work folders) — soft delete actor if name matches pattern
-    // Actor folder detection: check if folder name matches "이름 YYYY-MM-DD" pattern
     const folderName = path.basename(folderPath)
     const actorMatch = folderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
     if (actorMatch) {

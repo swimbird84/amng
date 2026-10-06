@@ -167,7 +167,7 @@ function App() {
             onNavigateToWork={handleNavigateToWork}
           />
         )}
-        {tab === 'files' && <Files />}
+        {tab === 'files' && <Files onNavigateToActor={handleNavigateToActor} onNavigateToWork={handleNavigateToWork} />}
       </main>
 
       {tab === 'home' && <span className="fixed bottom-2 right-3 text-xs text-gray-600 pointer-events-none select-none">v{version}</span>}

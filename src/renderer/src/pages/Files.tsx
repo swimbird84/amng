@@ -30,23 +30,54 @@ function countAllFolders(nodes: FolderNode[]): number {
   return count
 }
 
-function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: number; onRefresh: () => void }) {
-  const [open, setOpen] = useState(false)
+const OPEN_FOLDERS_KEY = 'files:openFolders'
+
+function getOpenFolders(): Set<string> {
+  try {
+    const saved = localStorage.getItem(OPEN_FOLDERS_KEY)
+    return saved ? new Set(JSON.parse(saved)) : new Set()
+  } catch { return new Set() }
+}
+
+function saveOpenFolders(set: Set<string>) {
+  localStorage.setItem(OPEN_FOLDERS_KEY, JSON.stringify([...set]))
+}
+
+function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWork }: { node: FolderNode; depth: number; onRefresh: () => void; onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void }) {
+  const [open, setOpen] = useState(() => getOpenFolders().has(node.path))
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState(node.name)
   const [fileRenaming, setFileRenaming] = useState<number | null>(null)
   const [fileNewName, setFileNewName] = useState('')
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [existsMap, setExistsMap] = useState<Record<string, boolean> | null>(null)
+  const checkedRef = useRef(false)
 
   const hasChildren = node.children.length > 0 || node.files.length > 0
   const matchedId = node.matchedActorId ?? node.matchedWorkId
   const matchedType = node.matchedActorId ? 'actor' as const : node.matchedWorkId ? 'work' as const : null
 
+  const folderExists = existsMap ? (existsMap[node.path] ?? true) : true
+
+  const handleToggle = async () => {
+    const willOpen = !open
+    setOpen(willOpen)
+    const openSet = getOpenFolders()
+    if (willOpen) openSet.add(node.path); else openSet.delete(node.path)
+    saveOpenFolders(openSet)
+    if (willOpen && !checkedRef.current) {
+      checkedRef.current = true
+      const paths = [node.path, ...node.files.map(f => f.filePath)]
+      const result = await folderApi.checkExists(paths)
+      setExistsMap(result)
+    }
+  }
+
   const handleMouseEnter = (e: React.MouseEvent) => {
     if (!matchedType || !matchedId) return
     hoverTimer.current = setTimeout(() => {
-      setTooltip({ type: matchedType, id: matchedId, x: e.clientX, y: e.clientY })
+      setTooltip({ type: matchedType, id: matchedId, x: e.clientX, y: e.clientY, showCover: true })
     }, 400)
   }
   const handleMouseLeave = () => {
@@ -110,19 +141,19 @@ function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: numbe
         onMouseLeave={handleMouseLeave}
       >
         <button
-          onClick={() => setOpen(!open)}
+          onClick={handleToggle}
           className="text-gray-400 text-xs w-4 shrink-0"
         >
           {hasChildren ? (open ? '▼' : '▶') : ' '}
         </button>
-        <span className={`text-sm ${node.exists ? 'text-gray-300' : 'text-red-400'}`}>
-          {node.exists ? '📁' : '📁⚠️'} {node.name}
+        <span className={`text-sm ${folderExists ? 'text-gray-300' : 'text-red-400'}`}>
+          {folderExists ? '📁' : '📁⚠️'} {node.name}
         </span>
         <span className="text-gray-500 text-xs ml-1">({node.children.length + node.files.length})</span>
-        {node.matchedActorName && <span className="text-blue-400 text-xs ml-2">배우: {node.matchedActorName}</span>}
-        {node.matchedWorkLabel && <span className="text-green-400 text-xs ml-2">작품: {node.matchedWorkLabel}</span>}
+        {node.matchedActorName && <span className="text-blue-400 text-xs ml-2 cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); onNavigateToActor(node.matchedActorId!) }}>배우: {node.matchedActorName}</span>}
+        {node.matchedWorkLabel && <span className="text-green-400 text-xs ml-2 cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); onNavigateToWork(node.matchedWorkId!) }}>작품: {node.matchedWorkLabel}</span>}
         <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
-          {node.exists ? (
+          {folderExists ? (
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); setRenaming(true); setNewName(node.name) }}
@@ -159,7 +190,7 @@ function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: numbe
       {open && (
         <>
           {node.children.map(child => (
-            <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} />
+            <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} />
           ))}
           {node.files.map(file => (
             <div key={file.id}>
@@ -167,13 +198,13 @@ function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: numbe
                 className="flex items-center gap-1 py-0.5 hover:bg-gray-800/50 rounded group"
                 style={{ paddingLeft: (depth + 1) * 20 + 12 }}
               >
-                <span className={`text-sm ${file.exists ? 'text-gray-400' : 'text-red-400'}`}>
+                <span className={`text-sm ${(existsMap ? (existsMap[file.filePath] ?? true) : true) ? 'text-gray-400' : 'text-red-400'}`}>
                   {file.fileName}
                 </span>
                 <span className="text-gray-600 text-xs mx-1">←</span>
                 <span className="text-gray-500 text-xs">{file.workLabel}</span>
                 <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
-                  {file.exists ? (
+                  {(existsMap ? (existsMap[file.filePath] ?? true) : true) ? (
                     <button
                       onClick={() => { setFileRenaming(file.id); setFileNewName(file.fileName) }}
                       className="text-xs text-gray-400 hover:text-white px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600"
@@ -204,7 +235,7 @@ function FolderItem({ node, depth, onRefresh }: { node: FolderNode; depth: numbe
   )
 }
 
-export default function Files() {
+export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void }) {
   const [tree, setTree] = useState<FolderNode[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -220,7 +251,7 @@ export default function Files() {
   const totalFolders = countAllFolders(tree)
 
   return (
-    <div className="h-full flex flex-col p-4 overflow-hidden">
+    <div className="h-full flex flex-col p-4 overflow-hidden cursor-default">
       <div className="flex items-center gap-3 mb-3 shrink-0">
         <button
           onClick={loadTree}
@@ -235,7 +266,7 @@ export default function Files() {
           <p className="text-gray-500 text-sm">등록된 로컬 파일이 없습니다</p>
         ) : (
           tree.map(node => (
-            <FolderItem key={node.path} node={node} depth={0} onRefresh={loadTree} />
+            <FolderItem key={node.path} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} />
           ))
         )}
       </div>

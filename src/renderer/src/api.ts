@@ -119,6 +119,7 @@ export const scanApi = {
 // 작품 파일
 export const folderApi = {
   tree: () => api.invoke('folder:tree'),
+  checkExists: (paths: string[]) => api.invoke('folder:checkExists', paths) as Promise<Record<string, boolean>>,
   renameFolder: (oldPath: string, newPath: string) => api.invoke('folder:rename', oldPath, newPath),
   renameFile: (oldPath: string, newPath: string) => api.invoke('file:rename', oldPath, newPath),
   deleteFolder: (folderPath: string) => api.invoke('folder:delete', folderPath),
