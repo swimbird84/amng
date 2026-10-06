@@ -335,31 +335,30 @@ const SORT_BY_KEY = 'files:sortBy'
 const SORT_DIR_KEY = 'files:sortDir'
 
 type SortField = 'name' | 'count'
-type SearchField = 'all' | 'actor' | 'product' | 'folder' | 'file'
+type SearchField = 'actor' | 'folder'
 const SEARCH_FIELD_KEY = 'files:searchField'
 
 function filterTree(nodes: FolderNode[], query: string, field: SearchField): FolderNode[] {
   const q = query.toLowerCase()
   const matches = (node: FolderNode): boolean => {
-    switch (field) {
-      case 'actor': return !!node.matchedActorName?.toLowerCase().includes(q)
-      case 'product': return !!(node.matchedWorkLabel?.toLowerCase().includes(q) || node.files.some(f => f.workLabel.toLowerCase().includes(q)))
-      case 'folder': return node.name.toLowerCase().includes(q)
-      case 'file': return node.files.some(f => f.fileName.toLowerCase().includes(q))
-      default:
-        if (node.name.toLowerCase().includes(q)) return true
-        if (node.matchedActorName?.toLowerCase().includes(q)) return true
-        if (node.matchedWorkLabel?.toLowerCase().includes(q)) return true
-        if (node.files.some(f => f.fileName.toLowerCase().includes(q) || f.workLabel.toLowerCase().includes(q))) return true
-        return false
-    }
+    if (field === 'actor') return !!node.matchedActorName?.toLowerCase().includes(q)
+    return node.name.toLowerCase().includes(q)
   }
   const filter = (nodes: FolderNode[]): FolderNode[] => {
     const result: FolderNode[] = []
     for (const node of nodes) {
-      const filteredChildren = filter(node.children)
-      if (matches(node) || filteredChildren.length > 0) {
-        result.push({ ...node, children: filteredChildren })
+      if (matches(node)) {
+        // 배우 매칭 시 하위 전체 보존
+        if (field === 'actor') {
+          result.push(node)
+        } else {
+          result.push({ ...node, children: filter(node.children) })
+        }
+      } else {
+        const filteredChildren = filter(node.children)
+        if (filteredChildren.length > 0) {
+          result.push({ ...node, children: filteredChildren })
+        }
       }
     }
     return result
@@ -381,7 +380,7 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
   const [loading, setLoading] = useState(true)
   const [toggleKey, setToggleKey] = useState(0)
   const [search, setSearch] = useState('')
-  const [searchField, setSearchField] = useState<SearchField>(() => (localStorage.getItem(SEARCH_FIELD_KEY) as SearchField) || 'all')
+  const [searchField, setSearchField] = useState<SearchField>(() => (localStorage.getItem(SEARCH_FIELD_KEY) as SearchField) || 'folder')
   const [sortField, setSortField] = useState<SortField>(() => (localStorage.getItem(SORT_BY_KEY) as SortField) || 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem(SORT_DIR_KEY) as 'asc' | 'desc') || 'asc')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -499,11 +498,8 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
               onChange={e => { const v = e.target.value as SearchField; setSearchField(v); localStorage.setItem(SEARCH_FIELD_KEY, v) }}
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded-l focus:outline-none"
             >
-              <option value="all">전체</option>
               <option value="actor">배우</option>
-              <option value="product">품번</option>
               <option value="folder">폴더</option>
-              <option value="file">파일</option>
             </select>
             <input
               value={search}
