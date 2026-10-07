@@ -208,6 +208,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
 
   const [masterWorkRows, setMasterWorkRows] = useState<{ rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]>([])
   const [masterActorRows, setMasterActorRows] = useState<{ rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]>([])
+  const [currentSeasonName, setCurrentSeasonName] = useState<string>('')
   const [expandedActors, setExpandedActors] = useState(false)
 
   const [years, setYears] = useState<{ year: string; count: number }[]>([])
@@ -261,6 +262,10 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.recentWorks().then((d) => setRecentWorks(d as Work[]))
     dashboardApi.newActors().then((d) => setNewActors(d as Actor[]))
     dashboardApi.recentActors().then((d) => setRecentActors(d as Actor[]))
+    // Load current season and master ranking
+    masterRankingApi.seasons('actor').then((seasons: any) => {
+      if (seasons.length > 0) setCurrentSeasonName(seasons[0].name)
+    })
     masterRankingApi.list({ type: 'work', limit: 50 }).then((d: any) => {
       const rows = d.rows as { rank: number; id: number; title: string; product_number: string; cover_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]
       // Get top 10 ranks (include ties at rank 10)
@@ -445,7 +450,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 신작 */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-white font-bold text-base">신작</h2>
+            <h2 className="text-white font-bold text-base">신작 ({newWorks.length})</h2>
             <span className="text-xs text-gray-500">({today} 기준 1개월)</span>
             <button
               onClick={() => setExpandedWorks((v) => !v)}
@@ -468,7 +473,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 신인 */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-white font-bold text-base">신인</h2>
+            <h2 className="text-white font-bold text-base">신인 ({newActors.length})</h2>
             <span className="text-xs text-gray-500">({today} 기준 3년)</span>
             <button
               onClick={() => setExpandedActors((v) => !v)}
@@ -501,7 +506,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         <div>
           <SectionTitle>신규 등록 <span className="text-xs text-gray-500 font-normal">({today} 기준 1개월)</span></SectionTitle>
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-gray-300 font-bold text-sm">작품</h3>
+            <h3 className="text-gray-300 font-bold text-sm">작품 ({recentWorks.length})</h3>
             <button
               onClick={() => setExpandedRecent((v) => !v)}
               className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
@@ -519,7 +524,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             <p className="text-gray-500 text-sm mb-4">최근 1개월 내 등록된 작품이 없습니다</p>
           )}
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-gray-300 font-bold text-sm">배우</h3>
+            <h3 className="text-gray-300 font-bold text-sm">배우 ({recentActors.length})</h3>
             <button
               onClick={() => setExpandedRecentActors((v) => !v)}
               className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
@@ -550,7 +555,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 마스터 랭킹 */}
         <div>
           <SectionTitle>마스터 랭킹</SectionTitle>
-          <h3 className="text-gray-300 font-bold text-sm mb-3">작품 TOP 10</h3>
+          <h3 className="text-gray-300 font-bold text-sm mb-3">작품 TOP 10 {currentSeasonName && <span className="text-gray-500 font-normal">({currentSeasonName})</span>}</h3>
           {masterWorkRows.length > 0 ? (
             <div className="grid grid-cols-10 gap-2 mb-4">
               {masterWorkRows.map((r) => (
@@ -565,9 +570,9 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-sm mb-4">마스터 랭킹 데이터가 없습니다</p>
+            <p className="text-gray-500 text-sm mb-4">아직 등록된 랭킹이 없습니다</p>
           )}
-          <h3 className="text-gray-300 font-bold text-sm mb-3">배우 TOP 10</h3>
+          <h3 className="text-gray-300 font-bold text-sm mb-3">배우 TOP 10 {currentSeasonName && <span className="text-gray-500 font-normal">({currentSeasonName})</span>}</h3>
           {masterActorRows.length > 0 ? (
             <div className="grid grid-cols-10 gap-2">
               {masterActorRows.map((r) => (
@@ -583,7 +588,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-sm">마스터 랭킹 데이터가 없습니다</p>
+            <p className="text-gray-500 text-sm">아직 등록된 랭킹이 없습니다</p>
           )}
         </div>
 
