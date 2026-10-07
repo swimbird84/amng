@@ -25,6 +25,8 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileName: string } | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [searchUrl, setSearchUrl] = useState(() => localStorage.getItem('files:searchUrl') || '')
+  const [showUrlModal, setShowUrlModal] = useState(false)
+  const [removeStr, setRemoveStr] = useState(() => localStorage.getItem('files:removeString') || '')
   const [newName, setNewName] = useState('')
   const [thumbCache, setThumbCache] = useState<Map<string, string>>(new Map())
 
@@ -184,15 +186,28 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
     <div className="h-full flex flex-col" onClick={() => setContextMenu(null)}>
       {/* Header */}
       <div className="flex items-center gap-2 mb-2 shrink-0">
+        <button onClick={() => setShowUrlModal(true)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded" title="검색 URL 설정"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
         <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
         {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
         {folderPath && <span className="text-gray-500 text-xs truncate min-w-0">{folderPath}</span>}
-        <input
-          value={searchUrl}
-          onChange={e => { setSearchUrl(e.target.value); localStorage.setItem('files:searchUrl', e.target.value) }}
-          placeholder="검색 URL"
-          className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-56 ml-auto"
-        />
+        <div className="flex items-center gap-1 ml-auto">
+          <input
+            value={removeStr}
+            onChange={e => { setRemoveStr(e.target.value); localStorage.setItem('files:removeString', e.target.value) }}
+            placeholder="제거할 문자열"
+            className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-44"
+          />
+          <button
+            onClick={async () => {
+              if (!removeStr.trim() || !folderPath) return
+              if (!confirm(`모든 파일명에서 "${removeStr}"를 제거하시겠습니까?`)) return
+              const res = await tempApi.removeString(folderPath, removeStr.trim())
+              if (res.ok) { loadFiles() }
+              else alert(res.error || '제거 실패')
+            }}
+            className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded"
+          >제거</button>
+        </div>
       </div>
 
       {/* File grid */}
@@ -297,6 +312,26 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
             <div className="flex justify-end gap-2">
               <button onClick={() => setRenaming(null)} className="text-sm text-gray-300 bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded">취소</button>
               <button onClick={handleRename} className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded">변경</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* URL modal */}
+      {showUrlModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowUrlModal(false)}>
+          <div className="bg-gray-800 rounded-lg p-4 w-96" onClick={e => e.stopPropagation()}>
+            <p className="text-white text-sm mb-3">검색 URL 설정</p>
+            <input
+              autoFocus
+              value={searchUrl}
+              onChange={e => { setSearchUrl(e.target.value); localStorage.setItem('files:searchUrl', e.target.value) }}
+              placeholder="https://xxx.com/"
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setShowUrlModal(false) }}
+              className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 mb-3"
+            />
+            <div className="flex justify-end">
+              <button onClick={() => setShowUrlModal(false)} className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded">확인</button>
             </div>
           </div>
         </div>

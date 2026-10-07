@@ -426,4 +426,22 @@ export function registerFilesHandlers(): void {
     }
     return { ok: true, moved }
   })
+
+  ipcMain.handle('temp:removeString', async (_e, folderPath: string, str: string) => {
+    if (!str) return { ok: false, error: '제거할 문자열이 없습니다' }
+    try {
+      const entries = await fs.promises.readdir(folderPath)
+      let count = 0
+      for (const entry of entries) {
+        if (!entry.includes(str)) continue
+        const newName = entry.replaceAll(str, '')
+        if (!newName || newName === entry) continue
+        await fs.promises.rename(path.join(folderPath, entry), path.join(folderPath, newName))
+        count++
+      }
+      return { ok: true, count }
+    } catch (err: unknown) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
 }

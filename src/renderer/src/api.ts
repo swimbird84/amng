@@ -130,6 +130,7 @@ export const tempApi = {
   renameFile: (folderPath: string, oldName: string, newName: string) => api.invoke('temp:renameFile', folderPath, oldName, newName) as Promise<{ ok: boolean; error?: string }>,
   deleteFile: (folderPath: string, fileNames: string[]) => api.invoke('temp:deleteFile', folderPath, fileNames) as Promise<{ ok: boolean; deleted: number }>,
   moveToTree: (srcFolder: string, fileNames: string[], targetActorFolder: string, releaseDate: string) => api.invoke('temp:moveToTree', srcFolder, fileNames, targetActorFolder, releaseDate) as Promise<{ ok: boolean; moved: string[] }>,
+  removeString: (folderPath: string, str: string) => api.invoke('temp:removeString', folderPath, str) as Promise<{ ok: boolean; error?: string; count?: number }>,
 }
 
 export const workFilesApi = {
