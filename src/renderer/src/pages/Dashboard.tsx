@@ -267,15 +267,14 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
       if (seasons.length > 0) setCurrentSeasonName(seasons[0].name)
     })
     masterRankingApi.list({ type: 'work', limit: 50 }).then((d: any) => {
-      const rows = d.rows as { rank: number; id: number; title: string; product_number: string; cover_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]
-      // Get top 10 ranks (include ties at rank 10)
-      const cutoff = rows.length > 0 ? (rows.find((_r: any, i: number) => i >= 10 && rows[i].rank > rows[9]?.rank)?.rank ?? rows[rows.length - 1]?.rank + 1) : 0
+      const rows = (d.rows as { rank: number; id: number; title: string; product_number: string; cover_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]).filter(r => r.total_points > 0)
+      const cutoff = rows.length > 0 && rows.length > 10 ? (rows.find((_r: any, i: number) => i >= 10 && rows[i].rank > rows[9]?.rank)?.rank ?? rows[rows.length - 1]?.rank + 1) : Infinity
       const filtered = rows.filter(r => r.rank < cutoff || r.rank <= 10)
       setMasterWorkRows(filtered.map(r => ({ rank: r.rank, id: r.id, name: r.product_number || r.title || `#${r.id}`, photo_path: r.cover_path, total_points: r.total_points, master_run_count: r.master_run_count, cup_wins: r.cup_wins })))
     })
     masterRankingApi.list({ type: 'actor', limit: 50 }).then((d: any) => {
-      const rows = d.rows as { rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]
-      const cutoff = rows.length > 0 ? (rows.find((_r: any, i: number) => i >= 10 && rows[i].rank > rows[9]?.rank)?.rank ?? rows[rows.length - 1]?.rank + 1) : 0
+      const rows = (d.rows as { rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]).filter(r => r.total_points > 0)
+      const cutoff = rows.length > 0 && rows.length > 10 ? (rows.find((_r: any, i: number) => i >= 10 && rows[i].rank > rows[9]?.rank)?.rank ?? rows[rows.length - 1]?.rank + 1) : Infinity
       const filtered = rows.filter(r => r.rank < cutoff || r.rank <= 10)
       setMasterActorRows(filtered)
     })
@@ -450,7 +449,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 신작 */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-white font-bold text-base">신작 ({newWorks.length})</h2>
+            <h2 className="text-white font-bold text-base">신작<span className="font-normal text-gray-400">({newWorks.length})</span></h2>
             <span className="text-xs text-gray-500">({today} 기준 1개월)</span>
             <button
               onClick={() => setExpandedWorks((v) => !v)}
@@ -473,7 +472,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         {/* 신인 */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-white font-bold text-base">신인 ({newActors.length})</h2>
+            <h2 className="text-white font-bold text-base">신인<span className="font-normal text-gray-400">({newActors.length})</span></h2>
             <span className="text-xs text-gray-500">({today} 기준 3년)</span>
             <button
               onClick={() => setExpandedActors((v) => !v)}
@@ -506,7 +505,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
         <div>
           <SectionTitle>신규 등록 <span className="text-xs text-gray-500 font-normal">({today} 기준 1개월)</span></SectionTitle>
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-gray-300 font-bold text-sm">작품 ({recentWorks.length})</h3>
+            <h3 className="text-gray-300 font-bold text-sm">작품<span className="font-normal text-gray-500">({recentWorks.length})</span></h3>
             <button
               onClick={() => setExpandedRecent((v) => !v)}
               className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
@@ -524,7 +523,7 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             <p className="text-gray-500 text-sm mb-4">최근 1개월 내 등록된 작품이 없습니다</p>
           )}
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-gray-300 font-bold text-sm">배우 ({recentActors.length})</h3>
+            <h3 className="text-gray-300 font-bold text-sm">배우<span className="font-normal text-gray-500">({recentActors.length})</span></h3>
             <button
               onClick={() => setExpandedRecentActors((v) => !v)}
               className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
