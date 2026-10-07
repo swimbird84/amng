@@ -379,6 +379,7 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
   const [tree, setTree] = useState<FolderNode[]>([])
   const [loading, setLoading] = useState(true)
   const [toggleKey, setToggleKey] = useState(0)
+  const [expanded, setExpanded] = useState(false)
   const [search, setSearch] = useState('')
   const [searchField, setSearchField] = useState<SearchField>(() => (localStorage.getItem(SEARCH_FIELD_KEY) as SearchField) || 'folder')
   const [sortField, setSortField] = useState<SortField>(() => (localStorage.getItem(SORT_BY_KEY) as SortField) || 'name')
@@ -466,18 +467,18 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
     <div className="h-full flex gap-2 p-4 overflow-hidden cursor-default">
       {/* Left: Folder Tree */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center gap-3 mb-2 shrink-0">
-          <div className="flex items-center gap-1">
-            <button onClick={handleExpandAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 펼치기</button>
-            <button onClick={handleCollapseAll} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">전체 접기</button>
-          </div>
+        <div className="flex items-center gap-2 mb-3 shrink-0">
+          <button
+            onClick={() => { if (expanded) handleCollapseAll(); else handleExpandAll(); setExpanded(!expanded) }}
+            className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
+          >{expanded
+            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+          }</button>
           <button
             onClick={loadTree}
             className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
           ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>
-          <span className="text-gray-500 text-sm">총 {totalFolders}개 폴더</span>
-        </div>
-        <div className="flex items-center gap-3 mb-3 shrink-0">
           <div className="flex items-center gap-1">
             <select
               value={sortField}
@@ -505,10 +506,10 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="검색"
-              className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded-r focus:outline-none focus:ring-1 focus:ring-blue-500 w-44"
+              className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded-r focus:outline-none focus:ring-1 focus:ring-blue-500 w-32"
             />
           </div>
-          {search.trim() && <span className="text-gray-500 text-sm">검색 결과: {countAllFolders(displayTree)}개</span>}
+          <span className="text-gray-500 text-sm">총 {totalFolders}개{search.trim() ? ` (${countAllFolders(displayTree)})` : ''}</span>
         </div>
         <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
           {loading ? (
