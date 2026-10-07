@@ -296,13 +296,15 @@ export function registerFilesHandlers(): void {
         }
       }
 
-      const result: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null }[] = []
+      const result: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null; fileSize: number }[] = []
       for (const name of fileNames) {
         const ext = path.extname(name).toLowerCase()
         if (!VIDEO_EXTS.has(ext)) continue
         const base = path.basename(name, ext)
         const thumb = imageMap.get(base.toLowerCase()) ?? null
-        result.push({ fileName: name, baseName: base, videoPath: path.join(folderPath, name), thumbPath: thumb })
+        let fileSize = 0
+        try { fileSize = (await fs.promises.stat(path.join(folderPath, name))).size } catch { /* skip */ }
+        result.push({ fileName: name, baseName: base, videoPath: path.join(folderPath, name), thumbPath: thumb, fileSize })
       }
       result.sort((a, b) => a.fileName.localeCompare(b.fileName))
       return { ok: true, files: result }

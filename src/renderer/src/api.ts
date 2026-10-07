@@ -126,7 +126,7 @@ export const folderApi = {
 }
 
 export const tempApi = {
-  listFiles: (folderPath: string) => api.invoke('temp:listFiles', folderPath) as Promise<{ ok: boolean; error?: string; files: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null }[] }>,
+  listFiles: (folderPath: string) => api.invoke('temp:listFiles', folderPath) as Promise<{ ok: boolean; error?: string; files: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null; fileSize: number }[] }>,
   renameFile: (folderPath: string, oldName: string, newName: string) => api.invoke('temp:renameFile', folderPath, oldName, newName) as Promise<{ ok: boolean; error?: string }>,
   deleteFile: (folderPath: string, fileNames: string[]) => api.invoke('temp:deleteFile', folderPath, fileNames) as Promise<{ ok: boolean; deleted: number }>,
   moveToTree: (srcFolder: string, fileNames: string[], targetActorFolder: string, releaseDate: string) => api.invoke('temp:moveToTree', srcFolder, fileNames, targetActorFolder, releaseDate) as Promise<{ ok: boolean; moved: string[] }>,

@@ -6,6 +6,15 @@ interface TempFile {
   baseName: string
   videoPath: string
   thumbPath: string | null
+  fileSize: number
+}
+
+function formatFileSize(bytes: number | undefined): string {
+  if (!bytes || isNaN(bytes)) return '-'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
 interface Props {
@@ -27,6 +36,8 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   const [searchUrl, setSearchUrl] = useState(() => localStorage.getItem('files:searchUrl') || '')
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [removeStr, setRemoveStr] = useState(() => localStorage.getItem('files:removeString') || '')
+  const [viewMode, setViewMode] = useState<'icon' | 'list'>(() => (localStorage.getItem('files:viewMode') as 'icon' | 'list') || 'icon')
+  const [listSort, setListSort] = useState<{ col: 'name' | 'ext' | 'size'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' })
   const [newName, setNewName] = useState('')
   const [thumbCache, setThumbCache] = useState<Map<string, string>>(new Map())
 
@@ -186,9 +197,16 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
     <div className="h-full flex flex-col" onClick={() => setContextMenu(null)}>
       {/* Header */}
       <div className="flex items-center gap-2 mb-2 shrink-0">
-        <button onClick={() => setShowUrlModal(true)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded" title="검색 URL 설정"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
-        <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
+        <button
+          onClick={() => { const next = viewMode === 'icon' ? 'list' : 'icon'; setViewMode(next); localStorage.setItem('files:viewMode', next) }}
+          className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
+        >{viewMode === 'icon'
+          ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        }</button>
+        <button onClick={() => setShowUrlModal(true)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
         {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
+        <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
         {folderPath && <span className="text-gray-500 text-xs truncate min-w-0">{folderPath}</span>}
         <div className="flex items-center gap-1 ml-auto">
           <input
@@ -228,37 +246,83 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          <div className="grid grid-cols-4 gap-2 p-1">
-            {files.map((file, index) => (
-              <div
-                key={file.fileName}
-                ref={el => { if (el) itemRefs.current.set(file.fileName, el); else itemRefs.current.delete(file.fileName) }}
-                className={`flex flex-col items-center p-2 rounded cursor-pointer transition ${selected.has(file.fileName) ? 'bg-blue-600/30 ring-1 ring-blue-500' : 'hover:bg-gray-800'}`}
-                onClick={e => { e.stopPropagation(); handleClick(index, e) }}
-                onDoubleClick={() => handleDoubleClick(file)}
-                onContextMenu={e => handleContextMenu(e, file.fileName)}
-                draggable
-                onDragStart={e => handleDragStart(e, file)}
-              >
-                <div className="w-full aspect-[4/3] rounded overflow-hidden bg-gray-800 flex items-center justify-center mb-1 relative group/thumb">
-                  {thumbCache.has(file.fileName) ? (
-                    <img src={thumbCache.get(file.fileName)} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-3xl">📹</span>
-                  )}
-                  <button
-                    onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName) }}
-                    className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
-                  ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-                  {searchUrl && <button
-                    onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + file.baseName) }}
-                    className="absolute bottom-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
-                  ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
+          {viewMode === 'icon' ? (
+            <div className="grid grid-cols-4 gap-2 p-1">
+              {files.map((file, index) => (
+                <div
+                  key={file.fileName}
+                  ref={el => { if (el) itemRefs.current.set(file.fileName, el); else itemRefs.current.delete(file.fileName) }}
+                  className={`flex flex-col items-center p-2 rounded cursor-pointer transition ${selected.has(file.fileName) ? 'bg-blue-600/30 ring-1 ring-blue-500' : 'hover:bg-gray-800'}`}
+                  onClick={e => { e.stopPropagation(); handleClick(index, e) }}
+                  onDoubleClick={() => handleDoubleClick(file)}
+                  onContextMenu={e => handleContextMenu(e, file.fileName)}
+                  draggable
+                  onDragStart={e => handleDragStart(e, file)}
+                >
+                  <div className="w-full aspect-[4/3] rounded overflow-hidden bg-gray-800 flex items-center justify-center mb-1 relative group/thumb">
+                    {thumbCache.has(file.fileName) ? (
+                      <img src={thumbCache.get(file.fileName)} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-3xl">📹</span>
+                    )}
+                    <button
+                      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName) }}
+                      className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
+                    ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                    {searchUrl && <button
+                      onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + file.baseName) }}
+                      className="absolute bottom-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
+                    ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
+                  </div>
+                  <span className="text-xs text-gray-300 text-center truncate w-full" title={file.baseName}>{file.baseName}</span>
                 </div>
-                <span className="text-xs text-gray-300 text-center truncate w-full">{file.baseName}</span>
+              ))}
+            </div>
+          ) : (() => {
+            const getExt = (f: TempFile) => f.fileName.includes('.') ? f.fileName.split('.').pop()!.toLowerCase() : ''
+            const sorted = [...files].sort((a, b) => {
+              const m = listSort.dir === 'asc' ? 1 : -1
+              switch (listSort.col) {
+                case 'ext': return m * getExt(a).localeCompare(getExt(b))
+                case 'size': return m * ((a.fileSize || 0) - (b.fileSize || 0))
+                default: return m * a.baseName.localeCompare(b.baseName)
+              }
+            })
+            const toggleSort = (col: 'name' | 'ext' | 'size') => {
+              setListSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+            }
+            const arrow = (col: string) => listSort.col === col ? (listSort.dir === 'asc' ? ' ↑' : ' ↓') : ''
+            // Map sorted index back to original index for selection
+            const origIndexMap = new Map(files.map((f, i) => [f.fileName, i]))
+            return (
+              <div className="p-1">
+                <div className="flex items-center gap-2 px-2 py-1 border-b border-gray-700 text-xs text-gray-400">
+                  <span className="flex-1 min-w-0 cursor-pointer hover:text-white" onClick={() => toggleSort('name')}>파일명{arrow('name')}</span>
+                  <span className="w-14 text-center cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('ext')}>형식{arrow('ext')}</span>
+                  <span className="w-16 text-right cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('size')}>용량{arrow('size')}</span>
+                </div>
+                {sorted.map(file => {
+                  const origIdx = origIndexMap.get(file.fileName) ?? 0
+                  return (
+                    <div
+                      key={file.fileName}
+                      ref={el => { if (el) itemRefs.current.set(file.fileName, el); else itemRefs.current.delete(file.fileName) }}
+                      className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition ${selected.has(file.fileName) ? 'bg-blue-600/30 ring-1 ring-blue-500' : 'hover:bg-gray-800'}`}
+                      onClick={e => { e.stopPropagation(); handleClick(origIdx, e) }}
+                      onDoubleClick={() => handleDoubleClick(file)}
+                      onContextMenu={e => handleContextMenu(e, file.fileName)}
+                      draggable
+                      onDragStart={e => handleDragStart(e, file)}
+                    >
+                      <span className="text-sm text-gray-300 truncate flex-1 min-w-0" title={file.baseName}>{file.baseName}</span>
+                      <span className="text-xs text-gray-500 w-14 text-center shrink-0">{getExt(file)}</span>
+                      <span className="text-xs text-gray-500 w-16 text-right shrink-0">{formatFileSize(file.fileSize)}</span>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            )
+          })()}
           {/* Drag selection rectangle */}
           {dragRect && (
             <div
