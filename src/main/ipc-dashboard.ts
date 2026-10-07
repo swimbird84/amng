@@ -84,6 +84,18 @@ export function registerDashboardHandlers(): void {
     return works.map(w => ({ ...w, rep_tags: repMap.get(w.id as number) ?? [], rep_actors: repActorMap.get(w.id as number) ?? [] }))
   })
 
+  ipcMain.handle('dashboard:recent-actors', () => {
+    return db().prepare(`
+      SELECT a.*,
+        COALESCE((s.face + s.bust + s.hip + s.physical + s.skin + s.acting + s.sexy + s.charm + s.technique + s.proportions) / 13.0, 0) AS avg_score,
+        (SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) AS work_count
+      FROM actors a LEFT JOIN actor_scores s ON s.actor_id = a.id
+      WHERE a.is_deleted = 0 AND a.created_at IS NOT NULL
+        AND a.created_at >= datetime('now', '-1 months')
+      ORDER BY a.created_at DESC, avg_score DESC
+    `).all()
+  })
+
   ipcMain.handle('dashboard:release-years', () => {
     return db().prepare(`
       SELECT strftime('%Y', release_date) AS year, COUNT(*) AS count

@@ -31,6 +31,14 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [lastClicked, setLastClicked] = useState<number | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 1500)
+  }
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileName: string } | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [searchUrl, setSearchUrl] = useState(() => localStorage.getItem('files:searchUrl') || '')
@@ -266,7 +274,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
                       <span className="text-3xl">📹</span>
                     )}
                     <button
-                      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName) }}
+                      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
                       className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
                     ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                     {searchUrl && <button
@@ -398,6 +406,13 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
               <button onClick={() => setShowUrlModal(false)} className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded">확인</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-700 text-white text-sm px-4 py-2 rounded shadow-lg z-50 pointer-events-none animate-fade-in">
+          {toast}
         </div>
       )}
     </div>

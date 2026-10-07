@@ -160,6 +160,7 @@ export const dashboardApi = {
   releaseWorks: (year: string, month: number) => api.invoke('dashboard:release-works', year, month),
   ratingDist: () => api.invoke('dashboard:rating-dist'),
   newActors: () => api.invoke('dashboard:new-actors'),
+  recentActors: () => api.invoke('dashboard:recent-actors'),
   ageDist: () => api.invoke('dashboard:age-dist'),
   actorScoreDist: () => api.invoke('dashboard:actor-score-dist'),
   actorPhysicalDist: () => api.invoke('dashboard:actor-physical-dist'),

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 
 import type { Work, Actor } from '../types'
-import { dashboardApi } from '../api'
+import { dashboardApi, masterRankingApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
@@ -201,7 +201,13 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [recentWorks, setRecentWorks] = useState<Work[]>([])
   const [expandedRecent, setExpandedRecent] = useState(false)
 
+  const [recentActors, setRecentActors] = useState<Actor[]>([])
+  const [expandedRecentActors, setExpandedRecentActors] = useState(false)
+
   const [newActors, setNewActors] = useState<Actor[]>([])
+
+  const [masterWorkRows, setMasterWorkRows] = useState<{ rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]>([])
+  const [masterActorRows, setMasterActorRows] = useState<{ rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]>([])
   const [expandedActors, setExpandedActors] = useState(false)
 
   const [years, setYears] = useState<{ year: string; count: number }[]>([])
@@ -254,6 +260,20 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.newWorks().then((d) => setNewWorks(d as Work[]))
     dashboardApi.recentWorks().then((d) => setRecentWorks(d as Work[]))
     dashboardApi.newActors().then((d) => setNewActors(d as Actor[]))
+    dashboardApi.recentActors().then((d) => setRecentActors(d as Actor[]))
+    masterRankingApi.list({ type: 'work', limit: 50 }).then((d: any) => {
+      const rows = d.rows as { rank: number; id: number; title: string; product_number: string; cover_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]
+      // Get top 10 ranks (include ties at rank 10)
+      const cutoff = rows.length > 0 ? (rows.find((_r: any, i: number) => i >= 10 && rows[i].rank > rows[9]?.rank)?.rank ?? rows[rows.length - 1]?.rank + 1) : 0
+      const filtered = rows.filter(r => r.rank < cutoff || r.rank <= 10)
+      setMasterWorkRows(filtered.map(r => ({ rank: r.rank, id: r.id, name: r.product_number || r.title || `#${r.id}`, photo_path: r.cover_path, total_points: r.total_points, master_run_count: r.master_run_count, cup_wins: r.cup_wins })))
+    })
+    masterRankingApi.list({ type: 'actor', limit: 50 }).then((d: any) => {
+      const rows = d.rows as { rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]
+      const cutoff = rows.length > 0 ? (rows.find((_r: any, i: number) => i >= 10 && rows[i].rank > rows[9]?.rank)?.rank ?? rows[rows.length - 1]?.rank + 1) : 0
+      const filtered = rows.filter(r => r.rank < cutoff || r.rank <= 10)
+      setMasterActorRows(filtered)
+    })
     dashboardApi.releaseYears().then((d) => setYears(d as { year: string; count: number }[]))
     dashboardApi.ageDist().then((d) => setAgeDist(d as (Actor & { age: number; avg_score: number })[]))
     dashboardApi.debutAgeDist().then((d) => setDebutAgeDist(d as (Actor & { debut_age: number; avg_score: number })[]))
@@ -445,29 +465,6 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           )}
         </div>
 
-        {/* 등록 */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-white font-bold text-base">신규 등록</h2>
-            <span className="text-xs text-gray-500">({today} 기준 1개월)</span>
-            <button
-              onClick={() => setExpandedRecent((v) => !v)}
-              className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
-            >
-              {expandedRecent ? '−' : '+'}
-            </button>
-          </div>
-          {recentWorks.length > 0 ? (
-            <div className="grid grid-cols-10 gap-2">
-              {recentWorks.slice(0, expandedRecent ? undefined : 10).map((w) => (
-                <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} dateLabel={((w as any).created_at as string)?.slice(0, 10) || '-'} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-sm">최근 2주 내 등록된 작품이 없습니다</p>
-          )}
-        </div>
-
         {/* 신인 */}
         <div>
           <div className="flex items-center gap-2 mb-3">
@@ -497,6 +494,96 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             </div>
           ) : (
             <p className="text-gray-500 text-sm">데뷔일이 등록된 배우가 없습니다</p>
+          )}
+        </div>
+
+        {/* 신규 등록 */}
+        <div>
+          <SectionTitle>신규 등록 <span className="text-xs text-gray-500 font-normal">({today} 기준 1개월)</span></SectionTitle>
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-gray-300 font-bold text-sm">작품</h3>
+            <button
+              onClick={() => setExpandedRecent((v) => !v)}
+              className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
+            >
+              {expandedRecent ? '−' : '+'}
+            </button>
+          </div>
+          {recentWorks.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2 mb-4">
+              {recentWorks.slice(0, expandedRecent ? undefined : 10).map((w) => (
+                <WorkMiniCard key={w.id} work={w} onClick={() => onNavigateToWork(w.id)} onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)} dateLabel={((w as any).created_at as string)?.slice(0, 10) || '-'} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm mb-4">최근 1개월 내 등록된 작품이 없습니다</p>
+          )}
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-gray-300 font-bold text-sm">배우</h3>
+            <button
+              onClick={() => setExpandedRecentActors((v) => !v)}
+              className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-bold leading-none"
+            >
+              {expandedRecentActors ? '−' : '+'}
+            </button>
+          </div>
+          {recentActors.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2">
+              {recentActors.slice(0, expandedRecentActors ? undefined : 10).map((a, i) => (
+                <ActorRankCard
+                  key={a.id}
+                  actor={a}
+                  rank={i + 1}
+                  subtitle={((a as any).created_at as string)?.slice(0, 10) || '-'}
+                  showRank={false}
+                  onClick={() => onNavigateToActor(a.id)}
+                  onMouseMove={(e) => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">최근 1개월 내 등록된 배우가 없습니다</p>
+          )}
+        </div>
+
+        {/* 마스터 랭킹 */}
+        <div>
+          <SectionTitle>마스터 랭킹</SectionTitle>
+          <h3 className="text-gray-300 font-bold text-sm mb-3">작품 TOP 10</h3>
+          {masterWorkRows.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2 mb-4">
+              {masterWorkRows.map((r) => (
+                <WorkMiniCard
+                  key={r.id}
+                  work={{ id: r.id, product_number: r.name, cover_path: r.photo_path, rating: 0 } as Work}
+                  onClick={() => onNavigateToWork(r.id)}
+                  onMouseMove={(e) => setTooltip({ type: 'work', id: r.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
+                  dateLabel={`#${r.rank} · ${r.total_points}pt`}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm mb-4">마스터 랭킹 데이터가 없습니다</p>
+          )}
+          <h3 className="text-gray-300 font-bold text-sm mb-3">배우 TOP 10</h3>
+          {masterActorRows.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2">
+              {masterActorRows.map((r) => (
+                <ActorRankCard
+                  key={r.id}
+                  actor={{ id: r.id, name: r.name, photo_path: r.photo_path } as Actor}
+                  rank={r.rank}
+                  subtitle={`${r.total_points}pt`}
+                  onClick={() => onNavigateToActor(r.id)}
+                  onMouseMove={(e) => setTooltip({ type: 'actor', id: r.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">마스터 랭킹 데이터가 없습니다</p>
           )}
         </div>
 
