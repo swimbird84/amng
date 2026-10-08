@@ -22,10 +22,15 @@ export default function Worldcup({
   const [selectedTab, setSelectedTab] = useState<'match' | 'standings'>('match')
   const [selectedRankId, setSelectedRankId] = useState<number | null>(null)
   const [tournaments, setTournaments] = useState<CupTournament[]>([])
-  const [typeFilter, setTypeFilter] = useState<'all' | 'actor' | 'work'>(() => (localStorage.getItem('cup:typeFilter') as 'all' | 'actor' | 'work') || 'all')
-  const [formatFilter, setFormatFilter] = useState<'all' | 'tournament' | 'league' | 'worldcup'>(() => (localStorage.getItem('cup:formatFilter') as 'all' | 'tournament' | 'league' | 'worldcup') || 'all')
-  const [masterFilter, setMasterFilter] = useState<'all' | 'master' | 'normal'>(() => (localStorage.getItem('cup:masterFilter') as 'all' | 'master' | 'normal') || 'all')
-  const [search, setSearch] = useState('')
+  const [typeToggles, setTypeToggles] = useState<{ actor: boolean; work: boolean }>(() => {
+    try { return JSON.parse(localStorage.getItem('cup:typeToggles') || '{"actor":true,"work":true}') } catch { return { actor: true, work: true } }
+  })
+  const [formatToggles, setFormatToggles] = useState<{ tournament: boolean; league: boolean; worldcup: boolean }>(() => {
+    try { return JSON.parse(localStorage.getItem('cup:formatToggles') || '{"tournament":true,"league":true,"worldcup":true}') } catch { return { tournament: true, league: true, worldcup: true } }
+  })
+  const [masterToggles, setMasterToggles] = useState<{ master: boolean; normal: boolean }>(() => {
+    try { return JSON.parse(localStorage.getItem('cup:masterToggles') || '{"master":true,"normal":true}') } catch { return { master: true, normal: true } }
+  })
   const [sortBy, setSortBy] = useState<'created_at' | 'name' | 'last_played'>(() => (localStorage.getItem('cup:sortBy') as 'created_at' | 'name' | 'last_played') || 'created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('cup:sortDir') as 'asc' | 'desc') || 'desc')
   const [showCreate, setShowCreate] = useState(false)
@@ -33,22 +38,35 @@ export default function Worldcup({
   const [statsData, setStatsData] = useState<{ total_runs: number; completed_runs: number; last_run_at: string | null; participated_items: number; run_dist: { run_count: number; count: number }[] } | null>(null)
   const [statsName, setStatsName] = useState('')
 
+  // Derive filter values from toggles (all on or all off = no filter)
+  const typeFilter = (typeToggles.actor === typeToggles.work) ? 'all' : typeToggles.actor ? 'actor' : 'work'
+  const formatFilter = (formatToggles.tournament && formatToggles.league && formatToggles.worldcup) || (!formatToggles.tournament && !formatToggles.league && !formatToggles.worldcup) ? 'all' : null
+  const masterFilter = (masterToggles.master === masterToggles.normal) ? 'all' : masterToggles.master ? 'master' : 'normal'
+
   const loadList = useCallback(async () => {
     const params: Record<string, unknown> = { sortBy, sortDir }
     if (typeFilter !== 'all') params.type = typeFilter
-    if (formatFilter !== 'all') params.format = formatFilter
+    if (formatFilter !== null && formatFilter !== 'all') {
+      // Single format selected
+      const active = Object.entries(formatToggles).filter(([, v]) => v).map(([k]) => k)
+      if (active.length === 1) params.format = active[0]
+    }
     if (masterFilter === 'master') params.isMaster = true
     if (masterFilter === 'normal') params.isMaster = false
-    if (search) params.search = search
     const list = await cupApi.list(params) as CupTournament[]
-    setTournaments(list)
-  }, [typeFilter, formatFilter, masterFilter, search, sortBy, sortDir])
+    // Client-side filter for multiple format toggles
+    const filteredList = formatFilter === null ? list : formatFilter === 'all' ? list : list
+    const formatFiltered = (formatToggles.tournament && formatToggles.league && formatToggles.worldcup) || (!formatToggles.tournament && !formatToggles.league && !formatToggles.worldcup)
+      ? filteredList
+      : filteredList.filter(t => formatToggles[t.format as keyof typeof formatToggles])
+    setTournaments(formatFiltered)
+  }, [typeToggles, formatToggles, masterToggles, sortBy, sortDir])
 
   useEffect(() => { loadList() }, [loadList])
 
-  useEffect(() => { localStorage.setItem('cup:typeFilter', typeFilter) }, [typeFilter])
-  useEffect(() => { localStorage.setItem('cup:formatFilter', formatFilter) }, [formatFilter])
-  useEffect(() => { localStorage.setItem('cup:masterFilter', masterFilter) }, [masterFilter])
+  useEffect(() => { localStorage.setItem('cup:typeToggles', JSON.stringify(typeToggles)) }, [typeToggles])
+  useEffect(() => { localStorage.setItem('cup:formatToggles', JSON.stringify(formatToggles)) }, [formatToggles])
+  useEffect(() => { localStorage.setItem('cup:masterToggles', JSON.stringify(masterToggles)) }, [masterToggles])
   useEffect(() => { localStorage.setItem('cup:sortBy', sortBy) }, [sortBy])
   useEffect(() => { localStorage.setItem('cup:sortDir', sortDir) }, [sortDir])
 
@@ -137,47 +155,37 @@ export default function Worldcup({
             </button>
           </div>
 
-          {/* 검색박스 */}
-          <div className="w-[38rem] shrink-0 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
-            <input
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0 outline-none placeholder-gray-500"
-              placeholder="대회명 검색"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value as 'all' | 'actor' | 'work')}
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-26"
-            >
-              <option value="all">배우+작품</option>
-              <option value="actor">배우</option>
-              <option value="work">작품</option>
-            </select>
-            <select
-              value={formatFilter}
-              onChange={e => setFormatFilter(e.target.value as 'all' | 'tournament' | 'league' | 'worldcup')}
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-26"
-            >
-              <option value="all">대회 전체</option>
-              <option value="tournament">토너먼트</option>
-              <option value="league">리그전</option>
-              <option value="worldcup">월드컵</option>
-            </select>
-            <select
-              value={masterFilter}
-              onChange={e => setMasterFilter(e.target.value as 'all' | 'master' | 'normal')}
-              className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-30"
-            >
-              <option value="all">마스터+일반</option>
-              <option value="master">마스터</option>
-              <option value="normal">일반</option>
-            </select>
+          {/* 필터 토글 */}
+          <div className="flex items-center gap-3 ml-2">
+            <div className="flex">
+              {([['actor', '배우'], ['work', '작품']] as const).map(([key, label], i) => (
+                <button key={key}
+                  onClick={() => setTypeToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                  className={`text-sm px-3 py-1.5 ${i === 0 ? 'rounded-l' : 'rounded-r'} ${typeToggles[key] ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                >{label}</button>
+              ))}
+            </div>
+            <div className="flex">
+              {([['tournament', '토너먼트'], ['league', '리그전'], ['worldcup', '월드컵']] as const).map(([key, label], i, arr) => (
+                <button key={key}
+                  onClick={() => setFormatToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                  className={`text-sm px-3 py-1.5 ${i === 0 ? 'rounded-l' : i === arr.length - 1 ? 'rounded-r' : ''} ${formatToggles[key] ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                >{label}</button>
+              ))}
+            </div>
+            <div className="flex">
+              {([['master', '마스터'], ['normal', '일반']] as const).map(([key, label], i) => (
+                <button key={key}
+                  onClick={() => setMasterToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                  className={`text-sm px-3 py-1.5 ${i === 0 ? 'rounded-l' : 'rounded-r'} ${masterToggles[key] ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                >{label}</button>
+              ))}
+            </div>
             <button
-              onClick={() => { setSearch(''); setTypeFilter('all'); setFormatFilter('all'); setMasterFilter('all') }}
+              onClick={() => { setTypeToggles({ actor: true, work: true }); setFormatToggles({ tournament: true, league: true, worldcup: true }); setMasterToggles({ master: true, normal: true }) }}
               className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0"
             >
-              초기화
+              전체
             </button>
           </div>
 
