@@ -44,6 +44,9 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   const [searchUrl, setSearchUrl] = useState(() => localStorage.getItem('files:searchUrl') || '')
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [removeStr, setRemoveStr] = useState(() => localStorage.getItem('files:removeString') || '')
+  const [urlBookmarks, setUrlBookmarks] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('files:searchUrlBookmarks') || '[]') } catch { return [] }
+  })
   const [viewMode, setViewMode] = useState<'icon' | 'list'>(() => (localStorage.getItem('files:viewMode') as 'icon' | 'list') || 'icon')
   const [listSort, setListSort] = useState<{ col: 'name' | 'ext' | 'size'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' })
   const [newName, setNewName] = useState('')
@@ -214,6 +217,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
         }</button>
         <button onClick={() => setShowUrlModal(true)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
         {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
+        {folderPath && <button onClick={() => shellApi.openPath(folderPath)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>}
         <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
         {folderPath && <span className="text-gray-500 text-xs truncate min-w-0">{folderPath}</span>}
         <div className="flex items-center gap-1 ml-auto">
@@ -393,17 +397,51 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
       {showUrlModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowUrlModal(false)}>
           <div className="bg-gray-800 rounded-lg p-4 w-96" onClick={e => e.stopPropagation()}>
-            <p className="text-white text-sm mb-3">검색 URL 설정</p>
-            <input
-              autoFocus
-              value={searchUrl}
-              onChange={e => { setSearchUrl(e.target.value); localStorage.setItem('files:searchUrl', e.target.value) }}
-              placeholder="https://xxx.com/"
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setShowUrlModal(false) }}
-              className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 mb-3"
-            />
+            <p className="text-white text-sm font-bold mb-3">검색 URL 설정</p>
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                autoFocus
+                value={searchUrl}
+                onChange={e => { setSearchUrl(e.target.value); localStorage.setItem('files:searchUrl', e.target.value) }}
+                placeholder="https://xxx.com/"
+                onKeyDown={e => { if (e.key === 'Escape') setShowUrlModal(false) }}
+                className="flex-1 bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                onClick={() => {
+                  if (!searchUrl.trim() || urlBookmarks.includes(searchUrl.trim())) return
+                  const next = [...urlBookmarks, searchUrl.trim()]
+                  setUrlBookmarks(next)
+                  localStorage.setItem('files:searchUrlBookmarks', JSON.stringify(next))
+                }}
+                className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded shrink-0"
+              >저장</button>
+            </div>
+            {urlBookmarks.length > 0 && (
+              <div className="mb-3">
+                <p className="text-gray-400 text-xs mb-2">즐겨찾기</p>
+                <div className="space-y-1">
+                  {urlBookmarks.map((url, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span
+                        className="text-sm text-gray-300 hover:text-white cursor-pointer truncate flex-1"
+                        onClick={() => { setSearchUrl(url); localStorage.setItem('files:searchUrl', url); setShowUrlModal(false) }}
+                      >{url}</span>
+                      <button
+                        onClick={() => {
+                          const next = urlBookmarks.filter((_, j) => j !== i)
+                          setUrlBookmarks(next)
+                          localStorage.setItem('files:searchUrlBookmarks', JSON.stringify(next))
+                        }}
+                        className="text-red-400 hover:text-red-300 text-sm shrink-0"
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex justify-end">
-              <button onClick={() => setShowUrlModal(false)} className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded">확인</button>
+              <button onClick={() => setShowUrlModal(false)} className="text-sm text-gray-300 bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded">닫기</button>
             </div>
           </div>
         </div>
