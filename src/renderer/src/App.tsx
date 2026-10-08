@@ -9,10 +9,11 @@ import Tags from './pages/Tags'
 import Labels from './pages/Labels'
 import Worldcup from './pages/Worldcup'
 import Files from './pages/Files'
+import Tier from './pages/Tier'
 import ActorDetailModal from './components/ActorDetailModal'
 import WorkDetailModal from './components/WorkDetailModal'
 
-type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'labels' | 'tags' | 'worldcup' | 'files'
+type Tab = 'home' | 'dashboard' | 'ranking' | 'works' | 'actors' | 'labels' | 'tags' | 'worldcup' | 'files' | 'tier'
 type ViewEntry = { type: 'actor'; id: number } | { type: 'work'; id: number }
 
 function App() {
@@ -85,6 +86,16 @@ function App() {
             }`}
           >
             파일
+          </button>
+          <button
+            onClick={() => setTabAndSave('tier')}
+            className={`px-4 py-3 text-sm border-b-2 transition ${
+              tab === 'tier'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            티어
           </button>
           <button
             onClick={() => setTabAndSave('ranking')}
@@ -168,6 +179,7 @@ function App() {
           />
         )}
         {tab === 'files' && <Files onNavigateToActor={handleNavigateToActor} onNavigateToWork={handleNavigateToWork} />}
+        {tab === 'tier' && <Tier onNavigateToActor={handleNavigateToActor} onNavigateToWork={handleNavigateToWork} />}
       </main>
 
       {tab === 'home' && <span className="fixed bottom-2 right-3 text-xs text-gray-600 pointer-events-none select-none">v{version}</span>}
