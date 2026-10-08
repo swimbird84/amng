@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useEscHandler } from '../escManager'
 import type { Work, Tag, Actor } from '../types'
-import { worksApi, shellApi } from '../api'
+import { worksApi, shellApi, tierApi } from '../api'
 import WorkForm from './WorkForm'
 import ImagePreview from './ImagePreview'
 import Rating from './Rating'
@@ -25,6 +25,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
   const [refreshKey, setRefreshKey] = useState(0)
   const [actorTooltip, setActorTooltip] = useState<TooltipState | null>(null)
   const [showMasterRecord, setShowMasterRecord] = useState(false)
+  const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string } | null>(null)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -40,6 +41,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
     const files = detail.files ?? []
     const results = await Promise.all(files.map((f) => f.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(f.file_path)))
     setFileStatuses(Object.fromEntries(files.map((f, i) => [f.id, results[i]])))
+    tierApi.getMasterTier('work', workId).then(t => setMasterTier(t))
   }
 
   useEffect(() => { loadWork() }, [workId])
@@ -116,6 +118,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
             <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-5 space-y-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-white font-bold text-lg">{work.product_number || '-'}</h3>
+                {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name}</span>}
                 {!!work.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                 <button
                   onClick={handleToggleFavorite}

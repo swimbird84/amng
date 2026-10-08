@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import type { Actor, Work } from '../types'
 import ImagePreview from './ImagePreview'
-import { actorsApi, worksApi } from '../api'
+import { actorsApi, worksApi, tierApi } from '../api'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData, type PhysicalStats } from './PhysicalCorrectionModal'
 
 // ---------- Module-level physics stats cache ----------
@@ -57,7 +57,7 @@ function ratingStars(rating: number): string {
   return '★'.repeat(full) + (half ? '☆' : '')
 }
 
-function WorkContent({ work }: { work: Work }) {
+function WorkContent({ work, masterTier }: { work: Work; masterTier?: { tier_name: string; tier_color: string } | null }) {
   const repActors = work.rep_actors ?? []
   const repIds = new Set(repActors.map((a) => a.id))
   const otherActors = (work.actors ?? [])
@@ -85,6 +85,7 @@ function WorkContent({ work }: { work: Work }) {
         <div className="flex items-center justify-between">
           <p className="font-bold text-gray-300">
             {work.product_number}
+            {masterTier && <span className="ml-1 font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name}</span>}
             {!!work.is_favorite && <span className="ml-1 text-pink-500 font-normal">♥</span>}
             {!!work.delete_pending && <span className="ml-1 text-red-500 font-normal text-[11px]">삭제예정</span>}
           </p>
@@ -98,7 +99,7 @@ function WorkContent({ work }: { work: Work }) {
   )
 }
 
-function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | null }) {
+function ActorContent({ actor, physScore, masterTier }: { actor: Actor; physScore: number | null; masterTier?: { tier_name: string; tier_color: string } | null }) {
   const s = actor.scores
   const hasBody = !!(actor.height || actor.bust || actor.waist || actor.hip || actor.cup)
   const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
@@ -119,6 +120,7 @@ function ActorContent({ actor, physScore }: { actor: Actor; physScore: number | 
     <div className="space-y-1 leading-relaxed">
       <p className="font-bold text-white text-[13px]">
         {actor.name}{' '}
+        {masterTier && <span className="font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name}</span>}{' '}
         {!!actor.is_favorite && <span className="text-pink-500 font-normal">♥</span>}{' '}
         {!!actor.delete_pending && <span className="text-red-500 font-normal text-[11px]">삭제예정</span>}{' '}
         <span className="text-gray-400 font-normal">(총작품 : {actor.work_count ?? 0}편)</span>
@@ -191,11 +193,14 @@ export default function CardTooltip({ tooltip }: Props) {
   const [work, setWork] = useState<Work | null>(null)
   const [actor, setActor] = useState<Actor | null>(null)
   const [physScore, setPhysScore] = useState<number | null>(null)
+  const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string } | null>(null)
 
   useEffect(() => {
     setWork(null)
     setActor(null)
     setPhysScore(null)
+    setMasterTier(null)
+    tierApi.getMasterTier(tooltip.type, tooltip.id).then(t => setMasterTier(t))
     if (tooltip.type === 'work') {
       worksApi.get(tooltip.id).then((d) => setWork(d as Work))
     } else {
@@ -257,9 +262,9 @@ export default function CardTooltip({ tooltip }: Props) {
         {loading ? (
           <p className="text-gray-500 text-[10px]">로딩중...</p>
         ) : tooltip.type === 'work' ? (
-          <WorkContent work={work!} />
+          <WorkContent work={work!} masterTier={masterTier} />
         ) : (
-          <ActorContent actor={actor!} physScore={physScore} />
+          <ActorContent actor={actor!} physScore={physScore} masterTier={masterTier} />
         )}
       </div>
       {coverPath && (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useEscHandler } from '../escManager'
 import type { Actor, Tag, Work } from '../types'
-import { actorsApi, actorTagsApi, shellApi } from '../api'
+import { actorsApi, actorTagsApi, shellApi, tierApi } from '../api'
 import ActorForm from './ActorForm'
 import ImagePreview from './ImagePreview'
 import Rating from './Rating'
@@ -37,6 +37,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   const [refreshKey, setRefreshKey] = useState(0)
   const [showMasterRecord, setShowMasterRecord] = useState(false)
   const [showWorksModal, setShowWorksModal] = useState(false)
+  const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string } | null>(null)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -61,6 +62,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
       const me = physData.find(a => a.id === actorId)
       if (me && stats) setPhysScore(calcPhysicalScore(me, settings, stats) ?? null)
     } catch { /* ignore */ }
+    tierApi.getMasterTier('actor', actorId).then(t => setMasterTier(t))
   }
 
   useEffect(() => { loadActor() }, [actorId])
@@ -153,6 +155,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               <div className="flex-1 pt-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-white font-bold text-lg">{actor.name}</h3>
+                  {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name}</span>}
                   {!!actor.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                   <button
                     onClick={() => setShowWorksModal(true)}

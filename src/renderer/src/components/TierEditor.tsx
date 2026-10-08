@@ -52,6 +52,8 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   const [newLevelName, setNewLevelName] = useState('')
   const [newLevelColor, setNewLevelColor] = useState(DEFAULT_COLORS[0])
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [draggingId, setDraggingId] = useState<number | null>(null)
+  const [dropIndicator, setDropIndicator] = useState<{ levelId: number; index: number } | null>(null)
 
   const POOL_LIMIT = 100
 
@@ -118,15 +120,45 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     e.dataTransfer.effectAllowed = 'move'
     if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null }
     setTooltip(null)
+    setDraggingId(itemId)
+    // Semi-transparent drag image
+    const el = e.currentTarget as HTMLElement
+    if (el) { e.dataTransfer.setDragImage(el, 28, 28) }
+  }
+
+  const handleDragEnd = () => {
+    setDraggingId(null)
+    setDropIndicator(null)
+  }
+
+  const calcDropIndex = (e: React.DragEvent, levelId: number) => {
+    const container = e.currentTarget as HTMLElement
+    const children = Array.from(container.querySelectorAll('[data-tier-item]')) as HTMLElement[]
+    for (let i = 0; i < children.length; i++) {
+      const rect = children[i].getBoundingClientRect()
+      if (e.clientX < rect.left + rect.width / 2) return i
+    }
+    return children.length
+  }
+
+  const handleDragOverLevel = (e: React.DragEvent, levelId: number) => {
+    e.preventDefault()
+    const idx = calcDropIndex(e, levelId)
+    setDropIndicator({ levelId, index: idx })
+  }
+
+  const handleDragLeaveLevel = () => {
+    setDropIndicator(null)
   }
 
   const handleDropOnLevel = async (e: React.DragEvent, levelId: number) => {
     e.preventDefault()
     const itemId = parseInt(e.dataTransfer.getData('text/plain'))
     if (isNaN(itemId)) return
-    const levelItems = getItemsForLevel(levelId)
-    const sortOrder = levelItems.length
-    await tierApi.setItem(setId, levelId, itemId, sortOrder)
+    const idx = calcDropIndex(e, levelId)
+    await tierApi.setItem(setId, levelId, itemId, idx)
+    setDraggingId(null)
+    setDropIndicator(null)
     loadItems()
     loadUnplaced(unplacedOffset)
   }
@@ -136,6 +168,8 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     const itemId = parseInt(e.dataTransfer.getData('text/plain'))
     if (isNaN(itemId)) return
     await tierApi.removeItem(setId, itemId)
+    setDraggingId(null)
+    setDropIndicator(null)
     loadItems()
     loadUnplaced(unplacedOffset)
   }
@@ -193,22 +227,32 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
               {/* Items area */}
               <div
                 className="flex-1 flex flex-wrap gap-1 p-1 bg-gray-800 border border-gray-700 min-h-[64px] items-start content-start"
-                onDragOver={e => e.preventDefault()}
+                onDragOver={e => handleDragOverLevel(e, level.id)}
+                onDragLeave={handleDragLeaveLevel}
                 onDrop={e => handleDropOnLevel(e, level.id)}
               >
-                {levelItems.map(item => (
-                  <div
-                    key={item.item_id}
-                    className="w-14 h-14 rounded overflow-hidden cursor-pointer border border-gray-600 hover:border-gray-400 transition"
-                    draggable
-                    onDragStart={e => handleDragStart(e, item.item_id)}
-                    onClick={() => handleItemClick(item.item_id)}
-                    onMouseEnter={e => handleMouseEnter(e, item.item_id)}
-                    onMouseLeave={handleMouseLeave}
-                  >
-                    <ImagePreview path={item.photo_path} alt={item.name} className="w-full h-full" />
+                {levelItems.map((item, idx) => (
+                  <div key={item.item_id} className="flex items-center">
+                    {dropIndicator?.levelId === level.id && dropIndicator.index === idx && (
+                      <div className="w-1 h-14 bg-blue-500 rounded shrink-0 mr-0.5" />
+                    )}
+                    <div
+                      data-tier-item
+                      className={`w-14 h-14 rounded overflow-hidden cursor-pointer border border-gray-600 hover:border-gray-400 transition ${draggingId === item.item_id ? 'opacity-30' : ''}`}
+                      draggable
+                      onDragStart={e => handleDragStart(e, item.item_id)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => handleItemClick(item.item_id)}
+                      onMouseEnter={e => handleMouseEnter(e, item.item_id)}
+                      onMouseLeave={handleMouseLeave}
+                    >
+                      <ImagePreview path={item.photo_path} alt={item.name} className="w-full h-full" />
+                    </div>
                   </div>
                 ))}
+                {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.length && (
+                  <div className="w-1 h-14 bg-blue-500 rounded shrink-0" />
+                )}
               </div>
 
               {/* Move buttons */}
@@ -265,9 +309,10 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
             {unplaced.map(item => (
               <div
                 key={item.id}
-                className="aspect-square rounded overflow-hidden cursor-pointer border border-gray-700 hover:border-gray-500 transition"
+                className={`aspect-square rounded overflow-hidden cursor-pointer border border-gray-700 hover:border-gray-500 transition ${draggingId === item.id ? 'opacity-30' : ''}`}
                 draggable
                 onDragStart={e => handleDragStart(e, item.id)}
+                onDragEnd={handleDragEnd}
                 onClick={() => handleItemClick(item.id)}
                 onMouseEnter={e => handleMouseEnter(e, item.id)}
                 onMouseLeave={handleMouseLeave}
