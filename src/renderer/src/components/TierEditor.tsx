@@ -214,7 +214,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
         {levels.map(level => {
           const levelItems = getItemsForLevel(level.id)
           return (
-            <div key={level.id} className="flex mb-1" style={{ minHeight: 72 }}>
+            <div key={level.id} className="flex mb-1" style={{ minHeight: 80 }}>
               {/* Label */}
               <div
                 className="w-16 shrink-0 flex items-center justify-center cursor-pointer font-bold text-sm text-white rounded-l"
@@ -226,7 +226,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
 
               {/* Items area */}
               <div
-                className="flex-1 flex flex-wrap gap-1 p-1 bg-gray-800 border border-gray-700 min-h-[64px] items-start content-start"
+                className="flex-1 flex flex-wrap gap-1 p-1 bg-gray-800 border border-gray-700 min-h-[64px] items-stretch content-start"
                 onDragOver={e => handleDragOverLevel(e, level.id)}
                 onDragLeave={handleDragLeaveLevel}
                 onDrop={e => handleDropOnLevel(e, level.id)}
@@ -234,11 +234,11 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                 {levelItems.map((item, idx) => (
                   <div key={item.item_id} className="flex items-center">
                     {dropIndicator?.levelId === level.id && dropIndicator.index === idx && (
-                      <div className="w-1 h-14 bg-blue-500 rounded shrink-0 mr-0.5" />
+                      <div className="w-1 h-full bg-blue-500 rounded shrink-0 mr-0.5" />
                     )}
                     <div
                       data-tier-item
-                      className={`w-14 h-14 rounded overflow-hidden cursor-pointer border border-gray-600 hover:border-gray-400 transition ${draggingId === item.item_id ? 'opacity-30' : ''}`}
+                      className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer border border-gray-600 hover:border-gray-400 transition ${draggingId === item.item_id ? 'opacity-30' : ''} relative`}
                       draggable
                       onDragStart={e => handleDragStart(e, item.item_id)}
                       onDragEnd={handleDragEnd}
@@ -247,11 +247,12 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                       onMouseLeave={handleMouseLeave}
                     >
                       <ImagePreview path={item.photo_path} alt={item.name} className="w-full h-full" />
+                      {!item.photo_path && <span className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] leading-tight text-center px-0.5">{item.name}</span>}
                     </div>
                   </div>
                 ))}
                 {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.length && (
-                  <div className="w-1 h-14 bg-blue-500 rounded shrink-0" />
+                  <div className="w-1 h-full bg-blue-500 rounded shrink-0" />
                 )}
               </div>
 
@@ -309,7 +310,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
             {unplaced.map(item => (
               <div
                 key={item.id}
-                className={`aspect-square rounded overflow-hidden cursor-pointer border border-gray-700 hover:border-gray-500 transition ${draggingId === item.id ? 'opacity-30' : ''}`}
+                className={`${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer border border-gray-700 hover:border-gray-500 transition ${draggingId === item.id ? 'opacity-30' : ''} relative`}
                 draggable
                 onDragStart={e => handleDragStart(e, item.id)}
                 onDragEnd={handleDragEnd}
@@ -318,6 +319,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                 onMouseLeave={handleMouseLeave}
               >
                 <ImagePreview path={item.photo_path} alt={item.name} className="w-full h-full" />
+                {!item.photo_path && <span className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] leading-tight text-center px-0.5">{item.name}</span>}
               </div>
             ))}
           </div>
