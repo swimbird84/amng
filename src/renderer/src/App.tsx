@@ -78,6 +78,26 @@ function App() {
             배우
           </button>
           <button
+            onClick={() => setTabAndSave('labels')}
+            className={`px-4 py-3 text-sm border-b-2 transition ${
+              tab === 'labels'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            레이블
+          </button>
+          <button
+            onClick={() => setTabAndSave('tags')}
+            className={`px-4 py-3 text-sm border-b-2 transition ${
+              tab === 'tags'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            태그
+          </button>
+          <button
             onClick={() => setTabAndSave('files')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'files'
@@ -116,26 +136,6 @@ function App() {
             }`}
           >
             월드컵
-          </button>
-          <button
-            onClick={() => setTabAndSave('labels')}
-            className={`px-4 py-3 text-sm border-b-2 transition ${
-              tab === 'labels'
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            레이블
-          </button>
-          <button
-            onClick={() => setTabAndSave('tags')}
-            className={`px-4 py-3 text-sm border-b-2 transition ${
-              tab === 'tags'
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            태그
           </button>
         </nav>
       </header>
