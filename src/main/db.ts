@@ -509,4 +509,44 @@ export function initDatabase(): void {
   // 미사용 cup_match_points 테이블 제거
   db.exec('DROP TABLE IF EXISTS cup_match_points')
 
+  // 티어메이커 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tier_sets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('actor', 'work')),
+      is_master INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tier_levels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      set_id INTEGER NOT NULL REFERENCES tier_sets(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tier_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      set_id INTEGER NOT NULL REFERENCES tier_sets(id) ON DELETE CASCADE,
+      level_id INTEGER NOT NULL REFERENCES tier_levels(id) ON DELETE CASCADE,
+      item_id INTEGER NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(set_id, item_id)
+    )
+  `)
+
+  // 마스터 티어 자동 생성 (타입별 1개)
+  const masterActorTier = db.prepare("SELECT id FROM tier_sets WHERE type = 'actor' AND is_master = 1").get()
+  if (!masterActorTier) {
+    db.prepare("INSERT INTO tier_sets (name, type, is_master) VALUES ('마스터 배우 티어', 'actor', 1)").run()
+  }
+  const masterWorkTier = db.prepare("SELECT id FROM tier_sets WHERE type = 'work' AND is_master = 1").get()
+  if (!masterWorkTier) {
+    db.prepare("INSERT INTO tier_sets (name, type, is_master) VALUES ('마스터 작품 티어', 'work', 1)").run()
+  }
+
 }

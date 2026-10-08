@@ -6,6 +6,7 @@ import { registerSystemHandlers } from './ipc-system'
 import { registerDashboardHandlers } from './ipc-dashboard'
 import { registerCupHandlers } from './ipc-cup'
 import { registerFilesHandlers } from './ipc-files'
+import { registerTierHandlers } from './ipc-tier'
 
 export function registerIpcHandlers(): void {
   registerWorksHandlers()
@@ -16,4 +17,5 @@ export function registerIpcHandlers(): void {
   registerDashboardHandlers()
   registerCupHandlers()
   registerFilesHandlers()
+  registerTierHandlers()
 }

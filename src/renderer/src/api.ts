@@ -274,3 +274,21 @@ export const masterRankingApi = {
       allMakers: { id: number; name: string; color: string | null; work_count: number; label_count: number; avg_rank: number; best_rank: number; worst_rank: number }[]
     }>,
 }
+
+export const tierApi = {
+  listSets: (params?: { type?: 'actor' | 'work'; isMaster?: boolean; sortBy?: string; sortDir?: string }) => api.invoke('tier:listSets', params),
+  createSet: (data: { name: string; type: 'actor' | 'work'; isMaster?: boolean }) => api.invoke('tier:createSet', data),
+  updateSet: (id: number, data: { name?: string }) => api.invoke('tier:updateSet', id, data),
+  deleteSet: (id: number) => api.invoke('tier:deleteSet', id) as Promise<{ ok: boolean; error?: string }>,
+  setMaster: (id: number) => api.invoke('tier:setMaster', id),
+  listLevels: (setId: number) => api.invoke('tier:listLevels', setId),
+  createLevel: (setId: number, data: { name: string; color: string }) => api.invoke('tier:createLevel', setId, data),
+  updateLevel: (levelId: number, data: { name?: string; color?: string }) => api.invoke('tier:updateLevel', levelId, data),
+  deleteLevel: (levelId: number) => api.invoke('tier:deleteLevel', levelId),
+  moveLevel: (setId: number, levelId: number, direction: 'up' | 'down') => api.invoke('tier:moveLevel', setId, levelId, direction),
+  listItems: (setId: number) => api.invoke('tier:listItems', setId),
+  setItem: (setId: number, levelId: number, itemId: number, sortOrder: number) => api.invoke('tier:setItem', setId, levelId, itemId, sortOrder),
+  removeItem: (setId: number, itemId: number) => api.invoke('tier:removeItem', setId, itemId),
+  getMasterTier: (type: 'actor' | 'work', itemId: number) => api.invoke('tier:getMasterTier', type, itemId) as Promise<{ tier_name: string; tier_color: string } | null>,
+  getUnplacedItems: (setId: number, offset: number, limit: number) => api.invoke('tier:getUnplacedItems', setId, offset, limit) as Promise<{ items: { id: number; name: string; photo_path: string | null }[]; total: number }>,
+}
