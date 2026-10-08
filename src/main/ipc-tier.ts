@@ -1,6 +1,20 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from './db'
 
+const DEFAULT_TIERS = [
+  { name: 'S', color: '#ff4444' },
+  { name: 'A', color: '#ff8c00' },
+  { name: 'B', color: '#ffd700' },
+  { name: 'C', color: '#44bb44' },
+  { name: 'D', color: '#4488ff' },
+  { name: 'F', color: '#4444bb' },
+]
+
+function createDefaultLevels(database: ReturnType<typeof getDatabase>, setId: number) {
+  const insert = database.prepare('INSERT INTO tier_levels (set_id, name, color, sort_order) VALUES (?, ?, ?, ?)')
+  DEFAULT_TIERS.forEach((t, i) => insert.run(setId, t.name, t.color, i))
+}
+
 export function registerTierHandlers(): void {
   const db = () => getDatabase()
 
@@ -56,7 +70,9 @@ export function registerTierHandlers(): void {
       db().prepare('UPDATE tier_sets SET is_master = 0 WHERE type = ? AND is_master = 1').run(data.type)
     }
     const result = db().prepare('INSERT INTO tier_sets (name, type, is_master) VALUES (?, ?, ?)').run(data.name, data.type, data.isMaster ? 1 : 0)
-    return result.lastInsertRowid
+    const setId = result.lastInsertRowid as number
+    createDefaultLevels(db(), setId)
+    return setId
   })
 
   ipcMain.handle('tier:updateSet', (_e, id: number, data: { name?: string }) => {

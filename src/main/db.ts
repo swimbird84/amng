@@ -539,14 +539,25 @@ export function initDatabase(): void {
     )
   `)
 
-  // 마스터 티어 자동 생성 (타입별 1개)
+  // 마스터 티어 자동 생성 (타입별 1개) + 기본 티어 레벨
+  const defaultTiers = [
+    { name: 'S', color: '#ff4444' },
+    { name: 'A', color: '#ff8c00' },
+    { name: 'B', color: '#ffd700' },
+    { name: 'C', color: '#44bb44' },
+    { name: 'D', color: '#4488ff' },
+    { name: 'F', color: '#4444bb' },
+  ]
+  const insertLevel = db.prepare('INSERT INTO tier_levels (set_id, name, color, sort_order) VALUES (?, ?, ?, ?)')
   const masterActorTier = db.prepare("SELECT id FROM tier_sets WHERE type = 'actor' AND is_master = 1").get()
   if (!masterActorTier) {
-    db.prepare("INSERT INTO tier_sets (name, type, is_master) VALUES ('마스터 배우 티어', 'actor', 1)").run()
+    const r = db.prepare("INSERT INTO tier_sets (name, type, is_master) VALUES ('마스터 배우 티어', 'actor', 1)").run()
+    defaultTiers.forEach((t, i) => insertLevel.run(r.lastInsertRowid, t.name, t.color, i))
   }
   const masterWorkTier = db.prepare("SELECT id FROM tier_sets WHERE type = 'work' AND is_master = 1").get()
   if (!masterWorkTier) {
-    db.prepare("INSERT INTO tier_sets (name, type, is_master) VALUES ('마스터 작품 티어', 'work', 1)").run()
+    const r = db.prepare("INSERT INTO tier_sets (name, type, is_master) VALUES ('마스터 작품 티어', 'work', 1)").run()
+    defaultTiers.forEach((t, i) => insertLevel.run(r.lastInsertRowid, t.name, t.color, i))
   }
 
 }
