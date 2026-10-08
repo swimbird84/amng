@@ -546,7 +546,7 @@ export function initDatabase(): void {
     { name: 'B', color: '#ffd700' },
     { name: 'C', color: '#44bb44' },
     { name: 'D', color: '#4488ff' },
-    { name: 'F', color: '#4444bb' },
+    { name: 'F', color: '#888888' },
   ]
   const insertLevel = db.prepare('INSERT INTO tier_levels (set_id, name, color, sort_order) VALUES (?, ?, ?, ?)')
   const masterActorTier = db.prepare("SELECT id FROM tier_sets WHERE type = 'actor' AND is_master = 1").get()

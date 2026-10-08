@@ -7,7 +7,7 @@ const DEFAULT_TIERS = [
   { name: 'B', color: '#ffd700' },
   { name: 'C', color: '#44bb44' },
   { name: 'D', color: '#4488ff' },
-  { name: 'F', color: '#4444bb' },
+  { name: 'F', color: '#888888' },
 ]
 
 function createDefaultLevels(database: ReturnType<typeof getDatabase>, setId: number) {
