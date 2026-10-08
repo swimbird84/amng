@@ -156,7 +156,7 @@ export default function Worldcup({
           </div>
 
           {/* 필터 토글 */}
-          <div className="flex items-center gap-3 ml-2">
+          <div className="flex items-center gap-1.5 bg-gray-800 rounded-lg px-3 py-1.5 ml-2">
             <div className="flex">
               {([['actor', '배우'], ['work', '작품']] as const).map(([key, label], i) => (
                 <button key={key}
