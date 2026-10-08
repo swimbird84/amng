@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { tierApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
+import TierEditor from '../components/TierEditor'
 
 interface TierSet {
   id: number
@@ -79,14 +80,16 @@ export default function Tier({ onNavigateToActor, onNavigateToWork }: Props) {
   }
 
   if (view === 'edit' && selectedSetId !== null) {
+    const selectedSet = sets.find(s => s.id === selectedSetId)
     return (
-      <div className="h-full flex flex-col overflow-hidden p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <button onClick={() => { setView('list'); loadSets() }} className="text-gray-400 hover:text-white text-sm">← 목록</button>
-          <span className="text-white font-bold">티어 편집</span>
-        </div>
-        <p className="text-gray-500 text-sm">Phase 3에서 구현 예정</p>
-      </div>
+      <TierEditor
+        setId={selectedSetId}
+        setName={selectedSet?.name ?? ''}
+        setType={(selectedSet?.type ?? 'actor') as 'actor' | 'work'}
+        onBack={() => { setView('list'); loadSets() }}
+        onNavigateToActor={onNavigateToActor}
+        onNavigateToWork={onNavigateToWork}
+      />
     )
   }
 
