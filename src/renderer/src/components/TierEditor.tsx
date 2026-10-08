@@ -55,6 +55,9 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [dropIndicator, setDropIndicator] = useState<{ levelId: number; index: number } | null>(null)
+  const [poolSort, setPoolSort] = useState('name')
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollAnimRef = useRef<number | null>(null)
 
   const POOL_LIMIT = 100
 
@@ -69,15 +72,18 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   }, [setId])
 
   const loadUnplaced = useCallback(async (offset: number) => {
-    const data = await tierApi.getUnplacedItems(setId, offset, POOL_LIMIT)
+    const data = await tierApi.getUnplacedItems(setId, offset, POOL_LIMIT, poolSort)
     setUnplaced(data.items)
     setUnplacedTotal(data.total)
     setUnplacedOffset(offset)
-  }, [setId])
+  }, [setId, poolSort])
 
   useEffect(() => {
     loadLevels()
     loadItems()
+  }, [loadLevels, loadItems])
+
+  useEffect(() => {
     loadUnplaced(0)
   }, [loadLevels, loadItems, loadUnplaced])
 
@@ -137,7 +143,10 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     const children = Array.from(container.querySelectorAll('[data-tier-item]')) as HTMLElement[]
     for (let i = 0; i < children.length; i++) {
       const rect = children[i].getBoundingClientRect()
-      if (e.clientX < rect.left + rect.width / 2) return i
+      // Check if mouse is in same row (Y overlap) and to the left of center
+      if (e.clientY >= rect.top && e.clientY <= rect.bottom && e.clientX < rect.left + rect.width / 2) return i
+      // If mouse is above this item's row, insert before it
+      if (e.clientY < rect.top) return i
     }
     return children.length
   }
@@ -161,18 +170,26 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     setDraggingId(null)
     setDropIndicator(null)
     loadItems()
-    loadUnplaced(unplacedOffset)
+    // Remove from unplaced pool (don't reload)
+    setUnplaced(prev => prev.filter(i => i.id !== itemId))
+    setUnplacedTotal(prev => prev - 1)
   }
 
   const handleDropOnPool = async (e: React.DragEvent) => {
     e.preventDefault()
     const itemId = parseInt(e.dataTransfer.getData('text/plain'))
     if (isNaN(itemId)) return
+    // Find item info from items before removing
+    const itemInfo = items.find(i => i.item_id === itemId)
     await tierApi.removeItem(setId, itemId)
     setDraggingId(null)
     setDropIndicator(null)
     loadItems()
-    loadUnplaced(unplacedOffset)
+    // Add back to unplaced pool
+    if (itemInfo) {
+      setUnplaced(prev => [...prev, { id: itemInfo.item_id, name: itemInfo.name, photo_path: itemInfo.photo_path }])
+      setUnplacedTotal(prev => prev + 1)
+    }
   }
 
   const handleItemClick = (itemId: number) => {
@@ -189,6 +206,19 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   const handleMouseLeave = () => {
     if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null }
     setTooltip(null)
+  }
+
+  const handleAutoScroll = (e: React.DragEvent) => {
+    const el = scrollRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const EDGE = 60
+    const SPEED = 12
+    if (e.clientY < rect.top + EDGE) {
+      el.scrollTop -= SPEED
+    } else if (e.clientY > rect.bottom - EDGE) {
+      el.scrollTop += SPEED
+    }
   }
 
   const handleFillPool = () => {
@@ -210,7 +240,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4" onDragOver={handleAutoScroll}>
         {/* Tier rows */}
         {levels.map(level => {
           const levelItems = getItemsForLevel(level.id)
@@ -218,7 +248,10 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
           const MAX_ROWS = 3
           const ITEM_HEIGHT = 80
           const maxCollapsedHeight = MAX_ROWS * (ITEM_HEIGHT + 4) + 8
-          const needsExpand = !isExpanded && levelItems.length > 0
+          // Estimate items per row: actor ~80px wide (1:1), work ~119px wide (800/540)
+          const estItemWidth = setType === 'actor' ? 84 : 123
+          const estItemsPerRow = Math.max(1, Math.floor(800 / estItemWidth))
+          const overflows = levelItems.length > estItemsPerRow * MAX_ROWS
           return (
             <div key={level.id} className="mb-1">
               <div className="flex" style={{ minHeight: 80 }}>
@@ -234,20 +267,17 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
 
                 {/* Items area */}
                 <div
-                  className="flex-1 flex flex-wrap gap-1 p-1 bg-gray-800 border border-gray-700 min-h-[64px] items-stretch content-start overflow-hidden"
+                  className={`flex-1 flex flex-wrap gap-1 p-1 border border-gray-700 min-h-[64px] items-stretch content-start overflow-hidden ${dropIndicator?.levelId === level.id && levelItems.length === 0 ? 'bg-gray-700' : 'bg-gray-800'}`}
                   style={!isExpanded ? { maxHeight: maxCollapsedHeight } : undefined}
                   onDragOver={e => handleDragOverLevel(e, level.id)}
                   onDragLeave={handleDragLeaveLevel}
                   onDrop={e => handleDropOnLevel(e, level.id)}
                 >
                   {levelItems.map((item, idx) => (
-                    <div key={item.item_id} className="flex items-center" style={{ height: ITEM_HEIGHT }}>
-                      {dropIndicator?.levelId === level.id && dropIndicator.index === idx && (
-                        <div className="w-1 h-full bg-blue-500 rounded shrink-0 mr-0.5" />
-                      )}
+                    <div key={item.item_id} style={{ height: ITEM_HEIGHT }}>
                       <div
                         data-tier-item
-                        className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer border border-gray-600 hover:border-gray-400 transition ${draggingId === item.item_id ? 'opacity-30' : ''} relative`}
+                        className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer transition ${draggingId === item.item_id ? 'opacity-30' : ''} relative ${dropIndicator?.levelId === level.id && dropIndicator.index === idx ? 'border-l-[3px] border-l-blue-500 border-y border-y-gray-600 border-r border-r-gray-600' : 'border border-gray-600 hover:border-gray-400'}`}
                         draggable
                         onDragStart={e => handleDragStart(e, item.item_id)}
                         onDragEnd={handleDragEnd}
@@ -260,22 +290,27 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                       </div>
                     </div>
                   ))}
-                  {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.length && (
-                    <div className="w-1 bg-blue-500 rounded shrink-0" style={{ height: ITEM_HEIGHT }} />
+                  {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.length && levelItems.length > 0 && (
+                    <div className="w-[3px] bg-blue-500 rounded shrink-0 self-stretch" />
                   )}
                 </div>
 
                 {/* Move buttons */}
-                <div className="w-8 shrink-0 flex flex-col items-center justify-center bg-gray-800 border-r border-y border-gray-700 rounded-r">
-                  <button onClick={() => handleMoveLevel(level.id, 'up')} className="text-gray-400 hover:text-white text-xs py-1">∧</button>
-                  <button onClick={() => handleMoveLevel(level.id, 'down')} className="text-gray-400 hover:text-white text-xs py-1">∨</button>
+                <div className="w-8 shrink-0 flex flex-col bg-gray-800 border-r border-y border-gray-700 rounded-r overflow-hidden">
+                  <button onClick={() => handleMoveLevel(level.id, 'up')} className="flex-1 flex items-center justify-center text-gray-500 hover:bg-gray-700 hover:text-white transition">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6"/></svg>
+                  </button>
+                  <div className="h-px bg-gray-700" />
+                  <button onClick={() => handleMoveLevel(level.id, 'down')} className="flex-1 flex items-center justify-center text-gray-500 hover:bg-gray-700 hover:text-white transition">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
                 </div>
               </div>
-              {needsExpand && (
+              {overflows && (
                 <button
                   onClick={() => setExpandedLevels(prev => { const next = new Set(prev); if (next.has(level.id)) next.delete(level.id); else next.add(level.id); return next })}
-                  className="w-full text-xs text-gray-400 hover:text-white bg-gray-800 border-x border-b border-gray-700 py-0.5 rounded-b"
-                >{isExpanded ? '접기' : `더보기 (${levelItems.length})`}</button>
+                  className="w-full text-xs text-gray-400 hover:text-white bg-gray-800/50 py-0.5 text-center"
+                >{isExpanded ? '접기 −' : `더보기 +`}</button>
               )}
             </div>
           )
@@ -312,6 +347,31 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
         <div className="mt-4 border-t border-gray-700 pt-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-gray-300 text-sm font-bold">미배치<span className="font-normal text-gray-500">({unplacedTotal})</span></span>
+            <select
+              value={poolSort}
+              onChange={e => setPoolSort(e.target.value)}
+              className="bg-gray-700 text-white text-xs px-2 py-1 rounded focus:outline-none"
+            >
+              {setType === 'actor' ? (
+                <>
+                  <option value="name">이름</option>
+                  <option value="avg_score">평점</option>
+                  <option value="work_count">작품수</option>
+                  <option value="birthday">나이</option>
+                  <option value="created_at">등록</option>
+                  <option value="debut_date">데뷔일</option>
+                  <option value="random">랜덤</option>
+                </>
+              ) : (
+                <>
+                  <option value="name">품번</option>
+                  <option value="release_date">발매일</option>
+                  <option value="studio">레이블</option>
+                  <option value="created_at">등록</option>
+                  <option value="random">랜덤</option>
+                </>
+              )}
+            </select>
             <button
               onClick={handleFillPool}
               disabled={!canFill}

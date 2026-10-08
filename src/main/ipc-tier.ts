@@ -191,26 +191,43 @@ export function registerTierHandlers(): void {
     return item ?? null
   })
 
-  ipcMain.handle('tier:getUnplacedItems', (_e, setId: number, offset: number, limit: number) => {
+  ipcMain.handle('tier:getUnplacedItems', (_e, setId: number, offset: number, limit: number, sortBy?: string) => {
     const set = db().prepare('SELECT type FROM tier_sets WHERE id = ?').get(setId) as { type: string } | undefined
     if (!set) return { items: [], total: 0 }
+    const notIn = `id NOT IN (SELECT item_id FROM tier_items WHERE set_id = ?)`
     if (set.type === 'actor') {
-      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0 AND id NOT IN (SELECT item_id FROM tier_items WHERE set_id = ?)`).get(setId) as { cnt: number }).cnt
+      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0 AND ${notIn}`).get(setId) as { cnt: number }).cnt
+      let orderBy = 'a.name'
+      switch (sortBy) {
+        case 'avg_score': orderBy = 'COALESCE((SELECT (s.face+s.bust+s.hip+s.physical+s.skin+s.acting+s.sexy+s.charm+s.technique+s.proportions)/13.0 FROM actor_scores s WHERE s.actor_id = a.id), 0) DESC'; break
+        case 'work_count': orderBy = '(SELECT COUNT(*) FROM work_actors wa WHERE wa.actor_id = a.id) DESC'; break
+        case 'birthday': orderBy = 'a.birthday DESC'; break
+        case 'created_at': orderBy = 'a.created_at DESC'; break
+        case 'debut_date': orderBy = 'a.debut_date DESC'; break
+        case 'random': orderBy = 'RANDOM()'; break
+      }
       const items = db().prepare(`
         SELECT a.id, a.name, a.photo_path
         FROM actors a
-        WHERE a.is_deleted = 0 AND a.id NOT IN (SELECT item_id FROM tier_items WHERE set_id = ?)
-        ORDER BY a.name
+        WHERE a.is_deleted = 0 AND a.${notIn}
+        ORDER BY ${orderBy}
         LIMIT ? OFFSET ?
       `).all(setId, limit, offset)
       return { items, total }
     } else {
-      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM works WHERE id NOT IN (SELECT item_id FROM tier_items WHERE set_id = ?)`).get(setId) as { cnt: number }).cnt
+      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM works WHERE ${notIn}`).get(setId) as { cnt: number }).cnt
+      let orderBy = 'w.product_number, w.title'
+      switch (sortBy) {
+        case 'release_date': orderBy = 'w.release_date DESC'; break
+        case 'studio': orderBy = '(SELECT s.name FROM studios s WHERE s.id = w.studio_id) ASC, w.product_number'; break
+        case 'created_at': orderBy = 'w.created_at DESC'; break
+        case 'random': orderBy = 'RANDOM()'; break
+      }
       const items = db().prepare(`
         SELECT w.id, COALESCE(w.product_number, w.title) AS name, w.cover_path AS photo_path
         FROM works w
-        WHERE w.id NOT IN (SELECT item_id FROM tier_items WHERE set_id = ?)
-        ORDER BY w.product_number, w.title
+        WHERE w.${notIn}
+        ORDER BY ${orderBy}
         LIMIT ? OFFSET ?
       `).all(setId, limit, offset)
       return { items, total }
