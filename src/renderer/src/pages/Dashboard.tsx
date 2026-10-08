@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 
 import type { Work, Actor } from '../types'
-import { dashboardApi, masterRankingApi } from '../api'
+import { dashboardApi, masterRankingApi, tierApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
@@ -209,6 +209,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
   const [masterWorkRows, setMasterWorkRows] = useState<{ rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]>([])
   const [masterActorRows, setMasterActorRows] = useState<{ rank: number; id: number; name: string; photo_path: string | null; total_points: number; master_run_count: number; cup_wins: number }[]>([])
   const [currentSeasonName, setCurrentSeasonName] = useState<string>('')
+  const [topTierWork, setTopTierWork] = useState<{ tierName: string | null; tierColor?: string; items: { id: number; name: string; photo_path: string | null }[] }>({ tierName: null, items: [] })
+  const [topTierActor, setTopTierActor] = useState<{ tierName: string | null; tierColor?: string; items: { id: number; name: string; photo_path: string | null }[] }>({ tierName: null, items: [] })
   const [expandedActors, setExpandedActors] = useState(false)
 
   const [years, setYears] = useState<{ year: string; count: number }[]>([])
@@ -263,6 +265,8 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
     dashboardApi.newActors().then((d) => setNewActors(d as Actor[]))
     dashboardApi.recentActors().then((d) => setRecentActors(d as Actor[]))
     // Load current season and master ranking
+    tierApi.getTopTierItems('work').then(d => setTopTierWork(d))
+    tierApi.getTopTierItems('actor').then(d => setTopTierActor(d))
     masterRankingApi.seasons('actor').then((seasons: any) => {
       if (seasons.length > 0) setCurrentSeasonName(seasons[0].name)
     })
@@ -588,6 +592,46 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             </div>
           ) : (
             <p className="text-gray-500 text-sm">아직 등록된 랭킹이 없습니다</p>
+          )}
+        </div>
+
+        {/* 마스터 티어 */}
+        <div>
+          <SectionTitle>마스터 티어</SectionTitle>
+          <h3 className="text-gray-300 font-bold text-sm mb-3">작품 {topTierWork.tierName && <span style={{ color: topTierWork.tierColor }}>{topTierWork.tierName}</span>} 티어</h3>
+          {topTierWork.items.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2 mb-4">
+              {topTierWork.items.map((r) => (
+                <WorkMiniCard
+                  key={r.id}
+                  work={{ id: r.id, product_number: r.name, cover_path: r.photo_path, rating: 0 } as Work}
+                  onClick={() => onNavigateToWork(r.id)}
+                  onMouseMove={(e) => setTooltip({ type: 'work', id: r.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm mb-4">최상위 티어가 비어있습니다</p>
+          )}
+          <h3 className="text-gray-300 font-bold text-sm mb-3">배우 {topTierActor.tierName && <span style={{ color: topTierActor.tierColor }}>{topTierActor.tierName}</span>} 티어</h3>
+          {topTierActor.items.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2">
+              {topTierActor.items.map((r, i) => (
+                <ActorRankCard
+                  key={r.id}
+                  actor={{ id: r.id, name: r.name, photo_path: r.photo_path } as Actor}
+                  rank={i + 1}
+                  subtitle=""
+                  showRank={false}
+                  onClick={() => onNavigateToActor(r.id)}
+                  onMouseMove={(e) => setTooltip({ type: 'actor', id: r.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">최상위 티어가 비어있습니다</p>
           )}
         </div>
 

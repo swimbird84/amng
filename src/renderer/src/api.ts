@@ -291,4 +291,5 @@ export const tierApi = {
   removeItem: (setId: number, itemId: number) => api.invoke('tier:removeItem', setId, itemId),
   getMasterTier: (type: 'actor' | 'work', itemId: number) => api.invoke('tier:getMasterTier', type, itemId) as Promise<{ tier_name: string; tier_color: string } | null>,
   getUnplacedItems: (setId: number, offset: number, limit: number) => api.invoke('tier:getUnplacedItems', setId, offset, limit) as Promise<{ items: { id: number; name: string; photo_path: string | null }[]; total: number }>,
+  getTopTierItems: (type: 'actor' | 'work') => api.invoke('tier:getTopTierItems', type) as Promise<{ tierName: string | null; tierColor?: string; items: { id: number; name: string; photo_path: string | null }[] }>,
 }

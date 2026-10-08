@@ -216,4 +216,30 @@ export function registerTierHandlers(): void {
       return { items, total }
     }
   })
+
+  ipcMain.handle('tier:getTopTierItems', (_e, type: 'actor' | 'work') => {
+    const set = db().prepare('SELECT id FROM tier_sets WHERE type = ? AND is_master = 1').get(type) as { id: number } | undefined
+    if (!set) return { tierName: null, items: [] }
+    const topLevel = db().prepare('SELECT id, name, color FROM tier_levels WHERE set_id = ? ORDER BY sort_order ASC LIMIT 1').get(set.id) as { id: number; name: string; color: string } | undefined
+    if (!topLevel) return { tierName: null, items: [] }
+    if (type === 'actor') {
+      const items = db().prepare(`
+        SELECT ti.item_id AS id, a.name, a.photo_path, ti.sort_order
+        FROM tier_items ti
+        JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0
+        WHERE ti.set_id = ? AND ti.level_id = ?
+        ORDER BY ti.sort_order ASC
+      `).all(set.id, topLevel.id)
+      return { tierName: topLevel.name, tierColor: topLevel.color, items }
+    } else {
+      const items = db().prepare(`
+        SELECT ti.item_id AS id, COALESCE(w.product_number, w.title) AS name, w.cover_path AS photo_path, ti.sort_order
+        FROM tier_items ti
+        JOIN works w ON w.id = ti.item_id
+        WHERE ti.set_id = ? AND ti.level_id = ?
+        ORDER BY ti.sort_order ASC
+      `).all(set.id, topLevel.id)
+      return { tierName: topLevel.name, tierColor: topLevel.color, items }
+    }
+  })
 }
