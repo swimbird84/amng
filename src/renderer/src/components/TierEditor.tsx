@@ -46,6 +46,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   const [unplacedOffset, setUnplacedOffset] = useState(0)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [editLevel, setEditLevel] = useState<TierLevel | null>(null)
+  const [expandedLevels, setExpandedLevels] = useState<Set<number>>(new Set())
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
   const [showAddLevel, setShowAddLevel] = useState(false)
@@ -213,54 +214,69 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
         {/* Tier rows */}
         {levels.map(level => {
           const levelItems = getItemsForLevel(level.id)
+          const isExpanded = expandedLevels.has(level.id)
+          const MAX_ROWS = 3
+          const ITEM_HEIGHT = 80
+          const maxCollapsedHeight = MAX_ROWS * (ITEM_HEIGHT + 4) + 8
+          const needsExpand = !isExpanded && levelItems.length > 0
           return (
-            <div key={level.id} className="flex mb-1" style={{ minHeight: 80 }}>
-              {/* Label */}
-              <div
-                className="w-16 shrink-0 flex items-center justify-center cursor-pointer font-bold text-sm text-white rounded-l"
-                style={{ backgroundColor: level.color }}
-                onClick={() => { setEditLevel(level); setEditName(level.name); setEditColor(level.color) }}
-              >
-                {level.name}
-              </div>
+            <div key={level.id} className="mb-1">
+              <div className="flex" style={{ minHeight: 80 }}>
+                {/* Label */}
+                <div
+                  className="w-16 shrink-0 flex flex-col items-center justify-center cursor-pointer font-bold text-sm text-white rounded-l"
+                  style={{ backgroundColor: level.color }}
+                  onClick={() => { setEditLevel(level); setEditName(level.name); setEditColor(level.color) }}
+                >
+                  <span>{level.name}</span>
+                  {levelItems.length > 0 && <span className="text-[10px] font-normal opacity-70">({levelItems.length})</span>}
+                </div>
 
-              {/* Items area */}
-              <div
-                className="flex-1 flex flex-wrap gap-1 p-1 bg-gray-800 border border-gray-700 min-h-[64px] items-stretch content-start"
-                onDragOver={e => handleDragOverLevel(e, level.id)}
-                onDragLeave={handleDragLeaveLevel}
-                onDrop={e => handleDropOnLevel(e, level.id)}
-              >
-                {levelItems.map((item, idx) => (
-                  <div key={item.item_id} className="flex items-center">
-                    {dropIndicator?.levelId === level.id && dropIndicator.index === idx && (
-                      <div className="w-1 h-full bg-blue-500 rounded shrink-0 mr-0.5" />
-                    )}
-                    <div
-                      data-tier-item
-                      className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer border border-gray-600 hover:border-gray-400 transition ${draggingId === item.item_id ? 'opacity-30' : ''} relative`}
-                      draggable
-                      onDragStart={e => handleDragStart(e, item.item_id)}
-                      onDragEnd={handleDragEnd}
-                      onClick={() => handleItemClick(item.item_id)}
-                      onMouseEnter={e => handleMouseEnter(e, item.item_id)}
-                      onMouseLeave={handleMouseLeave}
-                    >
-                      <ImagePreview path={item.photo_path} alt={item.name} className="w-full h-full" />
-                      {!item.photo_path && <span className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] leading-tight text-center px-0.5">{item.name}</span>}
+                {/* Items area */}
+                <div
+                  className="flex-1 flex flex-wrap gap-1 p-1 bg-gray-800 border border-gray-700 min-h-[64px] items-stretch content-start overflow-hidden"
+                  style={!isExpanded ? { maxHeight: maxCollapsedHeight } : undefined}
+                  onDragOver={e => handleDragOverLevel(e, level.id)}
+                  onDragLeave={handleDragLeaveLevel}
+                  onDrop={e => handleDropOnLevel(e, level.id)}
+                >
+                  {levelItems.map((item, idx) => (
+                    <div key={item.item_id} className="flex items-center" style={{ height: ITEM_HEIGHT }}>
+                      {dropIndicator?.levelId === level.id && dropIndicator.index === idx && (
+                        <div className="w-1 h-full bg-blue-500 rounded shrink-0 mr-0.5" />
+                      )}
+                      <div
+                        data-tier-item
+                        className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer border border-gray-600 hover:border-gray-400 transition ${draggingId === item.item_id ? 'opacity-30' : ''} relative`}
+                        draggable
+                        onDragStart={e => handleDragStart(e, item.item_id)}
+                        onDragEnd={handleDragEnd}
+                        onClick={() => handleItemClick(item.item_id)}
+                        onMouseEnter={e => handleMouseEnter(e, item.item_id)}
+                        onMouseLeave={handleMouseLeave}
+                      >
+                        <ImagePreview path={item.photo_path} alt={item.name} className="w-full h-full" />
+                        {!item.photo_path && <span className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] leading-tight text-center px-0.5">{item.name}</span>}
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.length && (
-                  <div className="w-1 h-full bg-blue-500 rounded shrink-0" />
-                )}
-              </div>
+                  ))}
+                  {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.length && (
+                    <div className="w-1 bg-blue-500 rounded shrink-0" style={{ height: ITEM_HEIGHT }} />
+                  )}
+                </div>
 
-              {/* Move buttons */}
-              <div className="w-8 shrink-0 flex flex-col items-center justify-center bg-gray-800 border-r border-y border-gray-700 rounded-r">
-                <button onClick={() => handleMoveLevel(level.id, 'up')} className="text-gray-400 hover:text-white text-xs py-1">∧</button>
-                <button onClick={() => handleMoveLevel(level.id, 'down')} className="text-gray-400 hover:text-white text-xs py-1">∨</button>
+                {/* Move buttons */}
+                <div className="w-8 shrink-0 flex flex-col items-center justify-center bg-gray-800 border-r border-y border-gray-700 rounded-r">
+                  <button onClick={() => handleMoveLevel(level.id, 'up')} className="text-gray-400 hover:text-white text-xs py-1">∧</button>
+                  <button onClick={() => handleMoveLevel(level.id, 'down')} className="text-gray-400 hover:text-white text-xs py-1">∨</button>
+                </div>
               </div>
+              {needsExpand && (
+                <button
+                  onClick={() => setExpandedLevels(prev => { const next = new Set(prev); if (next.has(level.id)) next.delete(level.id); else next.add(level.id); return next })}
+                  className="w-full text-xs text-gray-400 hover:text-white bg-gray-800 border-x border-b border-gray-700 py-0.5 rounded-b"
+                >{isExpanded ? '접기' : `더보기 (${levelItems.length})`}</button>
+              )}
             </div>
           )
         })}
