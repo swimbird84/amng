@@ -164,7 +164,7 @@ export default function Tier({ onNavigateToActor, onNavigateToWork }: Props) {
                 onClick={() => handleEdit(s.id)}
               >
                 <div className="relative">
-                  <ImagePreview path={s.thumb_path} alt={s.name} className="w-full h-32" />
+                  <ImagePreview path={s.thumb_path} alt={s.name} className="w-full h-40" />
                   <div className="absolute top-1 left-1 flex gap-1">
                     {s.is_master ? (
                       <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-600 text-white">★ 마스터</span>

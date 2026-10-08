@@ -88,16 +88,6 @@ function App() {
             파일
           </button>
           <button
-            onClick={() => setTabAndSave('tier')}
-            className={`px-4 py-3 text-sm border-b-2 transition ${
-              tab === 'tier'
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            티어
-          </button>
-          <button
             onClick={() => setTabAndSave('ranking')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
               tab === 'ranking'
@@ -106,6 +96,16 @@ function App() {
             }`}
           >
             랭킹
+          </button>
+          <button
+            onClick={() => setTabAndSave('tier')}
+            className={`px-4 py-3 text-sm border-b-2 transition ${
+              tab === 'tier'
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            티어
           </button>
           <button
             onClick={() => setTabAndSave('worldcup')}
