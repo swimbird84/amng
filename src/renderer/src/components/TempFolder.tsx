@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { tempApi, dialogApi, shellApi, imageApi } from '../api'
+import { tempApi, dialogApi, shellApi, imageApi, searchUrlApi } from '../api'
 
 interface TempFile {
   fileName: string
@@ -44,9 +44,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   const [searchUrl, setSearchUrl] = useState(() => localStorage.getItem('files:searchUrl') || '')
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [removeStr, setRemoveStr] = useState(() => localStorage.getItem('files:removeString') || '')
-  const [urlBookmarks, setUrlBookmarks] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('files:searchUrlBookmarks') || '[]') } catch { return [] }
-  })
+  const [urlBookmarks, setUrlBookmarks] = useState<{ id: number; url: string }[]>([])
   const [viewMode, setViewMode] = useState<'icon' | 'list'>(() => (localStorage.getItem('files:viewMode') as 'icon' | 'list') || 'icon')
   const [listSort, setListSort] = useState<{ col: 'name' | 'ext' | 'size'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' })
   const [newName, setNewName] = useState('')
@@ -88,6 +86,10 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   useEffect(() => {
     if (refreshRef) refreshRef.current = loadFiles
   }, [refreshRef, loadFiles])
+
+  const loadUrlBookmarks = () => {
+    searchUrlApi.list().then(list => setUrlBookmarks(list.map(r => ({ id: r.id, url: r.url }))))
+  }
 
   const handleSelectFolder = async () => {
     const result = await dialogApi.openFolder() as string | null
@@ -215,7 +217,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
           ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
           : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         }</button>
-        <button onClick={() => setShowUrlModal(true)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
+        <button onClick={() => { setShowUrlModal(true); loadUrlBookmarks() }} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
         {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
         {folderPath && <button onClick={() => shellApi.openPath(folderPath)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>}
         <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
@@ -408,11 +410,10 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
                 className="flex-1 bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <button
-                onClick={() => {
-                  if (!searchUrl.trim() || urlBookmarks.includes(searchUrl.trim())) return
-                  const next = [...urlBookmarks, searchUrl.trim()]
-                  setUrlBookmarks(next)
-                  localStorage.setItem('files:searchUrlBookmarks', JSON.stringify(next))
+                onClick={async () => {
+                  if (!searchUrl.trim()) return
+                  await searchUrlApi.add(searchUrl.trim())
+                  loadUrlBookmarks()
                 }}
                 className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded shrink-0"
               >저장</button>
@@ -421,17 +422,16 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
               <div className="mb-3">
                 <p className="text-gray-400 text-xs mb-2">즐겨찾기</p>
                 <div className="space-y-1">
-                  {urlBookmarks.map((url, i) => (
-                    <div key={i} className="flex items-center gap-2">
+                  {urlBookmarks.map(bm => (
+                    <div key={bm.id} className="flex items-center gap-2">
                       <span
                         className="text-sm text-gray-300 hover:text-white cursor-pointer truncate flex-1"
-                        onClick={() => { setSearchUrl(url); localStorage.setItem('files:searchUrl', url); setShowUrlModal(false) }}
-                      >{url}</span>
+                        onClick={() => { setSearchUrl(bm.url); localStorage.setItem('files:searchUrl', bm.url); setShowUrlModal(false) }}
+                      >{bm.url}</span>
                       <button
-                        onClick={() => {
-                          const next = urlBookmarks.filter((_, j) => j !== i)
-                          setUrlBookmarks(next)
-                          localStorage.setItem('files:searchUrlBookmarks', JSON.stringify(next))
+                        onClick={async () => {
+                          await searchUrlApi.delete(bm.id)
+                          loadUrlBookmarks()
                         }}
                         className="text-red-400 hover:text-red-300 text-sm shrink-0"
                       >✕</button>

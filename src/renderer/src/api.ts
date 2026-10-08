@@ -151,6 +151,12 @@ export const shellApi = {
   trashFolders: (filePaths: string[]) => api.invoke('shell:trashFolders', filePaths) as Promise<number>,
 }
 
+export const searchUrlApi = {
+  list: () => api.invoke('search-url:list') as Promise<{ id: number; url: string; created_at: string }[]>,
+  add: (url: string) => api.invoke('search-url:add', url) as Promise<{ ok: boolean }>,
+  delete: (id: number) => api.invoke('search-url:delete', id) as Promise<{ ok: boolean }>,
+}
+
 // 대시보드
 export const dashboardApi = {
   newWorks: () => api.invoke('dashboard:new-works'),

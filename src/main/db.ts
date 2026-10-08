@@ -560,4 +560,13 @@ export function initDatabase(): void {
     defaultTiers.forEach((t, i) => insertLevel.run(r.lastInsertRowid, t.name, t.color, i))
   }
 
+  // 검색 URL 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS search_urls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      url TEXT NOT NULL UNIQUE,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
 }

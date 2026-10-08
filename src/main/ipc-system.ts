@@ -216,4 +216,22 @@ export function registerSystemHandlers(): void {
     const mime = ext === 'jpg' ? 'jpeg' : ext
     return `data:image/${mime};base64,${data.toString('base64')}`
   })
+
+  // ========== 검색 URL ==========
+
+  ipcMain.handle('search-url:list', () => {
+    return db().prepare('SELECT * FROM search_urls ORDER BY created_at DESC').all()
+  })
+
+  ipcMain.handle('search-url:add', (_e, url: string) => {
+    try {
+      db().prepare('INSERT OR IGNORE INTO search_urls (url) VALUES (?)').run(url.trim())
+      return { ok: true }
+    } catch { return { ok: false } }
+  })
+
+  ipcMain.handle('search-url:delete', (_e, id: number) => {
+    db().prepare('DELETE FROM search_urls WHERE id = ?').run(id)
+    return { ok: true }
+  })
 }
