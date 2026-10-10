@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useEscHandler } from '../escManager'
 import type { Work, Tag, Actor } from '../types'
-import { worksApi, shellApi, tierApi } from '../api'
+import { worksApi, shellApi, tierApi, searchUrlApi } from '../api'
 import WorkForm from './WorkForm'
 import ImagePreview from './ImagePreview'
 import Rating from './Rating'
@@ -26,6 +26,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
   const [actorTooltip, setActorTooltip] = useState<TooltipState | null>(null)
   const [showMasterRecord, setShowMasterRecord] = useState(false)
   const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string } | null>(null)
+  const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -42,6 +43,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
     const results = await Promise.all(files.map((f) => f.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(f.file_path)))
     setFileStatuses(Object.fromEntries(files.map((f, i) => [f.id, results[i]])))
     tierApi.getMasterTier('work', workId).then(t => setMasterTier(t))
+    searchUrlApi.getActive().then(url => setActiveSearchUrl(url))
   }
 
   useEffect(() => { loadWork() }, [workId])
@@ -118,6 +120,11 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
             <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-5 space-y-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-white font-bold text-lg">{work.product_number || '-'}</h3>
+                {activeSearchUrl && work.product_number && (
+                  <button onClick={() => shellApi.openExternal(activeSearchUrl + work.product_number)} className="text-gray-400 hover:text-white">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  </button>
+                )}
                 {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name}</span>}
                 {!!work.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                 <button

@@ -156,6 +156,8 @@ export const searchUrlApi = {
   list: () => api.invoke('search-url:list') as Promise<{ id: number; url: string; created_at: string }[]>,
   add: (url: string) => api.invoke('search-url:add', url) as Promise<{ ok: boolean }>,
   delete: (id: number) => api.invoke('search-url:delete', id) as Promise<{ ok: boolean }>,
+  setActive: (id: number) => api.invoke('search-url:setActive', id) as Promise<{ ok: boolean }>,
+  getActive: () => api.invoke('search-url:getActive') as Promise<string | null>,
 }
 
 // 대시보드

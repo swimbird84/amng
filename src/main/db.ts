@@ -569,4 +569,12 @@ export function initDatabase(): void {
     )
   `)
 
+  // 앱 설정 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `)
+
 }

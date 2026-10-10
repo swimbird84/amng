@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work, Tag, Actor, Studio } from '../types'
-import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, masterRankingApi } from '../api'
+import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, masterRankingApi, searchUrlApi } from '../api'
+import SearchUrlModal from '../components/SearchUrlModal'
 import SearchBar, { type WorkSearchParams, DEFAULT_WORK_SEARCH } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
 import WorkDetailModal from '../components/WorkDetailModal'
@@ -41,6 +42,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const [refreshKey, setRefreshKey] = useState(0)
   const [masterPointsMap, setMasterPointsMap] = useState<Map<number, { rank: number; total_points: number; master_run_count: number }>>(new Map())
   const [deleteMode, setDeleteMode] = useState(false)
+  const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
+  const [showUrlModal, setShowUrlModal] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [scanProgress, setScanProgress] = useState<{ phase: 'scanning' | 'registering' | 'done'; current: number; total: number; fileName: string; result?: { added: number; duplicates: number } } | null>(null)
@@ -119,6 +122,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const loadActorList = async () => {
     setActorList(await actorsApi.list({ sortBy: 'name', sortDir: 'asc' }) as Actor[])
   }
+
+  useEffect(() => { searchUrlApi.getActive().then(url => setActiveSearchUrl(url)) }, [])
 
   useEffect(() => {
     setHasMore(true)
@@ -436,7 +441,12 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                   <button onClick={exitDeleteMode} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm">✕</button>
                 </>
               ) : (
-                <button onClick={() => setDeleteMode(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button>
+                <>
+                  <button onClick={() => setDeleteMode(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button>
+                  <button onClick={() => setShowUrlModal(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -479,6 +489,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 onTooltipLeave={() => setTooltip(null)}
                 onToggleFavorite={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
                 onPlay={() => handlePlay(w.id)}
+                onSearch={activeSearchUrl && w.product_number ? (e) => { e.stopPropagation(); shellApi.openExternal(activeSearchUrl + w.product_number) } : undefined}
               />
             ))}
           </div>
@@ -518,6 +529,13 @@ export default function Works({ onNavigateToActor }: WorksProps) {
       )}
 
       {tooltip && <CardTooltip tooltip={tooltip} />}
+
+      {showUrlModal && (
+        <SearchUrlModal
+          onClose={() => setShowUrlModal(false)}
+          onSelect={url => setActiveSearchUrl(url)}
+        />
+      )}
 
       {showForm && (
         <WorkForm

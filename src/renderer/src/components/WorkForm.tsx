@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work, Tag, Actor, Studio, Maker } from '../types'
-import { worksApi, workTagsApi, workTagCategoriesApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi, workTagLinksApi } from '../api'
+import { worksApi, workTagsApi, workTagCategoriesApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi, workTagLinksApi, searchUrlApi } from '../api'
 import Rating from './Rating'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
@@ -25,6 +25,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   )
   const [coverPath, setCoverPath] = useState(work?.cover_path || '')
   const [productNumber, setProductNumber] = useState(work?.product_number || '')
+  const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
   const [releaseDate, setReleaseDate] = useState(work?.release_date || '')
   const [rating, setRating] = useState(work?.rating || 0)
   const [isFavorite, setIsFavorite] = useState(work?.is_favorite ? 1 : 0)
@@ -73,6 +74,8 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const handleStudioDropClose = useCallback(() => { setStudioDropOpen(false); setStudioSearch(''); setStudioHoverIdx(-1) }, [])
 
   useEffect(() => { setStudioHoverIdx(-1) }, [studioSearch])
+
+  useEffect(() => { searchUrlApi.getActive().then(url => setActiveSearchUrl(url)) }, [])
 
   useEffect(() => {
     if (studioHoverIdx < 0) return
@@ -786,7 +789,14 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         {/* 우측 - 타이틀 + 태그 */}
         <div className="w-[500px] border-l border-gray-700 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4">
           <div>
-            <label className="text-sm text-gray-400 block mb-1">타이틀</label>
+            <div className="flex items-center gap-2 mb-1">
+              <label className="text-sm text-gray-400">타이틀</label>
+              {activeSearchUrl && productNumber && (
+                <button onClick={() => shellApi.openExternal(activeSearchUrl + productNumber)} className="text-gray-400 hover:text-white">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                </button>
+              )}
+            </div>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}

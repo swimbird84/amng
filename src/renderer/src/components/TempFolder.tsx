@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { tempApi, dialogApi, shellApi, imageApi, searchUrlApi } from '../api'
+import SearchUrlModal from './SearchUrlModal'
 
 interface TempFile {
   fileName: string
@@ -43,10 +44,9 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   }
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileName: string } | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
-  const [searchUrl, setSearchUrl] = useState(() => localStorage.getItem('files:searchUrl') || '')
+  const [searchUrl, setSearchUrl] = useState('')
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [removeStr, setRemoveStr] = useState(() => localStorage.getItem('files:removeString') || '')
-  const [urlBookmarks, setUrlBookmarks] = useState<{ id: number; url: string }[]>([])
   const [viewMode, setViewMode] = useState<'icon' | 'list'>(() => (localStorage.getItem('files:viewMode') as 'icon' | 'list') || 'icon')
   const [listSort, setListSort] = useState<{ col: 'name' | 'ext' | 'size'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' })
   const [newName, setNewName] = useState('')
@@ -86,12 +86,12 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   useEffect(() => { if (folderPath) loadFiles() }, [folderPath, loadFiles])
 
   useEffect(() => {
+    searchUrlApi.getActive().then(url => { if (url) setSearchUrl(url) })
+  }, [])
+
+  useEffect(() => {
     if (refreshRef) refreshRef.current = loadFiles
   }, [refreshRef, loadFiles])
-
-  const loadUrlBookmarks = () => {
-    searchUrlApi.list().then(list => setUrlBookmarks(list.map(r => ({ id: r.id, url: r.url }))))
-  }
 
   const handleSelectFolder = async () => {
     const result = await dialogApi.openFolder() as string | null
@@ -219,7 +219,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
           ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
           : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         }</button>
-        <button onClick={() => { setShowUrlModal(true); loadUrlBookmarks() }} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
+        <button onClick={() => setShowUrlModal(true)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
         {folderPath && <button
           onClick={async () => {
             const noThumb = files.filter(f => !f.thumbPath)
@@ -424,54 +424,10 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
 
       {/* URL modal */}
       {showUrlModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowUrlModal(false)}>
-          <div className="bg-gray-800 rounded-lg p-4 w-96" onClick={e => e.stopPropagation()}>
-            <p className="text-white text-sm font-bold mb-3">검색 URL 설정</p>
-            <div className="flex items-center gap-2 mb-3">
-              <input
-                autoFocus
-                value={searchUrl}
-                onChange={e => { setSearchUrl(e.target.value); localStorage.setItem('files:searchUrl', e.target.value) }}
-                placeholder="https://xxx.com/"
-                onKeyDown={e => { if (e.key === 'Escape') setShowUrlModal(false) }}
-                className="flex-1 bg-gray-700 text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <button
-                onClick={async () => {
-                  if (!searchUrl.trim()) return
-                  await searchUrlApi.add(searchUrl.trim())
-                  loadUrlBookmarks()
-                }}
-                className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded shrink-0"
-              >저장</button>
-            </div>
-            {urlBookmarks.length > 0 && (
-              <div className="mb-3">
-                <p className="text-gray-400 text-xs mb-2">즐겨찾기</p>
-                <div className="space-y-1">
-                  {urlBookmarks.map(bm => (
-                    <div key={bm.id} className="flex items-center gap-2">
-                      <span
-                        className="text-sm text-gray-300 hover:text-white cursor-pointer truncate flex-1"
-                        onClick={() => { setSearchUrl(bm.url); localStorage.setItem('files:searchUrl', bm.url); setShowUrlModal(false) }}
-                      >{bm.url}</span>
-                      <button
-                        onClick={async () => {
-                          await searchUrlApi.delete(bm.id)
-                          loadUrlBookmarks()
-                        }}
-                        className="text-red-400 hover:text-red-300 text-sm shrink-0"
-                      >✕</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="flex justify-end">
-              <button onClick={() => setShowUrlModal(false)} className="text-sm text-gray-300 bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded">닫기</button>
-            </div>
-          </div>
-        </div>
+        <SearchUrlModal
+          onClose={() => setShowUrlModal(false)}
+          onSelect={url => setSearchUrl(url)}
+        />
       )}
 
       {/* Toast */}

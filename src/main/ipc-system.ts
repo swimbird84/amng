@@ -234,4 +234,16 @@ export function registerSystemHandlers(): void {
     db().prepare('DELETE FROM search_urls WHERE id = ?').run(id)
     return { ok: true }
   })
+
+  ipcMain.handle('search-url:setActive', (_e, id: number) => {
+    db().prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('active_search_url_id', ?)").run(String(id))
+    return { ok: true }
+  })
+
+  ipcMain.handle('search-url:getActive', () => {
+    const setting = db().prepare("SELECT value FROM app_settings WHERE key = 'active_search_url_id'").get() as { value: string } | undefined
+    if (!setting) return null
+    const row = db().prepare('SELECT id, url FROM search_urls WHERE id = ?').get(Number(setting.value)) as { id: number; url: string } | undefined
+    return row?.url ?? null
+  })
 }
