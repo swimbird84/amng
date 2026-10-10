@@ -135,7 +135,9 @@ DB에 등록된 작품 파일 경로(DB 기반)를 트리 구조로 시각화하
 - **아이콘 좌측 하단**: 웹 검색 SVG 돋보기 아이콘 (호버 시 표시) → `shell.openExternal(url + baseName)`
 
 ### 16. 웹 검색 URL
-- 🔗 링크 아이콘 버튼 클릭 → URL 입력 모달 → `localStorage` 저장 (`files:searchUrl`)
+- 🔗 링크 아이콘 버튼 클릭 → URL 입력 모달 (즐겨찾기 저장/선택/삭제)
+- URL 즐겨찾기는 DB 저장 (`search_urls` 테이블)
+- 활성 URL은 `localStorage` 저장 (`files:searchUrl`)
 
 ### 17. 파일명 문자열 일괄 제거
 - 상단 문자열 input에 제거할 문자열 입력 → [제거] 버튼 클릭
@@ -143,7 +145,32 @@ DB에 등록된 작품 파일 경로(DB 기반)를 트리 구조로 시각화하
 - 입력값 `localStorage` 저장 (`files:removeString`)
 - 제거 완료 후 파일 목록 새로고침
 
-### 18. 드래그 앤 드롭 — 임시 폴더 → 트리 배우 폴더
+### 18. 임시 폴더 탐색기 열기
+- 📁 폴더 아이콘 버튼 (🔄 새로고침과 폴더선택 사이)
+- 클릭 시 `shell.openPath(folderPath)` → Windows 탐색기에서 현재 임시 폴더 열기
+
+### 19. 커버 이미지 자동 다운로드
+- 검색 URL 사이트에서 품번 페이지를 파싱하여 커버 이미지를 자동 다운로드
+- 대상: `<a class="bigImage"><img src="...">` 요소의 이미지
+- 다운로드된 이미지는 임시 폴더에 `품번.jpg`로 저장
+
+**일괄 다운로드:**
+- 상단 아이콘 버튼: 🔗 버튼과 🔄 버튼 사이에 다운로드 SVG 아이콘 (↓ + 받침대)
+- 클릭 시 이미지 없는 전체 파일에 대해 순차 다운로드
+- 완료 후 파일 목록 새로고침
+
+**개별 다운로드 (아이콘 모드):**
+- 이미지 없는 파일의 썸네일 우측 상단에 다운로드 아이콘 (📋 복사 버튼 오른쪽)
+- 클릭 시 해당 파일만 다운로드
+
+**개별 다운로드 (목록 모드):**
+- 용량 컬럼 뒤에 기능 컬럼 추가
+- 기능 컬럼에 아이콘 3개: 복사 | 다운로드 | 브라우저이동
+- 복사: 품번 클립보드 복사
+- 다운로드: 해당 품번 커버 이미지 다운로드
+- 브라우저이동: `shell.openExternal(searchUrl + baseName)`
+
+### 20. 드래그 앤 드롭 — 임시 폴더 → 트리 배우 폴더
 - 파일을 드래그하여 왼쪽 트리의 **배우 폴더**에 드롭
 - 배우 폴더 아래에 인라인 발매일 입력 표시:
   - `[YYYY-MM-DD][📅] 품번 [생성][취소]`
@@ -204,6 +231,7 @@ DB에 등록된 작품 파일 경로(DB 기반)를 트리 구조로 시각화하
 | `temp:deleteFile` | `folderPath`, `fileNames[]` | 동영상+이미지 함께 삭제 (다중) |
 | `temp:moveToTree` | `srcFolder`, `fileNames[]`, `targetActorFolder`, `releaseDate` | 폴더 생성 + 파일 이동 + 작품 DB 등록 |
 | `temp:removeString` | `folderPath`, `str` | 전체 파일명에서 문자열 일괄 제거 |
+| `temp:fetchCover` | `baseUrl`, `productNumber`, `savePath` | 웹 페이지 파싱 → 커버 이미지 다운로드 → 저장 |
 
 ### API 함수 (`api.ts`)
 

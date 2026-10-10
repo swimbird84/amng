@@ -1,4 +1,4 @@
-import { ipcMain, shell } from 'electron'
+import { ipcMain, shell, BrowserWindow } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import { getDatabase } from './db'
@@ -521,5 +521,85 @@ export function registerFilesHandlers(): void {
 
     const moved = await moveFilesToActorFolder(srcFolder, fileNames, actorFolderPath, releaseDate, actorId)
     return { ok: true, moved, actorId }
+  })
+
+  ipcMain.handle('temp:fetchCover', async (_e, productNumber: string, saveFolder: string) => {
+    try {
+      const baseUrl = 'https://www.javbus.com'
+      const pageUrl = baseUrl + '/' + productNumber
+
+      const imgUrl: string | null = await new Promise((resolve) => {
+        const win = new BrowserWindow({
+          show: false,
+          width: 800,
+          height: 600,
+          webPreferences: { nodeIntegration: false, contextIsolation: true },
+        })
+
+        const timeout = setTimeout(() => { win.destroy(); resolve(null) }, 15000)
+
+        win.webContents.on('did-finish-load', async () => {
+          try {
+            // Click age verification if present
+            await win.webContents.executeJavaScript(`
+              (function() {
+                var links = document.querySelectorAll('a');
+                for (var i = 0; i < links.length; i++) {
+                  var text = links[i].textContent || '';
+                  if (text.match(/進入|Enter|I am 18|18歲/i)) {
+                    links[i].click();
+                    return 'clicked';
+                  }
+                }
+                return 'none';
+              })()
+            `)
+            // Wait a bit for redirect
+            await new Promise(r => setTimeout(r, 2000))
+            // Extract bigImage src
+            const result = await win.webContents.executeJavaScript(`
+              (function() {
+                var el = document.querySelector('a.bigImage');
+                if (el) return el.getAttribute('href');
+                var img = document.querySelector('.screencap img');
+                if (img) return img.getAttribute('src');
+                return null;
+              })()
+            `)
+            clearTimeout(timeout)
+            win.destroy()
+            if (result) {
+              if (result.startsWith('/')) resolve(baseUrl + result)
+              else if (result.startsWith('http')) resolve(result)
+              else resolve(baseUrl + '/' + result)
+            } else {
+              resolve(null)
+            }
+          } catch {
+            clearTimeout(timeout)
+            win.destroy()
+            resolve(null)
+          }
+        })
+
+        win.loadURL(pageUrl)
+      })
+
+      if (!imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다' }
+
+      // Download image
+      const imgRes = await fetch(imgUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': baseUrl + '/' }
+      })
+      if (!imgRes.ok) return { ok: false, error: `이미지 다운로드 실패 HTTP ${imgRes.status}` }
+      const buffer = Buffer.from(await imgRes.arrayBuffer())
+      const ext = path.extname(imgUrl).split('?')[0] || '.jpg'
+      const savePath = path.join(saveFolder, productNumber + ext)
+      await fs.promises.writeFile(savePath, buffer)
+      return { ok: true, savePath }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+      return { ok: false, error: errMsg }
+    }
   })
 }

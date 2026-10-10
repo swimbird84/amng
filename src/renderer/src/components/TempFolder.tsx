@@ -34,10 +34,12 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, persistent = false) => {
     setToast(msg)
     if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), 1500)
+    if (!persistent) {
+      toastTimer.current = setTimeout(() => setToast(null), 1500)
+    }
   }
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileName: string } | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -218,6 +220,21 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
           : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         }</button>
         <button onClick={() => { setShowUrlModal(true); loadUrlBookmarks() }} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
+        {folderPath && <button
+          onClick={async () => {
+            const noThumb = files.filter(f => !f.thumbPath)
+            if (noThumb.length === 0) { showToast('다운로드할 파일이 없습니다'); return }
+            let count = 0
+            for (let i = 0; i < noThumb.length; i++) {
+              showToast(`${i + 1}/${noThumb.length} 다운로드 중... (${noThumb[i].baseName})`, true)
+              const res = await tempApi.fetchCover(noThumb[i].baseName, folderPath)
+              if (res.ok) count++
+            }
+            showToast(`${count}/${noThumb.length}개 커버 다운로드 완료`)
+            loadFiles()
+          }}
+          className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
+        ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
         {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
         {folderPath && <button onClick={() => shellApi.openPath(folderPath)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>}
         <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
@@ -283,6 +300,10 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
                       onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
                       className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
                     ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                    {!file.thumbPath && <button
+                      onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
+                      className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
+                    ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
                     {searchUrl && <button
                       onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + file.baseName) }}
                       className="absolute bottom-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
@@ -314,6 +335,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
                   <span className="flex-1 min-w-0 cursor-pointer hover:text-white" onClick={() => toggleSort('name')}>파일명{arrow('name')}</span>
                   <span className="w-14 text-center cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('ext')}>형식{arrow('ext')}</span>
                   <span className="w-16 text-right cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('size')}>용량{arrow('size')}</span>
+                  <span className="w-20 text-center shrink-0">기능</span>
                 </div>
                 {sorted.map(file => {
                   const origIdx = origIndexMap.get(file.fileName) ?? 0
@@ -331,6 +353,11 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
                       <span className="text-sm text-gray-300 truncate flex-1 min-w-0" title={file.baseName}>{file.baseName}</span>
                       <span className="text-xs text-gray-500 w-14 text-center shrink-0">{getExt(file)}</span>
                       <span className="text-xs text-gray-500 w-16 text-right shrink-0">{formatFileSize(file.fileSize)}</span>
+                      <span className="w-20 flex items-center justify-center gap-1.5 shrink-0">
+                        <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                        <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                        {searchUrl && <button onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + file.baseName) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
+                      </span>
                     </div>
                   )
                 })}
