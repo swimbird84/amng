@@ -4,6 +4,7 @@ interface Props {
   value: string // YYYY-MM-DD or ''
   onChange: (value: string) => void
   className?: string
+  onPaste?: (e: React.ClipboardEvent) => void
 }
 
 // 숫자만 추출 후 YYYY-MM-DD로 포맷
@@ -20,7 +21,7 @@ function isValidDate(str: string): boolean {
   return !isNaN(d.getTime())
 }
 
-export default function DateInput({ value, onChange, className }: Props) {
+export default function DateInput({ value, onChange, className, onPaste: externalOnPaste }: Props) {
   const [raw, setRaw] = useState(value || '')
 
   useEffect(() => {
@@ -43,6 +44,10 @@ export default function DateInput({ value, onChange, className }: Props) {
   }
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (externalOnPaste) {
+      externalOnPaste(e)
+      if (e.defaultPrevented) return
+    }
     e.preventDefault()
     const pasted = e.clipboardData.getData('text')
     const formatted = toFormatted(pasted)

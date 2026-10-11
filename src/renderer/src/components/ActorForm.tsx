@@ -45,6 +45,25 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     const next = new Set(prev); next.has(field) ? next.delete(field) : next.add(field); return next
   })
   const [aliases, setAliases] = useState(actor?.aliases || '')
+
+  const handleProfilePaste = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData('text')
+    if (!text) return
+    let parsed = false
+    // 생년월일 : 2002-01-30
+    const bdMatch = text.match(/생년월일\s*[:：]\s*(\d{4}-\d{2}-\d{2})/)
+    if (bdMatch) { setBirthday(bdMatch[1]); parsed = true }
+    // 신장 : 148
+    const htMatch = text.match(/신장\s*[:：]\s*(\d+)/)
+    if (htMatch) { setHeight(htMatch[1]); parsed = true }
+    // 신체사이즈 : B81 / W58 / H82
+    const bodyMatch = text.match(/신체사이즈\s*[:：]\s*B(\d+)\s*\/\s*W(\d+)\s*\/\s*H(\d+)/)
+    if (bodyMatch) { setBust(bodyMatch[1]); setWaist(bodyMatch[2]); setHip(bodyMatch[3]); parsed = true }
+    // 컵사이즈 : C
+    const cupMatch = text.match(/컵사이즈\s*[:：]\s*([A-Za-z]+)/)
+    if (cupMatch) { setCup(cupMatch[1].toUpperCase()); parsed = true }
+    if (parsed) e.preventDefault()
+  }
   const [comment, setComment] = useState(actor?.comment || '')
   const [scores, setScores] = useState<ActorScores>(
     actor?.scores ? { ...actor.scores, charm: actor.scores.charm ?? 0, technique: actor.scores.technique ?? 0, proportions: actor.scores.proportions ?? 0 } : { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
@@ -266,6 +285,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                   value={birthday}
                   onChange={setBirthday}
                   className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
+                  onPaste={handleProfilePaste}
                 />
               </div>
               <div>
@@ -291,6 +311,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                     type="number"
                     value={height}
                     onChange={(e) => setHeight(e.target.value)}
+                    onPaste={handleProfilePaste}
                     placeholder="cm"
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
@@ -305,6 +326,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                     type="number"
                     value={bust}
                     onChange={(e) => setBust(e.target.value)}
+                    onPaste={handleProfilePaste}
                     placeholder="cm"
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
@@ -319,6 +341,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                     type="number"
                     value={waist}
                     onChange={(e) => setWaist(e.target.value)}
+                    onPaste={handleProfilePaste}
                     placeholder="cm"
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
@@ -333,6 +356,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                     type="number"
                     value={hip}
                     onChange={(e) => setHip(e.target.value)}
+                    onPaste={handleProfilePaste}
                     placeholder="cm"
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
@@ -347,6 +371,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                       const converted = e.target.value.split('').map(c => KO_TO_CUP[c] ?? c).join('')
                       setCup(converted.toUpperCase())
                     }}
+                    onPaste={handleProfilePaste}
                     placeholder="A"
                     className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
                   />
