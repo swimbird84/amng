@@ -68,6 +68,7 @@ export interface Actor {
   debut_date: string | null
   is_favorite: number
   delete_pending: number
+  is_excluded: number
   height: number | null
   bust: number | null
   waist: number | null

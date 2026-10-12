@@ -665,7 +665,7 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
   }
   const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
   if (t.type === 'actor') {
-    return (database.prepare(`SELECT DISTINCT a.id FROM actors a${extraJoins} WHERE a.is_deleted = 0${filterWhere}`).all(...extraBindings) as { id: number }[]).map(r => r.id)
+    return (database.prepare(`SELECT DISTINCT a.id FROM actors a${extraJoins} WHERE a.is_deleted = 0 AND is_excluded = 0${filterWhere}`).all(...extraBindings) as { id: number }[]).map(r => r.id)
   } else {
     return (database.prepare(`SELECT DISTINCT w.id FROM works w${extraJoins} WHERE 1=1${filterWhere}`).all(...extraBindings) as { id: number }[]).map(r => r.id)
   }
@@ -708,7 +708,7 @@ export function registerCupHandlers(): void {
         (SELECT id FROM cup_runs WHERE tournament_id = t.id AND status = 'completed' AND (season_id IS NULL OR t.is_master = 0) ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cup_runs WHERE tournament_id = t.id AND status = 'completed' ORDER BY id DESC LIMIT 1)
       )
-      LEFT JOIN actors a ON a.id = lc.winner_id AND t.type = 'actor' AND a.is_deleted = 0
+      LEFT JOIN actors a ON a.id = lc.winner_id AND t.type = 'actor' AND a.is_deleted = 0 AND is_excluded = 0
       LEFT JOIN works w ON w.id = lc.winner_id AND t.type = 'work'
       ${where}
       ORDER BY ${isLastPlayed ? `${orderCol} ${dir}, lr.completed_at ${dir}, lr.started_at ${dir}` : `${orderCol} ${dir}`}
@@ -964,7 +964,7 @@ export function registerCupHandlers(): void {
             GROUP BY e.item_id
           ) mrc ON mrc.item_id = a.id
           LEFT JOIN actor_scores sc ON sc.actor_id = a.id
-          WHERE a.is_deleted = 0
+          WHERE a.is_deleted = 0 AND is_excluded = 0
         )
         SELECT ranked.rank, ranked.id, ranked.name, ranked.photo_path, ranked.total_points, ranked.master_run_count,
           ranked.avg_score, ranked.score_rank,
@@ -1309,7 +1309,7 @@ export function registerCupHandlers(): void {
     const ids = rows.map(r => r.opp_id)
     const placeholders = ids.map(() => '?').join(',')
     const infoRows: { id: number; [key: string]: unknown }[] = type === 'actor'
-      ? db().prepare(`SELECT id, name, photo_path FROM actors WHERE id IN (${placeholders}) AND is_deleted = 0`).all(...ids) as any
+      ? db().prepare(`SELECT id, name, photo_path FROM actors WHERE id IN (${placeholders}) AND is_deleted = 0 AND is_excluded = 0`).all(...ids) as any
       : db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id IN (${placeholders})`).all(...ids) as any
     const infoMap = new Map(infoRows.map(r => [r.id, r]))
     return rows.filter(r => r.opp_id != null && infoMap.has(r.opp_id)).map(r => ({ ...r, losses: r.total - r.wins - r.draws, ...infoMap.get(r.opp_id)! }))
@@ -1429,7 +1429,7 @@ export function registerCupHandlers(): void {
           (SELECT COUNT(DISTINCT e2.run_id) FROM cup_entries e2 JOIN cup_runs r2 ON r2.id = e2.run_id AND r2.status = 'completed' ${srf} JOIN cup_tournaments t2 ON t2.id = r2.tournament_id AND t2.is_master = 1 AND t2.type = '${type}' WHERE e2.item_id = r.winner_id) AS entry_count
         FROM cup_runs r
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-        JOIN actors a ON a.id = r.winner_id AND a.is_deleted = 0
+        JOIN actors a ON a.id = r.winner_id AND a.is_deleted = 0 AND is_excluded = 0
         WHERE r.status = 'completed' AND r.winner_id IS NOT NULL ${srf}
         GROUP BY r.winner_id ORDER BY win_count DESC LIMIT 10`
       : `SELECT r.winner_id AS id, COALESCE(w.product_number, w.title) AS name, w.cover_path AS img, COUNT(*) AS win_count,
@@ -1448,7 +1448,7 @@ export function registerCupHandlers(): void {
           r.winner_id, a.name AS winner_name, a.photo_path AS winner_img
         FROM cup_runs r
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-        LEFT JOIN actors a ON a.id = r.winner_id AND a.is_deleted = 0
+        LEFT JOIN actors a ON a.id = r.winner_id AND a.is_deleted = 0 AND is_excluded = 0
         WHERE r.status = 'completed' ${srf}
         ORDER BY r.completed_at DESC`
       : `SELECT r.id AS run_id, t.name AS tournament_name, t.format, r.completed_at,
@@ -1560,7 +1560,7 @@ export function registerCupHandlers(): void {
         if (filter.cupTo) { extraConditions.push('a.cup <= ?'); extraBindings.push(filter.cupTo) }
         }
       const filterWhere = extraConditions.length ? ` AND ${extraConditions.join(' AND ')}` : ''
-      items = db().prepare(`SELECT DISTINCT a.id FROM actors a ${extraJoins} WHERE a.is_deleted = 0${filterWhere}`).all(...extraBindings) as { id: number }[]
+      items = db().prepare(`SELECT DISTINCT a.id FROM actors a ${extraJoins} WHERE a.is_deleted = 0 AND is_excluded = 0${filterWhere}`).all(...extraBindings) as { id: number }[]
     } else {
       const extraConditions: string[] = []
       const extraBindings: unknown[] = []
@@ -1732,7 +1732,7 @@ export function registerCupHandlers(): void {
     if (tournament.format === 'worldcup') {
       if (!tournament.is_master) throw new Error('월드컵은 마스터 대회만 가능합니다')
       participants = tournament.type === 'actor'
-        ? db().prepare(`SELECT id FROM actors WHERE is_deleted = 0`).all() as { id: number }[]
+        ? db().prepare(`SELECT id FROM actors WHERE is_deleted = 0 AND is_excluded = 0`).all() as { id: number }[]
         : db().prepare(`SELECT id FROM works`).all() as { id: number }[]
       const selectedDivisions = filter?.selectedDivisions as number[] | undefined
       if (selectedDivisions?.length) {
@@ -2135,13 +2135,13 @@ export function registerCupHandlers(): void {
     if (type === 'actor') {
       const rows = db().prepare(`${baseCte}
         SELECT c.*, a.name, a.photo_path
-        FROM combined c LEFT JOIN actors a ON a.id = c.item_id AND a.is_deleted = 0
+        FROM combined c LEFT JOIN actors a ON a.id = c.item_id AND a.is_deleted = 0 AND is_excluded = 0
         WHERE 1=1 ${searchWhere}
         ORDER BY c.${sortCol} ${dir}, c.item_id ASC
         LIMIT ? OFFSET ?
       `).all(tournamentId, tournamentId, tournamentId, tournamentId, ...searchBindings, limit, offset)
       const total = (db().prepare(`${baseCte}
-        SELECT COUNT(*) AS cnt FROM combined c LEFT JOIN actors a ON a.id = c.item_id AND a.is_deleted = 0 WHERE 1=1 ${searchWhere}
+        SELECT COUNT(*) AS cnt FROM combined c LEFT JOIN actors a ON a.id = c.item_id AND a.is_deleted = 0 AND is_excluded = 0 WHERE 1=1 ${searchWhere}
       `).get(tournamentId, tournamentId, tournamentId, tournamentId, ...searchBindings) as { cnt: number }).cnt
       return { rows, total }
     } else {
@@ -2238,7 +2238,7 @@ export function registerCupHandlers(): void {
     const placeholders = ids.map(() => '?').join(',')
     const infoMap = new Map<number, Record<string, unknown>>()
     if (type === 'actor') {
-      const actors = db().prepare(`SELECT id, name, photo_path FROM actors WHERE id IN (${placeholders}) AND is_deleted = 0`).all(...ids) as { id: number }[]
+      const actors = db().prepare(`SELECT id, name, photo_path FROM actors WHERE id IN (${placeholders}) AND is_deleted = 0 AND is_excluded = 0`).all(...ids) as { id: number }[]
       actors.forEach(a => infoMap.set(a.id, a as Record<string, unknown>))
     } else {
       const works = db().prepare(`SELECT id, title, product_number, cover_path FROM works WHERE id IN (${placeholders})`).all(...ids) as { id: number }[]
@@ -2316,7 +2316,7 @@ export function registerCupHandlers(): void {
     const eligibleSet = new Set(eligibleIds)
 
     // participated/runDist: 대상 아이템 범위 내에서만 집계
-    const existsJoin = tInfo.type === 'actor' ? 'JOIN actors a ON a.id = e.item_id AND a.is_deleted = 0' : 'JOIN works w ON w.id = e.item_id'
+    const existsJoin = tInfo.type === 'actor' ? 'JOIN actors a ON a.id = e.item_id AND a.is_deleted = 0 AND is_excluded = 0' : 'JOIN works w ON w.id = e.item_id'
     let participated: number
     let runDist: { run_count: number; count: number }[]
 
@@ -2438,7 +2438,7 @@ export function registerCupHandlers(): void {
     const waRows = db().prepare(`
       SELECT wa.work_id, wa.actor_id, a.name, a.photo_path
       FROM work_actors wa
-      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0
+      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0 AND is_excluded = 0
       WHERE wa.work_id IN (${workIds.map(() => '?').join(',')})
     `).all(...workIds) as { work_id: number; actor_id: number; name: string; photo_path: string | null }[]
 
@@ -2450,7 +2450,7 @@ export function registerCupHandlers(): void {
         RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS actor_rank
       FROM actors a
       LEFT JOIN ${actorPtsCte} ON pts.item_id = a.id
-      WHERE a.is_deleted = 0
+      WHERE a.is_deleted = 0 AND is_excluded = 0
     `).all() as { id: number; actor_rank: number }[]
     const actorRankMap = new Map<number, number>()
     for (const ar of actorRanks) actorRankMap.set(ar.id, ar.actor_rank)

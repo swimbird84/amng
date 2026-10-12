@@ -50,6 +50,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
   const [refreshKey, setRefreshKey] = useState(0)
   const [masterPointsMap, setMasterPointsMap] = useState<Map<number, { rank: number; total_points: number; master_run_count: number }>>(new Map())
   const [deleteMode, setDeleteMode] = useState(false)
+  const [showExcluded, setShowExcluded] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [tagCloud, setTagCloud] = useState<{ category_id: number | null; category_name: string | null; category_sort_order: number | null; tag_id: number; tag_name: string; count: number }[] | null>(null)
@@ -138,9 +139,10 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     if (search.commentSearch) params.commentSearch = search.commentSearch
     if (search.commentNull) params.commentNull = true
     if (search.deletePending) params.deletePending = true
+    if (showExcluded) params.showExcluded = true
     const list = await actorsApi.list(params) as Actor[]
     setActors(list)
-  }, [search, sortBy, sortDir])
+  }, [search, sortBy, sortDir, showExcluded])
 
   const displayActors = useMemo(() => {
     const ratioFrom = search.ratioScoreFrom !== '' ? Number(search.ratioScoreFrom) : null
@@ -339,7 +341,13 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                   <button onClick={exitDeleteMode} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm">✕</button>
                 </>
               ) : (
-                <button onClick={() => setDeleteMode(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button>
+                <>
+                  <button
+                    onClick={() => setShowExcluded(v => !v)}
+                    className={`px-3 py-1.5 rounded text-sm ${showExcluded ? 'bg-orange-600 text-white' : 'bg-gray-600 hover:bg-gray-500 text-gray-300'}`}
+                  >제외 배우</button>
+                  <button onClick={() => setDeleteMode(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button>
+                </>
               )}
             </div>
           </div>

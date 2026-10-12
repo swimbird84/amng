@@ -55,7 +55,7 @@ export function registerTierHandlers(): void {
 
       // Total eligible items count
       if (s.type === 'actor') {
-        s.total_items = (db().prepare('SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0').get() as { cnt: number }).cnt
+        s.total_items = (db().prepare('SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0 AND is_excluded = 0').get() as { cnt: number }).cnt
       } else {
         s.total_items = (db().prepare('SELECT COUNT(*) AS cnt FROM works').get() as { cnt: number }).cnt
       }
@@ -149,7 +149,7 @@ export function registerTierHandlers(): void {
       return db().prepare(`
         SELECT ti.*, a.name, a.photo_path
         FROM tier_items ti
-        JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0
+        JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0 AND is_excluded = 0
         WHERE ti.set_id = ?
         ORDER BY ti.level_id, ti.sort_order
       `).all(setId)
@@ -196,7 +196,7 @@ export function registerTierHandlers(): void {
     if (!set) return { items: [], total: 0 }
     const notIn = `id NOT IN (SELECT item_id FROM tier_items WHERE set_id = ?)`
     if (set.type === 'actor') {
-      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0 AND ${notIn}`).get(setId) as { cnt: number }).cnt
+      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0 AND is_excluded = 0 AND ${notIn}`).get(setId) as { cnt: number }).cnt
       let orderBy = 'a.name'
       switch (sortBy) {
         case 'avg_score': orderBy = 'COALESCE((SELECT (s.face+s.bust+s.hip+s.physical+s.skin+s.acting+s.sexy+s.charm+s.technique+s.proportions)/13.0 FROM actor_scores s WHERE s.actor_id = a.id), 0) DESC'; break
@@ -209,7 +209,7 @@ export function registerTierHandlers(): void {
       const items = db().prepare(`
         SELECT a.id, a.name, a.photo_path
         FROM actors a
-        WHERE a.is_deleted = 0 AND a.${notIn}
+        WHERE a.is_deleted = 0 AND is_excluded = 0 AND a.${notIn}
         ORDER BY ${orderBy}
         LIMIT ? OFFSET ?
       `).all(setId, limit, offset)
@@ -243,7 +243,7 @@ export function registerTierHandlers(): void {
       const items = db().prepare(`
         SELECT ti.item_id AS id, a.name, a.photo_path, ti.sort_order
         FROM tier_items ti
-        JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0
+        JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0 AND is_excluded = 0
         WHERE ti.set_id = ? AND ti.level_id = ?
         ORDER BY ti.sort_order ASC
       `).all(set.id, topLevel.id)

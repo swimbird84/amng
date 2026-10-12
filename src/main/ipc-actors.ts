@@ -47,6 +47,7 @@ export function registerActorsHandlers(): void {
     commentSearch?: string
     commentNull?: boolean
     deletePending?: boolean
+    showExcluded?: boolean
   }) => {
     let sql = `
       WITH stats AS (
@@ -79,6 +80,11 @@ export function registerActorsHandlers(): void {
       LEFT JOIN actor_scores s ON s.actor_id = a.id
     `
     const conditions: string[] = ['a.is_deleted = 0']
+    if (params?.showExcluded) {
+      conditions.push('a.is_excluded = 1')
+    } else if (!params?.showExcluded) {
+      conditions.push('a.is_excluded = 0')
+    }
     const bindings: unknown[] = []
 
     if (params?.tagIds?.length) {
@@ -377,6 +383,7 @@ export function registerActorsHandlers(): void {
     debut_date?: string | null
     is_favorite?: number
     delete_pending?: number
+    is_excluded?: number
     height?: number | null
     bust?: number | null
     waist?: number | null
@@ -398,6 +405,7 @@ export function registerActorsHandlers(): void {
     if (data.debut_date !== undefined) { fields.push('debut_date = ?'); values.push(data.debut_date) }
     if (data.is_favorite !== undefined) { fields.push('is_favorite = ?'); values.push(data.is_favorite) }
     if (data.delete_pending !== undefined) { fields.push('delete_pending = ?'); values.push(data.delete_pending) }
+    if (data.is_excluded !== undefined) { fields.push('is_excluded = ?'); values.push(data.is_excluded) }
     if (data.height !== undefined) { fields.push('height = ?'); values.push(data.height) }
     if (data.bust !== undefined) { fields.push('bust = ?'); values.push(data.bust) }
     if (data.waist !== undefined) { fields.push('waist = ?'); values.push(data.waist) }
@@ -473,7 +481,7 @@ export function registerActorsHandlers(): void {
     const rows = db().prepare(`
       SELECT a.name, s.face, s.bust, s.hip, s.physical, s.skin, s.acting, s.sexy, s.charm, s.technique, s.proportions
       FROM actor_scores s
-      JOIN actors a ON a.id = s.actor_id AND a.is_deleted = 0
+      JOIN actors a ON a.id = s.actor_id AND a.is_deleted = 0 AND a.is_excluded = 0
       WHERE (s.face >= 11 OR s.bust >= 11 OR s.hip >= 11 OR s.physical >= 11 OR s.skin >= 11
              OR s.acting >= 11 OR s.sexy >= 11 OR s.charm >= 11 OR s.technique >= 11 OR s.proportions >= 11)
         AND (${excludeId != null ? 's.actor_id != ?' : '1=1'})
@@ -516,7 +524,7 @@ export function registerActorsHandlers(): void {
         (SELECT COUNT(*) FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id AND w2.is_favorite = 1 WHERE wa2.actor_id = a.id) AS fav_work_count
       FROM actors a
       LEFT JOIN actor_scores s ON s.actor_id = a.id
-      WHERE a.is_deleted = 0
+      WHERE a.is_deleted = 0 AND a.is_excluded = 0
     `).all()
   })
 

@@ -219,6 +219,16 @@ export function initDatabase(): void {
   if (!actorCols.includes('aliases')) {
     db.prepare('ALTER TABLE actors ADD COLUMN aliases TEXT').run()
   }
+  // score_excluded → is_excluded rename
+  if (actorCols.includes('score_excluded') && !actorCols.includes('is_excluded')) {
+    db.prepare('ALTER TABLE actors RENAME COLUMN score_excluded TO is_excluded').run()
+  } else if (!actorCols.includes('is_excluded')) {
+    db.prepare('ALTER TABLE actors ADD COLUMN is_excluded INTEGER NOT NULL DEFAULT 0').run()
+  }
+  // is_retired 제거
+  if (actorCols.includes('is_retired')) {
+    db.prepare('ALTER TABLE actors DROP COLUMN is_retired').run()
+  }
   if (!workCols.includes('delete_pending')) {
     db.prepare('ALTER TABLE works ADD COLUMN delete_pending INTEGER DEFAULT 0').run()
   }
