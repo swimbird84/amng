@@ -355,6 +355,7 @@ export default function SearchBar(props: Props) {
     if (ap.commentSearch) conditions.push({ label: `코멘트: ${ap.commentSearch}`, onClear: () => onChange({ ...ap, commentSearch: '' } as never) })
     if (ap.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...ap, commentNull: false } as never) })
     if (ap.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...ap, deletePending: false } as never) })
+    if (ap.showExcluded) conditions.push({ label: '제외배우', onClear: () => onChange({ ...ap, showExcluded: false } as never) })
   }
 
   // ── render ────────────────────────────────────────────────────────
@@ -822,6 +823,14 @@ export default function SearchBar(props: Props) {
                       onClick={() => onChange({ ...aParams, deletePending: !aParams.deletePending } as never)}
                       className={`text-xs px-2 py-1 rounded ${aParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                     >삭제 예정</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 w-14 shrink-0">제외배우</span>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...aParams, showExcluded: !aParams.showExcluded } as never)}
+                      className={`text-xs px-2 py-1 rounded ${aParams.showExcluded ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >제외 배우</button>
                   </div>
                 </>
               )}

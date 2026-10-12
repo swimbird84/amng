@@ -405,7 +405,19 @@ export function registerActorsHandlers(): void {
     if (data.debut_date !== undefined) { fields.push('debut_date = ?'); values.push(data.debut_date) }
     if (data.is_favorite !== undefined) { fields.push('is_favorite = ?'); values.push(data.is_favorite) }
     if (data.delete_pending !== undefined) { fields.push('delete_pending = ?'); values.push(data.delete_pending) }
-    if (data.is_excluded !== undefined) { fields.push('is_excluded = ?'); values.push(data.is_excluded) }
+    if (data.is_excluded !== undefined) {
+      if (data.is_excluded === 1) {
+        const blocked = db().prepare(`
+          SELECT 1 FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.type = 'actor'
+          WHERE r.status = 'in_progress' AND e.item_id = ?
+          LIMIT 1
+        `).get(id)
+        if (blocked) return { blocked: true }
+      }
+      fields.push('is_excluded = ?'); values.push(data.is_excluded)
+    }
     if (data.height !== undefined) { fields.push('height = ?'); values.push(data.height) }
     if (data.bust !== undefined) { fields.push('bust = ?'); values.push(data.bust) }
     if (data.waist !== undefined) { fields.push('waist = ?'); values.push(data.waist) }

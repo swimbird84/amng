@@ -62,6 +62,7 @@ export interface ActorSearchParams {
   commentSearch: string
   commentNull: boolean
   deletePending: boolean
+  showExcluded: boolean
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
@@ -90,4 +91,5 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   favoriteOnly: false,
   commentSearch: '', commentNull: false,
   deletePending: false,
+  showExcluded: false,
 }

@@ -163,7 +163,8 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     }
 
     if (actor) {
-      await actorsApi.update(actor.id, data)
+      const res = await actorsApi.update(actor.id, data) as { blocked?: boolean } | undefined
+      if (res?.blocked) { alert('진행 중인 대회에 참가한 배우는 제외할 수 없습니다'); return }
       if (photoPath && photoPath !== actor.photo_path) {
         const newPath = await imageApi.copy(photoPath, 'actors', actor.id) as string
         await actorsApi.update(actor.id, { photo_path: newPath })

@@ -121,6 +121,7 @@ function ActorContent({ actor, physScore, masterTier }: { actor: Actor; physScor
       <p className="font-bold text-white text-[13px]">
         {actor.name}{' '}
         {masterTier && <span className="font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name}</span>}{' '}
+        {!!actor.is_excluded && <span className="text-red-500 font-normal text-[11px]">제외됨</span>}{' '}
         {!!actor.is_favorite && <span className="text-pink-500 font-normal">♥</span>}{' '}
         {!!actor.delete_pending && <span className="text-red-500 font-normal text-[11px]">삭제예정</span>}{' '}
         <span className="text-gray-400 font-normal">(총작품 : {actor.work_count ?? 0}편)</span>

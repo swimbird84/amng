@@ -156,6 +156,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-white font-bold text-lg">{actor.name}</h3>
                   {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name}</span>}
+                  {!!actor.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                   {!!actor.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                   <button
                     onClick={() => setShowWorksModal(true)}
