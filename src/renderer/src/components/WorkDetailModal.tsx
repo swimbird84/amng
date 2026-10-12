@@ -167,9 +167,11 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                           onMouseMove={e => setActorTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY, showCover: true })}
                           onMouseLeave={() => setActorTooltip(null)}
                           className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
-                            isRep
-                              ? 'bg-fuchsia-700 text-fuchsia-200 hover:bg-fuchsia-600'
-                              : 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50'
+                            (a as any).is_excluded
+                              ? 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                              : isRep
+                                ? 'bg-fuchsia-700 text-fuchsia-200 hover:bg-fuchsia-600'
+                                : 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50'
                           }`}
                         >
                           {a.name}

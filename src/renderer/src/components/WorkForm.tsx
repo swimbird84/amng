@@ -121,7 +121,9 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   useEffect(() => {
     workTagsApi.list().then((t) => setAllTags(t as Tag[]))
     workTagLinksApi.list().then(l => setTagLinks(l))
-    actorsApi.list().then((a) => setAllActors(a as Actor[]))
+    Promise.all([actorsApi.list(), actorsApi.list({ showExcluded: true })]).then(([normal, excluded]) => {
+      setAllActors([...(normal as Actor[]), ...(excluded as Actor[])])
+    })
     studiosApi.list().then((s) => setAllStudios(s as (Studio & { maker_name?: string | null })[]))
     makersApi.list().then((m) => setAllMakers(m as Maker[]))
   }, [])
@@ -188,8 +190,8 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         const actorName = actorMatch[1]
         const birthday = actorMatch[2]
         const actorId = await actorsApi.findOrCreate(actorName, birthday)
-        const updatedActors = await actorsApi.list() as Actor[]
-        setAllActors(updatedActors)
+        const [normal2, excluded2] = await Promise.all([actorsApi.list(), actorsApi.list({ showExcluded: true })])
+        setAllActors([...(normal2 as Actor[]), ...(excluded2 as Actor[])])
         setSelectedActorIds((prev) => prev.includes(actorId) ? prev : [...prev, actorId])
         setRepActorIds((prev) => prev.includes(actorId) ? prev : [...prev, actorId])
       }
@@ -347,8 +349,8 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
       }
     } else {
       const id = await actorsApi.create({ name, scores: { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 } }) as number
-      const updated = await actorsApi.list() as Actor[]
-      setAllActors(updated)
+      const [normal3, excluded3] = await Promise.all([actorsApi.list(), actorsApi.list({ showExcluded: true })])
+      setAllActors([...(normal3 as Actor[]), ...(excluded3 as Actor[])])
       setSelectedActorIds((prev) => [...prev, id])
       if (repActorIds.length === 0) setRepActorIds([id])
     }
@@ -716,7 +718,9 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                       onMouseLeave={() => setActorTooltip(null)}
                       title={isRep ? '대표 배우 해제' : '대표 배우로 설정'}
                       className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
-                        isRep ? 'bg-fuchsia-700 text-fuchsia-200' : 'bg-purple-900/60 text-purple-300'
+                        a.is_excluded
+                          ? isRep ? 'bg-gray-600 text-gray-300' : 'bg-gray-700 text-gray-400'
+                          : isRep ? 'bg-fuchsia-700 text-fuchsia-200' : 'bg-purple-900/60 text-purple-300'
                       }`}
                     >
                       {a.name}

@@ -113,7 +113,7 @@ export default function WorkCard({
         {w.rep_actors && w.rep_actors.length > 0 && (
           <div className="flex flex-wrap gap-0.5 mt-0.5">
             {w.rep_actors.map((a) => (
-              <span key={a.id} className="bg-purple-900/50 text-purple-300 text-xs px-1.5 py-0.5 rounded">
+              <span key={a.id} className={`text-xs px-1.5 py-0.5 rounded ${(a as any).is_excluded ? 'bg-gray-700 text-gray-400' : 'bg-purple-900/50 text-purple-300'}`}>
                 {a.name}
               </span>
             ))}

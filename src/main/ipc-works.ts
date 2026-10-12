@@ -186,16 +186,16 @@ export function registerWorksHandlers(): void {
       repTagMap.get(row.work_id)!.push({ id: row.id, name: row.name })
     }
     const repActorRows = db().prepare(`
-      SELECT wa.work_id, a.id, a.name
+      SELECT wa.work_id, a.id, a.name, a.is_excluded
       FROM work_actors wa
       JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0
       WHERE wa.is_rep = 1 AND wa.work_id IN (${ph})
       ORDER BY a.name
-    `).all(...workIds) as Array<{ work_id: number; id: number; name: string }>
-    const repActorMap = new Map<number, Array<{ id: number; name: string }>>()
+    `).all(...workIds) as Array<{ work_id: number; id: number; name: string; is_excluded: number }>
+    const repActorMap = new Map<number, Array<{ id: number; name: string; is_excluded: number }>>()
     for (const row of repActorRows) {
       if (!repActorMap.has(row.work_id)) repActorMap.set(row.work_id, [])
-      repActorMap.get(row.work_id)!.push({ id: row.id, name: row.name })
+      repActorMap.get(row.work_id)!.push({ id: row.id, name: row.name, is_excluded: row.is_excluded })
     }
     const items = rawList.map(w => ({ ...w, rep_tags: repTagMap.get(w.id as number) ?? [], rep_actors: repActorMap.get(w.id as number) ?? [] }))
     return total !== undefined ? { items, total } : items
