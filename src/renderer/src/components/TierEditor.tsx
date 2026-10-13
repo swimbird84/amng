@@ -138,17 +138,17 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     setDropIndicator(null)
   }
 
-  const calcDropIndex = (e: React.DragEvent, levelId: number) => {
+  const calcDropIndex = (e: React.DragEvent, _levelId: number) => {
     const container = e.currentTarget as HTMLElement
     const children = Array.from(container.querySelectorAll('[data-tier-item]')) as HTMLElement[]
-    for (let i = 0; i < children.length; i++) {
-      const rect = children[i].getBoundingClientRect()
-      // Check if mouse is in same row (Y overlap) and to the left of center
+    // Filter out the item being dragged so index calculation is accurate
+    const filtered = children.filter(el => el.dataset.itemId !== String(draggingId))
+    for (let i = 0; i < filtered.length; i++) {
+      const rect = filtered[i].getBoundingClientRect()
       if (e.clientY >= rect.top && e.clientY <= rect.bottom && e.clientX < rect.left + rect.width / 2) return i
-      // If mouse is above this item's row, insert before it
       if (e.clientY < rect.top) return i
     }
-    return children.length
+    return filtered.length
   }
 
   const handleDragOverLevel = (e: React.DragEvent, levelId: number) => {
@@ -273,24 +273,28 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                   onDragLeave={handleDragLeaveLevel}
                   onDrop={e => handleDropOnLevel(e, level.id)}
                 >
-                  {levelItems.map((item, idx) => (
-                    <div key={item.item_id} style={{ height: ITEM_HEIGHT }}>
-                      <div
-                        data-tier-item
-                        className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer transition ${draggingId === item.item_id ? 'opacity-30' : ''} relative ${dropIndicator?.levelId === level.id && dropIndicator.index === idx ? 'border-l-[3px] border-l-blue-500 border-y border-y-gray-600 border-r border-r-gray-600' : 'border border-gray-600 hover:border-gray-400'}`}
-                        draggable
-                        onDragStart={e => handleDragStart(e, item.item_id)}
-                        onDragEnd={handleDragEnd}
-                        onClick={() => handleItemClick(item.item_id)}
-                        onMouseEnter={e => handleMouseEnter(e, item.item_id)}
-                        onMouseLeave={handleMouseLeave}
-                      >
-                        <ImagePreview path={item.photo_path} alt={item.name} className="w-full h-full" />
-                        {!item.photo_path && <span className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] leading-tight text-center px-0.5">{item.name}</span>}
+                  {(() => {
+                    const filteredItems = levelItems.filter(i => i.item_id !== draggingId)
+                    return filteredItems.map((item, idx) => (
+                      <div key={item.item_id} style={{ height: ITEM_HEIGHT }}>
+                        <div
+                          data-tier-item
+                          data-item-id={item.item_id}
+                          className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer transition relative ${dropIndicator?.levelId === level.id && dropIndicator.index === idx ? 'border-l-[3px] border-l-blue-500 border-y border-y-gray-600 border-r border-r-gray-600' : 'border border-gray-600 hover:border-gray-400'}`}
+                          draggable
+                          onDragStart={e => handleDragStart(e, item.item_id)}
+                          onDragEnd={handleDragEnd}
+                          onClick={() => handleItemClick(item.item_id)}
+                          onMouseEnter={e => handleMouseEnter(e, item.item_id)}
+                          onMouseLeave={handleMouseLeave}
+                        >
+                          <ImagePreview path={item.photo_path} alt={item.name} className="w-full h-full" />
+                          {!item.photo_path && <span className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] leading-tight text-center px-0.5">{item.name}</span>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.length && levelItems.length > 0 && (
+                    ))
+                  })()}
+                  {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.filter(i => i.item_id !== draggingId).length && levelItems.filter(i => i.item_id !== draggingId).length > 0 && (
                     <div className="w-[3px] bg-blue-500 rounded shrink-0 self-stretch" />
                   )}
                 </div>

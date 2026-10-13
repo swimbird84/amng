@@ -168,7 +168,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                           onMouseLeave={() => setActorTooltip(null)}
                           className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
                             (a as any).is_excluded
-                              ? 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                              ? isRep ? 'bg-gray-600 text-gray-300 hover:bg-gray-500' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
                               : isRep
                                 ? 'bg-fuchsia-700 text-fuchsia-200 hover:bg-fuchsia-600'
                                 : 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50'

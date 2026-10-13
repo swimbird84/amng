@@ -165,12 +165,22 @@ export function registerTierHandlers(): void {
   })
 
   ipcMain.handle('tier:setItem', (_e, setId: number, levelId: number, itemId: number, sortOrder: number) => {
-    // Remove existing placement if any
-    db().prepare('DELETE FROM tier_items WHERE set_id = ? AND item_id = ?').run(setId, itemId)
-    // Shift existing items at and after sortOrder
-    db().prepare('UPDATE tier_items SET sort_order = sort_order + 1 WHERE set_id = ? AND level_id = ? AND sort_order >= ?').run(setId, levelId, sortOrder)
-    // Insert
-    db().prepare('INSERT INTO tier_items (set_id, level_id, item_id, sort_order) VALUES (?, ?, ?, ?)').run(setId, levelId, itemId, sortOrder)
+    const txn = db().transaction(() => {
+      // Remove existing placement if any
+      db().prepare('DELETE FROM tier_items WHERE set_id = ? AND item_id = ?').run(setId, itemId)
+      // Re-number existing items in target level to remove gaps
+      const existing = db().prepare(
+        'SELECT id FROM tier_items WHERE set_id = ? AND level_id = ? ORDER BY sort_order'
+      ).all(setId, levelId) as { id: number }[]
+      existing.forEach((row, i) => {
+        db().prepare('UPDATE tier_items SET sort_order = ? WHERE id = ?').run(i, row.id)
+      })
+      // Shift items at and after sortOrder
+      db().prepare('UPDATE tier_items SET sort_order = sort_order + 1 WHERE set_id = ? AND level_id = ? AND sort_order >= ?').run(setId, levelId, sortOrder)
+      // Insert
+      db().prepare('INSERT INTO tier_items (set_id, level_id, item_id, sort_order) VALUES (?, ?, ?, ?)').run(setId, levelId, itemId, sortOrder)
+    })
+    txn()
     return true
   })
 

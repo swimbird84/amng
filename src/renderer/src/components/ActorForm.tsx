@@ -62,6 +62,18 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     // 컵사이즈 : C
     const cupMatch = text.match(/컵사이즈\s*[:：]\s*([A-Za-z]+)/)
     if (cupMatch) { setCup(cupMatch[1].toUpperCase()); parsed = true }
+    // 다른이름 : #한글이름(한자)#한글이름(한자)...
+    const aliasMatch = text.match(/다른이름\s*[:：]\s*(.+)/)
+    if (aliasMatch) {
+      const koreanNames = [...aliasMatch[1].matchAll(/#([가-힣\s]+)/g)].map(m => m[1].trim()).filter(Boolean)
+      const filtered = koreanNames.filter(n => n !== name.trim())
+      if (filtered.length > 0) {
+        const existing = aliases.split(',').map(s => s.trim()).filter(Boolean)
+        const merged = [...new Set([...existing, ...filtered])]
+        setAliases(merged.join(','))
+        parsed = true
+      }
+    }
     if (parsed) e.preventDefault()
   }
   const [comment, setComment] = useState(actor?.comment || '')

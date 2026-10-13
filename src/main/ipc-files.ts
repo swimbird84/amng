@@ -22,6 +22,7 @@ interface FolderNode {
   children: FolderNode[]
   matchedActorId?: number
   matchedActorName?: string
+  matchedActorAliases?: string
   matchedWorkId?: number
   matchedWorkLabel?: string
 }
@@ -130,6 +131,7 @@ function buildTree(
       if (actor) {
         node.matchedActorId = actor.id
         node.matchedActorName = actor.name
+        if (actor.aliases) node.matchedActorAliases = actor.aliases
       }
     }
     // Work match (from pre-loaded map)

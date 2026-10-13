@@ -21,6 +21,7 @@ interface FolderNode {
   children: FolderNode[]
   matchedActorId?: number
   matchedActorName?: string
+  matchedActorAliases?: string
   matchedWorkId?: number
   matchedWorkLabel?: string
 }
@@ -412,7 +413,7 @@ const SEARCH_FIELD_KEY = 'files:searchField'
 function filterTree(nodes: FolderNode[], query: string, field: SearchField): FolderNode[] {
   const q = query.toLowerCase()
   const matches = (node: FolderNode): boolean => {
-    if (field === 'actor') return !!node.matchedActorName?.toLowerCase().includes(q)
+    if (field === 'actor') return !!node.matchedActorName?.toLowerCase().includes(q) || !!node.matchedActorAliases?.toLowerCase().includes(q)
     return node.name.toLowerCase().includes(q)
   }
   const filter = (nodes: FolderNode[]): FolderNode[] => {
@@ -599,8 +600,11 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="검색"
-              className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded-r focus:outline-none focus:ring-1 focus:ring-blue-500 w-32"
+              className={`bg-gray-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 w-32 ${search ? '' : 'rounded-r'}`}
             />
+            {search && (
+              <button onClick={() => setSearch('')} className="bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white text-sm px-1.5 py-1.5 rounded-r">✕</button>
+            )}
           </div>
           <span className="text-gray-500 text-sm">총 {totalFolders}개{search.trim() ? ` (${countAllFolders(displayTree)})` : ''}</span>
         </div>
