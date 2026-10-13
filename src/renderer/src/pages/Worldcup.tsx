@@ -115,6 +115,7 @@ export default function Worldcup({
         onBack={() => setView('list')}
         onNavigateToActor={onNavigateToActor}
         onNavigateToWork={onNavigateToWork}
+        initialSource="cup"
       />
     )
   }

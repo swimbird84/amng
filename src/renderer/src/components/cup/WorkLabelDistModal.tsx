@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { masterRankingApi } from '../../api'
+import { masterRankingApi, tierApi } from '../../api'
 import { DIV_LABEL, DIV_COLOR, DIV_TEXT_COLOR } from './cupConstants'
 import { pushEscHandler, popEscHandler } from '../../escManager'
 
@@ -17,14 +17,18 @@ type MakerDivData = { division: number; makers: MakerRow[] }
 
 export default function WorkLabelDistModal({
   onClose,
+  source = 'cup',
 }: {
   onClose: () => void
+  source?: 'cup' | 'tier'
 }) {
   const [mode, setMode] = useState<'label' | 'maker'>(() =>
     (localStorage.getItem('labelDist:mode') as 'label' | 'maker') || 'label'
   )
   const [labelData, setLabelData] = useState<{ divisions: LabelDivData[]; allLabels: LabelRow[] } | null>(null)
   const [makerData, setMakerData] = useState<{ divisions: MakerDivData[]; allMakers: MakerRow[] } | null>(null)
+  const [tierLabelData, setTierLabelData] = useState<{ levels: any[]; allLabels: LabelRow[] } | null>(null)
+  const [tierMakerData, setTierMakerData] = useState<{ levels: any[]; allMakers: MakerRow[] } | null>(null)
   const [tab, setTab] = useState<'division' | 'all'>(() =>
     (localStorage.getItem('labelDist:tab') as 'division' | 'all') || 'division'
   )
@@ -37,9 +41,14 @@ export default function WorkLabelDistModal({
   const [tableSearch, setTableSearch] = useState('')
 
   useEffect(() => {
-    masterRankingApi.workLabelDistribution().then(setLabelData)
-    masterRankingApi.workMakerDistribution().then(setMakerData)
-  }, [])
+    if (source === 'cup') {
+      masterRankingApi.workLabelDistribution().then(setLabelData)
+      masterRankingApi.workMakerDistribution().then(setMakerData)
+    } else {
+      tierApi.workLabelDistribution().then(setTierLabelData)
+      tierApi.workMakerDistribution().then(setTierMakerData)
+    }
+  }, [source])
 
   useEffect(() => {
     const handler = () => onClose()
@@ -55,17 +64,19 @@ export default function WorkLabelDistModal({
   const SortIcon = ({ col }: { col: typeof tableSortCol }) =>
     tableSortCol === col ? <span className="text-[9px]">{tableSortDir === 'desc' ? '▼' : '▲'}</span> : <span className="text-[9px] text-gray-700">▼</span>
 
-  const data = mode === 'label' ? labelData : makerData
-  const isLoading = data === null
-  const isEmpty = data !== null && (mode === 'label' ? (data as any).allLabels.length === 0 : (data as any).allMakers.length === 0)
+  const cupData = mode === 'label' ? labelData : makerData
+  const tierDat = mode === 'label' ? tierLabelData : tierMakerData
+  const activeData = source === 'cup' ? cupData : tierDat
+  const isLoading = activeData === null
+  const isEmpty = activeData !== null && (mode === 'label' ? (activeData as any).allLabels?.length === 0 : (activeData as any).allMakers?.length === 0)
 
   const allItems: LabelRow[] | MakerRow[] = mode === 'label'
-    ? (labelData?.allLabels ?? [])
-    : (makerData?.allMakers ?? [])
+    ? ((source === 'cup' ? labelData?.allLabels : tierLabelData?.allLabels) ?? [])
+    : ((source === 'cup' ? makerData?.allMakers : tierMakerData?.allMakers) ?? [])
 
-  const divItems = mode === 'label'
-    ? (labelData?.divisions ?? [])
-    : (makerData?.divisions ?? [])
+  const divItems = source === 'cup'
+    ? (mode === 'label' ? (labelData?.divisions ?? []) : (makerData?.divisions ?? []))
+    : (mode === 'label' ? (tierLabelData?.levels ?? []) : (tierMakerData?.levels ?? []))
 
   const sortedAll = [...allItems]
     .filter((item: any) => {
@@ -99,7 +110,7 @@ export default function WorkLabelDistModal({
         {/* 헤더 + 토글 + 탭 */}
         <div className="shrink-0 px-6 pt-5 pb-0 border-b border-gray-700">
           <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-lg font-bold text-white">작품 랭킹 {modeLabel} 분포</h2>
+            <h2 className="text-lg font-bold text-white">작품 {source === 'cup' ? '랭킹' : '티어'} {modeLabel} 분포</h2>
             <div className="flex items-center gap-1 bg-gray-900 rounded-lg px-1 py-0.5">
               {(['label', 'maker'] as const).map(m => (
                 <button
@@ -114,7 +125,7 @@ export default function WorkLabelDistModal({
           </div>
           <div className="flex items-center">
             <div className="flex">
-              {([['division', `부별 주요 ${modeLabel}`], ['all', `전체 ${modeLabel} 통계`]] as const).map(([key, label]) => (
+              {([['division', source === 'cup' ? `부별 주요 ${modeLabel}` : `티어별 주요 ${modeLabel}`], ['all', `전체 ${modeLabel} 통계`]] as const).map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => { setTab(key as 'division' | 'all'); localStorage.setItem('labelDist:tab', key) }}
@@ -162,14 +173,19 @@ export default function WorkLabelDistModal({
             {tab === 'division' && (
               <div className="space-y-3">
                 {divItems.map((divData: any) => {
-                  const division = divData.division
+                  const key = source === 'cup' ? divData.division : divData.level_id
                   const items: any[] = divData.labels ?? divData.makers
                   const shown = topN > 0 ? items.slice(0, topN) : items
+                  const groupLabel = source === 'cup' ? (DIV_LABEL[divData.division] ?? `${divData.division}부`) : divData.level_name
+                  const groupColor = source === 'cup' ? (DIV_COLOR[divData.division] ?? '') : ''
+                  const groupStyle = source === 'tier' ? { backgroundColor: `${divData.level_color}30`, color: divData.level_color, borderColor: `${divData.level_color}60` } : undefined
+                  const textColor = source === 'cup' ? (DIV_TEXT_COLOR[divData.division] ?? 'text-gray-400') : ''
+                  const textStyle = source === 'tier' ? { color: divData.level_color } : undefined
                   return (
-                    <div key={division} className="bg-gray-900/50 rounded-lg p-3">
+                    <div key={key} className="bg-gray-900/50 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${DIV_COLOR[division] ?? ''}`}>
-                          {DIV_LABEL[division] ?? `${division}부`}
+                        <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${groupColor}`} style={groupStyle}>
+                          {groupLabel}
                         </span>
                         <span className="text-xs text-gray-500">{items.length}개 {modeLabel} 출현</span>
                       </div>
@@ -183,7 +199,7 @@ export default function WorkLabelDistModal({
                             <span className="text-[10px] text-gray-500 font-medium">{idx + 1}</span>
                             <ColorBadge name={item.name} color={item.color} />
                             <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                              <span className={DIV_TEXT_COLOR[division] ?? 'text-gray-400'}>{item.work_count}작</span>
+                              <span className={textColor} style={textStyle}>{item.work_count}작</span>
                               <span>avg {item.avg_rank}</span>
                               {mode === 'maker' && item.label_count > 0 && (
                                 <span className="text-gray-600">{item.label_count}레이블</span>

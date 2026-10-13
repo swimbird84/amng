@@ -5,11 +5,11 @@ type DB = ReturnType<typeof getDatabase>
 
 const DIV_BOUNDS_WORK = [32, 96, 224, 480, 992, 2016]
 const DIV_BOUNDS_ACTOR = [16, 48, 112, 240, 496, 1008]
-function getDivBoundaries(type: 'actor' | 'work'): number[] {
+export function getDivBoundaries(type: 'actor' | 'work'): number[] {
   return type === 'actor' ? DIV_BOUNDS_ACTOR : DIV_BOUNDS_WORK
 }
 
-function getRecentRunLimit(database: DB, type: 'actor' | 'work'): number {
+export function getRecentRunLimit(database: DB, type: 'actor' | 'work'): number {
   const row = database.prepare(`SELECT settings_json FROM ranking_settings WHERE type = ?`).get(type) as { settings_json: string } | undefined
   if (!row) return 0
   const s = JSON.parse(row.settings_json)
@@ -30,7 +30,7 @@ function buildSeasonRunFilter(seasonId: number | null): string {
 // recentRunLimit에 따른 포인트 집계 SQL 조각 생성
 // limit=0: 전체 누적, limit>0: 최근 N회만 합산
 // seasonId: null=현재시즌, -1=전체, number=과거시즌
-function buildPointsCte(type: 'actor' | 'work', limit: number, alias = 'pts', masterOnly = true, seasonId: number | null = null): string {
+export function buildPointsCte(type: 'actor' | 'work', limit: number, alias = 'pts', masterOnly = true, seasonId: number | null = null): string {
   const seasonFilter = buildSeasonFilter('mh2.season_id', seasonId)
   const masterJoin = masterOnly
     ? `JOIN cup_runs r ON r.id = mh2.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1`
@@ -906,10 +906,11 @@ export function registerCupHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('master-ranking:list', (_e, params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc'; seasonId?: number }) => {
-    const { type, limit = 50, offset = 0, search, division, sortBy = 'total_points', sortDir = 'desc', seasonId = null } = params
+  ipcMain.handle('master-ranking:list', (_e, params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc'; seasonId?: number; tierLevelId?: number }) => {
+    const { type, limit = 50, offset = 0, search, division, sortBy = 'total_points', sortDir = 'desc', seasonId = null, tierLevelId } = params
     const dir = sortDir === 'asc' ? 'ASC' : 'DESC'
     const nameSortCol = type === 'actor' ? 'name' : 'title'
+    const nullPos = dir === 'ASC' ? 999999 : -1
     const orderBy = (() => {
       switch (sortBy) {
         case 'win_rate':
@@ -920,6 +921,10 @@ export function registerCupHandlers(): void {
           return `master_run_count ${dir}, total_points DESC, ${nameSortCol} ASC`
         case 'score_rank':
           return `score_rank ${dir}, ${nameSortCol} ASC`
+        case 'tier_rank':
+          return `COALESCE(td.tier_level_order, ${nullPos}) ${dir}, COALESCE(td.tier_item_order, ${nullPos}) ${dir}, ${nameSortCol} ASC`
+        case 'league_rank':
+          return `ranked.rank ${dir}, ${nameSortCol} ASC`
         default:
           return `total_points ${dir}, ${nameSortCol} ASC`
       }
@@ -936,6 +941,15 @@ export function registerCupHandlers(): void {
         divWhere = division === 6
           ? ` AND master_run_count > 0 AND rank >= ${lo}`
           : ` AND master_run_count > 0 AND rank BETWEEN ${lo} AND ${hi}`
+      }
+    }
+    // Tier level filter
+    let tierWhere = ''
+    if (tierLevelId !== undefined && tierLevelId !== null) {
+      if (tierLevelId === -1) {
+        tierWhere = ' AND td.item_id IS NULL'
+      } else {
+        tierWhere = ` AND td.tier_level_id = ${tierLevelId}`
       }
     }
     const searchWhere = search ? (type === 'actor' ? ` AND (name LIKE ? OR aliases LIKE ?)` : ` AND (title LIKE ? OR product_number LIKE ?)`) : ''
@@ -975,7 +989,8 @@ export function registerCupHandlers(): void {
           (SELECT mh.points FROM master_ranking_history mh
            JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
            WHERE mh.type = 'actor' AND mh.item_id = ranked.id ${seasonFilter}
-           ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
+           ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points,
+          td.tier_name, td.tier_color, td.tier_rank, td.tier_level_id, td.tier_level_order, td.tier_item_order
         FROM ranked
         LEFT JOIN (
           SELECT e.item_id,
@@ -998,7 +1013,16 @@ export function registerCupHandlers(): void {
             JOIN cup_matches m ON m.run_id = r.id AND (m.item1_id = e2.item_id OR m.item2_id = e2.item_id)
           ) sub GROUP BY sub.item_id
         ) cs_match ON cs_match.item_id = ranked.id
-        WHERE 1=1${divWhere}${searchWhere}
+        LEFT JOIN (
+          SELECT ti.item_id, tl.name AS tier_name, tl.color AS tier_color,
+                 tl.sort_order AS tier_level_order, ti.sort_order AS tier_item_order,
+                 tl.id AS tier_level_id,
+                 ROW_NUMBER() OVER (PARTITION BY ti.level_id ORDER BY ti.sort_order) AS tier_rank
+          FROM tier_items ti
+          JOIN tier_levels tl ON tl.id = ti.level_id
+          JOIN tier_sets ts ON ts.id = ti.set_id AND ts.type = 'actor' AND ts.is_master = 1
+        ) td ON td.item_id = ranked.id
+        WHERE 1=1${divWhere}${tierWhere}${searchWhere}
       `
       const rows = db().prepare(cte + ` ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...searchBindings, limit, offset)
       const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM (${cte})`).get(...searchBindings) as { cnt: number }).cnt
@@ -1030,7 +1054,8 @@ export function registerCupHandlers(): void {
           (SELECT mh.points FROM master_ranking_history mh
            JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1
            WHERE mh.type = 'work' AND mh.item_id = ranked.id ${seasonFilter}
-           ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points
+           ORDER BY mh.recorded_at DESC LIMIT 1) AS last_run_points,
+          td.tier_name, td.tier_color, td.tier_rank, td.tier_level_id, td.tier_level_order, td.tier_item_order
         FROM ranked
         LEFT JOIN studios s ON s.id = ranked.studio_id
         LEFT JOIN makers mk ON mk.id = s.maker_id
@@ -1055,7 +1080,16 @@ export function registerCupHandlers(): void {
             JOIN cup_matches m ON m.run_id = r.id AND (m.item1_id = e2.item_id OR m.item2_id = e2.item_id)
           ) sub GROUP BY sub.item_id
         ) cs_match ON cs_match.item_id = ranked.id
-        WHERE 1=1${divWhere}${searchWhere}
+        LEFT JOIN (
+          SELECT ti.item_id, tl.name AS tier_name, tl.color AS tier_color,
+                 tl.sort_order AS tier_level_order, ti.sort_order AS tier_item_order,
+                 tl.id AS tier_level_id,
+                 ROW_NUMBER() OVER (PARTITION BY ti.level_id ORDER BY ti.sort_order) AS tier_rank
+          FROM tier_items ti
+          JOIN tier_levels tl ON tl.id = ti.level_id
+          JOIN tier_sets ts ON ts.id = ti.set_id AND ts.type = 'work' AND ts.is_master = 1
+        ) td ON td.item_id = ranked.id
+        WHERE 1=1${divWhere}${tierWhere}${searchWhere}
       `
       const rows = db().prepare(cte + ` ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...searchBindings, limit, offset)
       const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM (${cte})`).get(...searchBindings) as { cnt: number }).cnt

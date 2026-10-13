@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { tierApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import TierEditor from '../components/TierEditor'
+import MasterRankingView from '../components/cup/MasterRankingView'
 
 interface TierSet {
   id: number
@@ -21,7 +22,7 @@ interface Props {
 }
 
 export default function Tier({ onNavigateToActor, onNavigateToWork }: Props) {
-  const [view, setView] = useState<'list' | 'edit'>('list')
+  const [view, setView] = useState<'list' | 'edit' | 'ranking'>('list')
   const [selectedSetId, setSelectedSetId] = useState<number | null>(null)
   const [sets, setSets] = useState<TierSet[]>([])
   const [sortBy, setSortBy] = useState<'created_at' | 'name'>(() => (localStorage.getItem('tier:sortBy') as 'created_at' | 'name') || 'created_at')
@@ -77,6 +78,17 @@ export default function Tier({ onNavigateToActor, onNavigateToWork }: Props) {
   const handleEdit = (id: number) => {
     setSelectedSetId(id)
     setView('edit')
+  }
+
+  if (view === 'ranking') {
+    return (
+      <MasterRankingView
+        onBack={() => setView('list')}
+        onNavigateToActor={onNavigateToActor}
+        onNavigateToWork={onNavigateToWork}
+        initialSource="tier"
+      />
+    )
   }
 
   if (view === 'edit' && selectedSetId !== null) {
@@ -144,6 +156,10 @@ export default function Tier({ onNavigateToActor, onNavigateToWork }: Props) {
               onClick={() => setShowCreate(true)}
               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
             >+ 티어 등록</button>
+            <button
+              onClick={() => setView('ranking')}
+              className="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1.5 rounded text-sm"
+            >★ 마스터 랭킹</button>
           </div>
         </div>
       </div>

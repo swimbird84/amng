@@ -240,7 +240,7 @@ export const rankingSettingsApi = {
 
 // 마스터 랭킹
 export const masterRankingApi = {
-  list: (params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc'; seasonId?: number }) =>
+  list: (params: { type: 'actor' | 'work'; limit?: number; offset?: number; search?: string; division?: number; sortBy?: string; sortDir?: 'asc' | 'desc'; seasonId?: number; tierLevelId?: number }) =>
     api.invoke('master-ranking:list', params) as Promise<{ rows: unknown[]; total: number }>,
   reset: (type: 'actor' | 'work') =>
     api.invoke('master-ranking:reset', type) as Promise<{ ok: boolean; seasonId: number; seasonName: string }>,
@@ -301,4 +301,12 @@ export const tierApi = {
   getMasterTier: (type: 'actor' | 'work', itemId: number) => api.invoke('tier:getMasterTier', type, itemId) as Promise<{ tier_name: string; tier_color: string } | null>,
   getUnplacedItems: (setId: number, offset: number, limit: number, sortBy?: string) => api.invoke('tier:getUnplacedItems', setId, offset, limit, sortBy) as Promise<{ items: { id: number; name: string; photo_path: string | null }[]; total: number }>,
   getTopTierItems: (type: 'actor' | 'work') => api.invoke('tier:getTopTierItems', type) as Promise<{ tierName: string | null; tierColor?: string; items: { id: number; name: string; photo_path: string | null }[] }>,
+  masterLevelCounts: (type: 'actor' | 'work') => api.invoke('tier:masterLevelCounts', type) as Promise<{ levels: { id: number; name: string; color: string; sort_order: number; count: number }[]; unplacedCount: number }>,
+  leagueTierCross: (type: 'actor' | 'work') => api.invoke('tier:league-tier-cross', type) as Promise<{
+    items: { id: number; name: string; photo_path: string | null; cup_rank: number; master_run_count: number; tier_level_id: number | null; tier_name: string | null; tier_color: string | null; tier_level_order: number | null }[]
+    tierLevels: { id: number; name: string; color: string; sort_order: number }[]
+  }>,
+  workActorDistribution: () => api.invoke('tier:work-actor-distribution') as Promise<any>,
+  workLabelDistribution: () => api.invoke('tier:work-label-distribution') as Promise<any>,
+  workMakerDistribution: () => api.invoke('tier:work-maker-distribution') as Promise<any>,
 }

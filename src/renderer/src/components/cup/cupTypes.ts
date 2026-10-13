@@ -117,6 +117,10 @@ export type MasterRankRow = {
   total_matches: number
   match_wins: number
   last_run_points?: number | null
+  tier_name?: string | null
+  tier_color?: string | null
+  tier_rank?: number | null
+  tier_level_id?: number | null
 }
 
 export type FormatStat = {

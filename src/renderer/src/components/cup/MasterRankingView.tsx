@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { cupApi, masterRankingApi, dashboardApi, actorsApi } from '../../api'
+import { cupApi, masterRankingApi, dashboardApi, actorsApi, tierApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import type { MasterRankRow, FormatStat, RateTooltip } from './cupTypes'
@@ -8,6 +8,7 @@ import RankingSettingsModal from './RankingSettingsModal'
 import WorkActorDistModal from './WorkActorDistModal'
 import WorkLabelDistModal from './WorkLabelDistModal'
 import ActorForm from '../ActorForm'
+import LeagueTierModal from './LeagueTierModal'
 import { pushEscHandler, popEscHandler } from '../../escManager'
 import { useDataChanged } from '../../dataEvents'
 import TournamentStatsModal from './TournamentStatsModal'
@@ -17,14 +18,24 @@ export default function MasterRankingView({
   onBack,
   onNavigateToActor,
   onNavigateToWork,
+  initialSource,
 }: {
   onBack: () => void
   onNavigateToActor: (id: number) => void
   onNavigateToWork: (id: number) => void
+  initialSource?: 'cup' | 'tier'
 }) {
+  const [source, setSource] = useState<'cup' | 'tier'>(initialSource ?? (() =>
+    (localStorage.getItem('masterRank:source') as 'cup' | 'tier') || 'cup'
+  ))
   const [type, setType] = useState<'actor' | 'work'>(() =>
     (localStorage.getItem('masterRank:type') as 'actor' | 'work') || 'actor'
   )
+  const [tierLevels, setTierLevels] = useState<{ id: number; name: string; color: string; count: number }[]>([])
+  const [tierUnplacedCount, setTierUnplacedCount] = useState(0)
+  const [tierLevelFilter, setTierLevelFilter] = useState<number | null>(null)
+  const [showTierChart, setShowTierChart] = useState(false)
+  const [showLeagueTier, setShowLeagueTier] = useState(false)
   const [seasons, setSeasons] = useState<{ id: number; name: string }[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null) // null = 현재 시즌
   const isCurrentSeason = selectedSeasonId === null
@@ -74,7 +85,7 @@ export default function MasterRankingView({
   const [rankChartHover, setRankChartHover] = useState<number | null>(null)
   const [rankChartTooltip, setRankChartTooltip] = useState<TooltipState | null>(null)
 
-  const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc', sid: number | null = null) => {
+  const load = useCallback(async (t: 'actor' | 'work', s: string, p: number, div: number | null, ps: number, sb: string, sd: 'asc' | 'desc', sid: number | null = null, tlf: number | null = null) => {
     setLoading(true)
     try {
       const data = await masterRankingApi.list({
@@ -83,6 +94,7 @@ export default function MasterRankingView({
         ...(div !== null ? { division: div } : {}),
         sortBy: sb, sortDir: sd,
         ...(sid !== null ? { seasonId: sid } : {}),
+        ...(tlf !== null ? { tierLevelId: tlf } : {}),
       })
       setRows(data.rows as MasterRankRow[])
       setTotal(data.total)
@@ -96,13 +108,22 @@ export default function MasterRankingView({
     setRankTrends(new Map(trends.map(r => [r.item_id, r.prev_rank])))
   }, [])
 
-  useEffect(() => { setPage(0); setDivFilter(null); setSelectedSeasonId(null); setRankChartDiv(0) }, [type])
-  useEffect(() => { setPage(0) }, [search, divFilter, pageSize, sortBy, sortDir, selectedSeasonId])
-  useEffect(() => { load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId) }, [type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, load])
+  const loadTierLevels = useCallback(async (t: 'actor' | 'work') => {
+    const data = await tierApi.masterLevelCounts(t)
+    setTierLevels(data.levels)
+    setTierUnplacedCount(data.unplacedCount)
+  }, [])
 
-  useDataChanged(() => load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId))
+  useEffect(() => { setPage(0); setDivFilter(null); setTierLevelFilter(null); setSelectedSeasonId(null); setRankChartDiv(0) }, [type])
+  useEffect(() => { setPage(0); setDivFilter(null); setTierLevelFilter(null); if (source === 'tier') { setSortBy('tier_rank'); setSortDir('asc') } else { setSortBy('total_points'); setSortDir('desc') } }, [source])
+  useEffect(() => { setPage(0) }, [search, divFilter, tierLevelFilter, pageSize, sortBy, sortDir, selectedSeasonId])
+  useEffect(() => { load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, tierLevelFilter) }, [type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, tierLevelFilter, load])
+
+  useDataChanged(() => load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, tierLevelFilter))
   useEffect(() => { loadTrends(type, selectedSeasonId) }, [type, selectedSeasonId, loadTrends])
+  useEffect(() => { loadTierLevels(type) }, [type, loadTierLevels])
   useEffect(() => { localStorage.setItem('masterRank:type', type) }, [type])
+  useEffect(() => { localStorage.setItem('masterRank:source', source) }, [source])
   useEffect(() => { localStorage.setItem('masterRank:pageSize', String(pageSize)) }, [pageSize])
   useEffect(() => { localStorage.setItem('masterRank:sortBy', sortBy) }, [sortBy])
   useEffect(() => { localStorage.setItem('masterRank:sortDir', sortDir) }, [sortDir])
@@ -175,7 +196,7 @@ export default function MasterRankingView({
 
   const handleSort = (col: string) => {
     if (sortBy === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
-    else { setSortBy(col); setSortDir(col === 'score_rank' ? 'asc' : 'desc') }
+    else { setSortBy(col); setSortDir(col === 'score_rank' || col === 'league_rank' || col === 'tier_rank' ? 'asc' : 'desc') }
   }
 
   const SortTh = ({ col, label, subLabel, subLabelClass, className }: { col: string; label: string; subLabel?: React.ReactNode; subLabelClass?: string; className?: string }) => {
@@ -187,7 +208,7 @@ export default function MasterRankingView({
       >
         <div className="flex items-center justify-end gap-1">
           <span>{label}{subLabel && <><br/><span className={subLabelClass ?? 'text-gray-600 font-normal'}>{subLabel}</span></>}</span>
-          <span className="text-[10px]">{active ? ((sortDir === 'desc') !== (col === 'score_rank') ? '▼' : '▲') : <span className="text-gray-700">▼</span>}</span>
+          <span className="text-[10px]">{active ? ((sortDir === 'desc') !== (col === 'score_rank' || col === 'league_rank' || col === 'tier_rank') ? '▼' : '▲') : <span className="text-gray-700">▼</span>}</span>
         </div>
       </th>
     )
@@ -210,8 +231,21 @@ export default function MasterRankingView({
             <span className="text-yellow-400 font-semibold text-sm">★ 마스터 랭킹</span>
           </div>
 
+          {/* 소스 토글 */}
+          <div className="flex items-center bg-gray-800 rounded-lg px-2 py-1">
+            {(['cup', 'tier'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setSource(s)}
+                className={`px-3 py-1 rounded text-xs font-medium transition ${source === s ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              >
+                {s === 'cup' ? '월드컵' : '티어'}
+              </button>
+            ))}
+          </div>
+
           {/* 유형 토글 */}
-          <div className="flex items-center gap-1 bg-gray-800 rounded-lg px-2 py-1">
+          <div className="flex items-center bg-gray-800 rounded-lg px-2 py-1">
             {(['actor', 'work'] as const).map(t => (
               <button
                 key={t}
@@ -246,108 +280,120 @@ export default function MasterRankingView({
               <option key={s} value={s}>{s}개</option>
             ))}
           </select>
-
-          {/* 설정 */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-400 hover:text-gray-200 text-sm transition"
-          >
-            ⚙ 설정
-          </button>
-          {/* 시즌 종료 */}
-          <button
-            onClick={() => setShowResetConfirm('actor')}
-            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
-          >
-            배우 시즌 종료
-          </button>
-          <button
-            onClick={() => setShowResetConfirm('work')}
-            className="bg-gray-800 rounded-lg px-3 py-1.5 text-gray-600 hover:text-gray-400 text-xs transition"
-          >
-            작품 시즌 종료
-          </button>
         </div>
 
-        {/* 시즌 선택 + 부별 필터 */}
+        {/* 2행: 소스별 필터/도구 */}
         <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-          {/* 시즌 드롭다운 */}
-          <select
-            value={selectedSeasonId === null ? '' : String(selectedSeasonId)}
-            onChange={e => setSelectedSeasonId(e.target.value === '' ? null : Number(e.target.value))}
-            className="bg-gray-800 text-gray-300 text-xs rounded px-2 py-1 border-none outline-none cursor-pointer hover:text-white"
-          >
-            <option value="">{seasons.length + 1}시즌(현재)</option>
-            {seasons.map(s => (
-              <option key={s.id} value={s.id}>{s.name}시즌</option>
-            ))}
-            <option value="-1">전체</option>
-          </select>
-
-          {/* 부별 필터 */}
-          {divisionCounts.length > 0 && (<>
-
+          {source === 'cup' ? (<>
+            {/* 시즌 드롭다운 */}
+            <select
+              value={selectedSeasonId === null ? '' : String(selectedSeasonId)}
+              onChange={e => setSelectedSeasonId(e.target.value === '' ? null : Number(e.target.value))}
+              className="bg-gray-800 text-gray-300 text-xs rounded px-2 py-1 border-none outline-none cursor-pointer hover:text-white"
+            >
+              <option value="">{seasons.length + 1}시즌(현재)</option>
+              {seasons.map(s => (
+                <option key={s.id} value={s.id}>{s.name}시즌</option>
+              ))}
+              <option value="-1">전체</option>
+            </select>
+            {/* 부별 필터 */}
+            {divisionCounts.length > 0 && (<>
+              <button
+                onClick={() => setDivFilter(null)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition ${divFilter === null ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}
+              >
+                전체
+              </button>
+              {divisionCounts.map(({ division, count }) => (
+                <button
+                  key={division}
+                  onClick={() => setDivFilter(divFilter === division ? null : division)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition border ${
+                    divFilter === division
+                      ? 'bg-blue-600 text-white border-blue-500'
+                      : `${DIV_COLOR[division] ?? 'bg-gray-800 text-gray-400 border-gray-700'} hover:opacity-80`
+                  }`}
+                >
+                  {DIV_LABEL[division] ?? `${division}부`} <span className="opacity-70">{(type === 'actor' ? DIV_STD_SIZES_ACTOR : DIV_STD_SIZES)[division] != null ? `${(type === 'actor' ? DIV_STD_SIZES_ACTOR : DIV_STD_SIZES)[division]}(${count})` : count}</span>
+                </button>
+              ))}
+              <div className="flex-1" />
+              {type === 'work' && (
+                <>
+                  <button onClick={() => setShowActorDist(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">배우분포</button>
+                  <button onClick={() => setShowLabelDist(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">레이블분포</button>
+                </>
+              )}
+              <button onClick={() => { setChartSeasonId(selectedSeasonId); setRankChartModal(true) }} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">랭킹차트</button>
+              <button onClick={() => setShowTournamentStats(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">대회통계</button>
+              <button onClick={() => setShowSettings(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">⚙ 설정</button>
+              <button onClick={() => setShowResetConfirm('actor')} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">배우 시즌종료</button>
+              <button onClick={() => setShowResetConfirm('work')} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">작품 시즌종료</button>
+            </>)}
+          </>) : (<>
+            {/* 티어 레벨 필터 */}
             <button
-              onClick={() => setDivFilter(null)}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition ${divFilter === null ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}
+              onClick={() => setTierLevelFilter(null)}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition ${tierLevelFilter === null ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}
             >
               전체
             </button>
-            {divisionCounts.map(({ division, count }) => (
+            {tierLevels.map(lv => (
               <button
-                key={division}
-                onClick={() => setDivFilter(divFilter === division ? null : division)}
+                key={lv.id}
+                onClick={() => setTierLevelFilter(tierLevelFilter === lv.id ? null : lv.id)}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition border ${
-                  divFilter === division
+                  tierLevelFilter === lv.id
                     ? 'bg-blue-600 text-white border-blue-500'
-                    : `${DIV_COLOR[division] ?? 'bg-gray-800 text-gray-400 border-gray-700'} hover:opacity-80`
+                    : 'hover:opacity-80'
                 }`}
+                style={tierLevelFilter !== lv.id ? { backgroundColor: `${lv.color}30`, color: lv.color, borderColor: `${lv.color}60` } : undefined}
               >
-                {DIV_LABEL[division] ?? `${division}부`} <span className="opacity-70">{(type === 'actor' ? DIV_STD_SIZES_ACTOR : DIV_STD_SIZES)[division] != null ? `${(type === 'actor' ? DIV_STD_SIZES_ACTOR : DIV_STD_SIZES)[division]}(${count})` : count}</span>
+                {lv.name} <span className="opacity-70">{lv.count}</span>
               </button>
             ))}
+            <button
+              onClick={() => setTierLevelFilter(tierLevelFilter === -1 ? null : -1)}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition border ${
+                tierLevelFilter === -1
+                  ? 'bg-blue-600 text-white border-blue-500'
+                  : 'bg-gray-800/60 text-gray-500 border-gray-700 hover:opacity-80'
+              }`}
+            >
+              미분류 <span className="opacity-70">{tierUnplacedCount}</span>
+            </button>
             <div className="flex-1" />
             {type === 'work' && (
               <>
-                <button
-                  onClick={() => setShowActorDist(true)}
-                  className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
-                >
-                  배우분포
-                </button>
-                <button
-                  onClick={() => setShowLabelDist(true)}
-                  className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
-                >
-                  레이블분포
-                </button>
+                <button onClick={() => setShowActorDist(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">배우분포</button>
+                <button onClick={() => setShowLabelDist(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">레이블분포</button>
               </>
             )}
-            <button
-              onClick={() => { setChartSeasonId(selectedSeasonId); setRankChartModal(true) }}
-              className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
-            >
-              랭킹차트
-            </button>
-            <button
-              onClick={() => setShowTournamentStats(true)}
-              className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80"
-            >
-              대회통계
-            </button>
+            <button onClick={() => setShowTierChart(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">티어차트</button>
           </>)}
+          <button onClick={() => setShowLeagueTier(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">리그⇄티어</button>
         </div>
       </div>
+
+      {showLeagueTier && (
+        <LeagueTierModal
+          onClose={() => setShowLeagueTier(false)}
+          onNavigateToActor={(id) => { setShowLeagueTier(false); onNavigateToActor(id) }}
+          onNavigateToWork={(id) => { setShowLeagueTier(false); onNavigateToWork(id) }}
+        />
+      )}
 
       {showActorDist && (
         <WorkActorDistModal
           onClose={() => setShowActorDist(false)}
           onNavigateToActor={(id) => { setShowActorDist(false); onNavigateToActor(id) }}
+          source={source}
         />
       )}
 
       {showLabelDist && (
-        <WorkLabelDistModal onClose={() => setShowLabelDist(false)} />
+        <WorkLabelDistModal onClose={() => setShowLabelDist(false)} source={source} />
       )}
 
       {showTournamentStats && (
@@ -366,7 +412,7 @@ export default function MasterRankingView({
 
       {showSettings && <RankingSettingsModal onClose={() => {
         setShowSettings(false)
-        load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId)
+        load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, tierLevelFilter)
         loadTrends(type, selectedSeasonId)
         cupApi.divisionCounts(type, selectedSeasonId ?? undefined).then(setDivisionCounts).catch(() => setDivisionCounts([]))
       }} />}
@@ -389,9 +435,10 @@ export default function MasterRankingView({
                   setShowResetConfirm(false)
                   setSelectedSeasonId(null)
                   masterRankingApi.seasons(type).then(s => setSeasons(s.map(r => ({ id: r.id, name: r.name })))).catch(() => setSeasons([]))
-                  load(type, search, page, divFilter, pageSize, sortBy, sortDir, null)
+                  load(type, search, page, divFilter, pageSize, sortBy, sortDir, null, tierLevelFilter)
                   loadTrends(type, null)
                   cupApi.divisionCounts(type).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+                  loadTierLevels(type)
                 }}
                 className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white rounded text-sm font-semibold"
               >시즌 종료</button>
@@ -418,8 +465,8 @@ export default function MasterRankingView({
             <table className="w-full table-fixed text-sm">
               <colgroup>
                 <col style={{ width: '2.5rem' }} />
-                <col style={{ width: '3rem' }} />
-                <col style={{ width: '3.5rem' }} />
+                <col style={{ width: '4rem' }} />
+                <col style={{ width: '4rem' }} />
                 <col style={{ width: '4rem' }} />
                 <col />
                 {type === 'work' && <col style={{ width: '6rem' }} />}
@@ -434,8 +481,8 @@ export default function MasterRankingView({
               <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr className="border-b border-gray-700 text-gray-400 text-xs">
                   <th className="px-2 py-2.5 text-center text-gray-400">#</th>
-                  <th className="px-2 py-2.5 text-center text-gray-400">순위</th>
-                  <th className="px-2 py-2.5 text-center text-gray-400">리그</th>
+                  <SortTh col="league_rank" label="리그" className="text-center" />
+                  <SortTh col="tier_rank" label="티어" className="text-center" />
                   <th className="px-2 py-2.5 text-left text-gray-400">썸네일</th>
                   <th className="px-3 py-2.5 text-left text-gray-400">이름</th>
                   {type === 'work' && <th className="px-2 py-2.5 text-left text-gray-400">레이블</th>}
@@ -478,15 +525,35 @@ export default function MasterRankingView({
                     >
                       {/* # */}
                       <td className="px-2 py-2 text-center text-gray-600 text-xs">{page * pageSize + idx + 1}</td>
-                      {/* 순위 */}
-                      <td className="px-2 py-2 text-center">
-                        <span className={`text-xs font-medium ${!isRegistered ? 'text-gray-600' : row.rank <= 3 ? 'text-yellow-400' : 'text-gray-300'}`}>{isRegistered ? row.rank : '-'}</span>
+                      {/* 리그 뱃지 */}
+                      <td className="px-1 py-1 text-center">
+                        {division === 0 ? (
+                          <span className="text-gray-600 text-xs">-</span>
+                        ) : (() => {
+                          const divBounds = type === 'actor' ? DIV_BOUNDARIES_ACTOR : DIV_BOUNDARIES
+                          const divStart = division <= 1 ? 1 : (divBounds[division - 2] + 1)
+                          const leagueRank = row.rank - divStart + 1
+                          return (
+                            <div className={`inline-flex flex-col items-center rounded border text-xs font-medium px-1.5 py-0.5 leading-tight ${DIV_COLOR[division] ?? ''}`}>
+                              <span>{DIV_LABEL[division] ?? `${division}부`}</span>
+                              <span className="text-[10px] opacity-70">#{leagueRank}</span>
+                            </div>
+                          )
+                        })()}
                       </td>
-                      {/* 리그 */}
-                      <td className="px-2 py-2 text-center">
-                        <span className={`inline-block px-1.5 py-0.5 rounded border text-xs font-medium ${DIV_COLOR[division] ?? ''}`}>
-                          {DIV_LABEL[division] ?? `${division}부`}
-                        </span>
+                      {/* 티어 뱃지 */}
+                      <td className="px-1 py-1 text-center">
+                        {row.tier_name ? (
+                          <div
+                            className="inline-flex flex-col items-center rounded text-xs font-medium px-1.5 py-0.5 leading-tight border"
+                            style={{ backgroundColor: `${row.tier_color}30`, color: row.tier_color, borderColor: `${row.tier_color}60` }}
+                          >
+                            <span>{row.tier_name}</span>
+                            <span className="text-[10px] opacity-70">#{row.tier_rank}</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-600 text-xs">-</span>
+                        )}
                       </td>
                       {/* 썸네일 */}
                       <td
@@ -1012,11 +1079,63 @@ export default function MasterRankingView({
           onSave={() => {
             setEditActorId(null)
             setEditActorData(null)
-            load(type, search, page, divFilter, pageSize, sortBy, sortDir)
+            load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, tierLevelFilter)
           }}
           onCancel={() => { setEditActorId(null); setEditActorData(null) }}
         />
       )}
+
+      {/* 티어 차트 모달 */}
+      {showTierChart && (() => {
+        const totalPlaced = tierLevels.reduce((s, lv) => s + lv.count, 0)
+        const totalAll = totalPlaced + tierUnplacedCount
+        const pct = totalAll > 0 ? (totalPlaced / totalAll * 100).toFixed(1) : '0'
+        const maxCount = Math.max(...tierLevels.map(lv => lv.count), tierUnplacedCount, 1)
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowTierChart(false)}>
+            <div className="bg-gray-800 rounded-lg w-[600px] p-6" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-white font-bold">티어 분포 — {type === 'actor' ? '배우' : '작품'}</h2>
+                <button onClick={() => setShowTierChart(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
+              </div>
+              <p className="text-sm text-gray-400 mb-4">
+                전체 <span className="text-white font-medium">{totalAll}</span>{type === 'actor' ? '명' : '개'} 중{' '}
+                <span className="text-white font-medium">{totalPlaced}</span>{type === 'actor' ? '명' : '개'} 배치{' '}
+                <span className="text-green-400">({pct}%)</span>
+              </p>
+              <div className="space-y-2">
+                {tierLevels.map(lv => (
+                  <div key={lv.id} className="flex items-center gap-2">
+                    <span className="w-12 text-right text-xs font-medium shrink-0" style={{ color: lv.color }}>{lv.name}</span>
+                    <div className="flex-1 h-6 bg-gray-900 rounded overflow-hidden">
+                      <div
+                        className="h-full rounded flex items-center justify-end px-1.5 transition-all"
+                        style={{ width: `${Math.max(lv.count / maxCount * 100, lv.count > 0 ? 3 : 0)}%`, backgroundColor: lv.color }}
+                      >
+                        {lv.count > 0 && <span className="text-white text-xs font-medium drop-shadow">{lv.count}</span>}
+                      </div>
+                    </div>
+                    {lv.count === 0 && <span className="text-gray-600 text-xs">0</span>}
+                  </div>
+                ))}
+                {/* 미분류 */}
+                <div className="flex items-center gap-2 pt-1 border-t border-gray-700 mt-1">
+                  <span className="w-12 text-right text-xs font-medium text-gray-500 shrink-0">미분류</span>
+                  <div className="flex-1 h-6 bg-gray-900 rounded overflow-hidden">
+                    <div
+                      className="h-full rounded bg-gray-600 flex items-center justify-end px-1.5 transition-all"
+                      style={{ width: `${Math.max(tierUnplacedCount / maxCount * 100, tierUnplacedCount > 0 ? 3 : 0)}%` }}
+                    >
+                      {tierUnplacedCount > 0 && <span className="text-white text-xs font-medium drop-shadow">{tierUnplacedCount}</span>}
+                    </div>
+                  </div>
+                  {tierUnplacedCount === 0 && <span className="text-gray-600 text-xs">0</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { masterRankingApi } from '../../api'
+import { masterRankingApi, tierApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import { DIV_LABEL, DIV_COLOR, DIV_TEXT_COLOR } from './cupConstants'
 import { pushEscHandler, popEscHandler } from '../../escManager'
@@ -9,15 +9,19 @@ type ActorRow = {
   work_count: number; avg_rank: number; best_rank: number; worst_rank: number; actor_rank: number | null
 }
 type DivData = { division: number; actors: ActorRow[] }
+type TierLevelData = { level_id: number; level_name: string; level_color: string; actors: ActorRow[] }
 
 export default function WorkActorDistModal({
   onClose,
   onNavigateToActor,
+  source = 'cup',
 }: {
   onClose: () => void
   onNavigateToActor: (id: number) => void
+  source?: 'cup' | 'tier'
 }) {
   const [data, setData] = useState<{ divisions: DivData[]; allActors: ActorRow[] } | null>(null)
+  const [tierData, setTierData] = useState<{ levels: TierLevelData[]; allActors: ActorRow[] } | null>(null)
   const [tab, setTab] = useState<'division' | 'all'>(() =>
     (localStorage.getItem('actorDist:tab') as 'division' | 'all') || 'division'
   )
@@ -30,8 +34,9 @@ export default function WorkActorDistModal({
   const [tableSearch, setTableSearch] = useState('')
 
   useEffect(() => {
-    masterRankingApi.workActorDistribution().then(setData)
-  }, [])
+    if (source === 'cup') masterRankingApi.workActorDistribution().then(setData)
+    else tierApi.workActorDistribution().then(setTierData)
+  }, [source])
 
   useEffect(() => {
     const handler = () => onClose()
@@ -47,7 +52,8 @@ export default function WorkActorDistModal({
   const SortIcon = ({ col }: { col: typeof tableSortCol }) =>
     tableSortCol === col ? <span className="text-[9px]">{tableSortDir === 'desc' ? '▼' : '▲'}</span> : <span className="text-[9px] text-gray-700">▼</span>
 
-  const sortedAllActors = data ? [...data.allActors]
+  const allActorsList = source === 'cup' ? data?.allActors : tierData?.allActors
+  const sortedAllActors = allActorsList ? [...allActorsList]
     .filter(a => !tableSearch || a.name.includes(tableSearch))
     .sort((a, b) => {
       const dir = tableSortDir === 'asc' ? 1 : -1
@@ -55,6 +61,8 @@ export default function WorkActorDistModal({
       const bv = b[tableSortCol] ?? 99999
       return (av - bv) * dir || a.name.localeCompare(b.name)
     }) : []
+  const isLoaded = source === 'cup' ? data !== null : tierData !== null
+  const isEmpty = isLoaded && sortedAllActors.length === 0 && (source === 'cup' ? (data?.divisions.length === 0) : (tierData?.levels.length === 0))
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]" onClick={onClose}>
@@ -63,10 +71,10 @@ export default function WorkActorDistModal({
 
         {/* 헤더 + 탭 */}
         <div className="shrink-0 px-6 pt-5 pb-0 border-b border-gray-700">
-          <h2 className="text-lg font-bold text-white mb-3">작품 랭킹 배우 분포</h2>
+          <h2 className="text-lg font-bold text-white mb-3">작품 {source === 'cup' ? '랭킹' : '티어'} 배우 분포</h2>
           <div className="flex items-center">
             <div className="flex">
-              {([['division', '부별 주요 배우'], ['all', '전체 배우 통계']] as const).map(([key, label]) => (
+              {([['division', source === 'cup' ? '부별 주요 배우' : '티어별 주요 배우'], ['all', '전체 배우 통계']] as const).map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => { setTab(key); localStorage.setItem('actorDist:tab', key) }}
@@ -104,22 +112,29 @@ export default function WorkActorDistModal({
           </div>
         </div>
 
-        {!data ? (
+        {!isLoaded ? (
           <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">로딩 중...</div>
-        ) : data.allActors.length === 0 ? (
+        ) : isEmpty ? (
           <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">배우 분포 데이터가 없습니다.</div>
         ) : (
           <div className={`flex-1 overflow-y-auto px-6 py-4 ${tab === 'all' ? 'flex flex-col' : ''}`}>
-            {/* 부별 주요 배우 탭 */}
+            {/* 부별/티어별 주요 배우 탭 */}
             {tab === 'division' && (
               <div className="space-y-3">
-                {data.divisions.map(({ division, actors }) => {
+                {(source === 'cup' ? (data?.divisions ?? []) : (tierData?.levels ?? [])).map((group: any) => {
+                  const key = source === 'cup' ? group.division : group.level_id
+                  const actors: ActorRow[] = group.actors
                   const shown = topN > 0 ? actors.slice(0, topN) : actors
+                  const groupLabel = source === 'cup' ? (DIV_LABEL[group.division] ?? `${group.division}부`) : group.level_name
+                  const groupColor = source === 'cup' ? (DIV_COLOR[group.division] ?? '') : ''
+                  const groupStyle = source === 'tier' ? { backgroundColor: `${group.level_color}30`, color: group.level_color, borderColor: `${group.level_color}60` } : undefined
+                  const textColor = source === 'cup' ? (DIV_TEXT_COLOR[group.division] ?? 'text-gray-400') : ''
+                  const textStyle = source === 'tier' ? { color: group.level_color } : undefined
                   return (
-                    <div key={division} className="bg-gray-900/50 rounded-lg p-3">
+                    <div key={key} className="bg-gray-900/50 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${DIV_COLOR[division] ?? ''}`}>
-                          {DIV_LABEL[division] ?? `${division}부`}
+                        <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${groupColor}`} style={groupStyle}>
+                          {groupLabel}
                         </span>
                         <span className="text-xs text-gray-500">{actors.length}명의 배우 출현</span>
                       </div>
@@ -144,7 +159,7 @@ export default function WorkActorDistModal({
                                 <span className="text-xs text-white group-hover:underline truncate">{actor.name}</span>
                               </div>
                               <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                                <span className={DIV_TEXT_COLOR[division] ?? 'text-gray-400'}>{actor.work_count}작</span>
+                                <span className={textColor} style={textStyle}>{actor.work_count}작</span>
                                 <span>avg {actor.avg_rank}</span>
                               </div>
                             </div>
