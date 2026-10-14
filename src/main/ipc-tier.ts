@@ -245,6 +245,40 @@ export function registerTierHandlers(): void {
     }
   })
 
+  ipcMain.handle('tier:masterRanking', (_e, type: 'actor' | 'work') => {
+    const set = db().prepare('SELECT id FROM tier_sets WHERE type = ? AND is_master = 1').get(type) as { id: number } | undefined
+    if (!set) return []
+    if (type === 'actor') {
+      const rows = db().prepare(`
+        SELECT ti.item_id AS id, a.name, a.photo_path, tl.name AS tier_name, tl.color AS tier_color, tl.sort_order AS level_order, ti.sort_order
+        FROM tier_items ti
+        JOIN tier_levels tl ON tl.id = ti.level_id
+        JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0 AND a.is_excluded = 0
+        WHERE ti.set_id = ?
+        ORDER BY tl.sort_order, ti.sort_order
+      `).all(set.id) as any[]
+      let prevLevel = -1, tierRank = 0
+      return rows.map(r => {
+        if (r.level_order !== prevLevel) { tierRank = 1; prevLevel = r.level_order } else { tierRank++ }
+        return { ...r, tier_rank: tierRank }
+      })
+    } else {
+      const rows = db().prepare(`
+        SELECT ti.item_id AS id, COALESCE(w.product_number, w.title) AS name, w.cover_path AS photo_path, tl.name AS tier_name, tl.color AS tier_color, tl.sort_order AS level_order, ti.sort_order
+        FROM tier_items ti
+        JOIN tier_levels tl ON tl.id = ti.level_id
+        JOIN works w ON w.id = ti.item_id
+        WHERE ti.set_id = ?
+        ORDER BY tl.sort_order, ti.sort_order
+      `).all(set.id) as any[]
+      let prevLevel = -1, tierRank = 0
+      return rows.map(r => {
+        if (r.level_order !== prevLevel) { tierRank = 1; prevLevel = r.level_order } else { tierRank++ }
+        return { ...r, tier_rank: tierRank }
+      })
+    }
+  })
+
   ipcMain.handle('tier:masterLevelCounts', (_e, type: 'actor' | 'work') => {
     const set = db().prepare('SELECT id FROM tier_sets WHERE type = ? AND is_master = 1').get(type) as { id: number } | undefined
     if (!set) return { levels: [], unplacedCount: 0 }
@@ -252,11 +286,13 @@ export function registerTierHandlers(): void {
       SELECT tl.id, tl.name, tl.color, tl.sort_order, COUNT(ti.id) AS count
       FROM tier_levels tl
       LEFT JOIN tier_items ti ON ti.level_id = tl.id AND ti.set_id = ?
+        ${type === 'actor' ? 'LEFT JOIN actors a ON a.id = ti.item_id' : ''}
       WHERE tl.set_id = ?
+        ${type === 'actor' ? 'AND (ti.id IS NULL OR (a.is_deleted = 0 AND a.is_excluded = 0))' : ''}
       GROUP BY tl.id
       ORDER BY tl.sort_order
     `).all(set.id, set.id)
-    const placedCount = (db().prepare('SELECT COUNT(*) AS cnt FROM tier_items WHERE set_id = ?').get(set.id) as { cnt: number }).cnt
+    const placedCount = (db().prepare(`SELECT COUNT(*) AS cnt FROM tier_items ti ${type === 'actor' ? 'JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0 AND a.is_excluded = 0' : ''} WHERE ti.set_id = ?`).get(set.id) as { cnt: number }).cnt
     const totalItems = type === 'actor'
       ? (db().prepare('SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0 AND is_excluded = 0').get() as { cnt: number }).cnt
       : (db().prepare('SELECT COUNT(*) AS cnt FROM works').get() as { cnt: number }).cnt

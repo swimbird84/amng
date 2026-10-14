@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { actorsApi, masterRankingApi } from '../api'
+import { actorsApi, masterRankingApi, tierApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData, type PhysicalSettings } from '../components/PhysicalCorrectionModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
@@ -10,11 +10,12 @@ type RankBy =
   | 'height' | 'bust' | 'waist' | 'hip' | 'cup'
   | 'face' | 'score_bust' | 'score_hip' | 'physical' | 'skin'
   | 'acting' | 'sexy' | 'charm' | 'technique' | 'proportions'
-  | 'masterRanking'
+  | 'masterRanking' | 'tierRanking'
 
 
 const RANK_ITEMS: { value: RankBy; label: string }[] = [
-  { value: 'masterRanking',  label: '마스터랭킹' },
+  { value: 'masterRanking',  label: '월드컵' },
+  { value: 'tierRanking',    label: '티어' },
   { value: 'work_count',     label: '작품수' },
   { value: 'fav_work_count', label: '찜' },
   { value: 'avg_score',      label: '평점' },
@@ -103,6 +104,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
   const [masterTrends, setMasterTrends] = useState<Map<number, number | null>>(new Map())
   const [seasons, setSeasons] = useState<{ id: number; name: string }[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
+  const [tierItems, setTierItems] = useState<{ id: number; name: string; photo_path: string | null; tier_name: string; tier_color: string; tier_rank: number }[]>([])
+  const [tierMap, setTierMap] = useState<Map<number, { tier_name: string; tier_color: string; tier_rank: number }>>(new Map())
 
   const loadData = useCallback(async () => {
     const data = await actorsApi.physicalData() as ActorPhysicalData[]
@@ -129,9 +132,16 @@ export default function Ranking({ onNavigateToActor }: Props) {
 
   useDataChanged(() => loadData())
 
+  const loadTierRanking = useCallback(async () => {
+    const data = await tierApi.masterRanking('actor')
+    setTierItems(data)
+    setTierMap(new Map(data.map(r => [r.id, { tier_name: r.tier_name, tier_color: r.tier_color, tier_rank: r.tier_rank }])))
+  }, [])
+
   useEffect(() => {
     if (rankBy === 'masterRanking') loadMasterRanking(selectedSeasonId)
-  }, [rankBy, selectedSeasonId, loadMasterRanking])
+    if (rankBy === 'tierRanking') loadTierRanking()
+  }, [rankBy, selectedSeasonId, loadMasterRanking, loadTierRanking])
 
   const stats = useMemo(() => computeStats(actors), [actors])
 
@@ -148,6 +158,17 @@ export default function Ranking({ onNavigateToActor }: Props) {
         if (!br) return -1
         return sortDir === 'desc' ? br.total_points - ar.total_points : ar.total_points - br.total_points
       })
+    }
+
+    if (rankBy === 'tierRanking') {
+      const tierOrder = tierItems.map(t => t.id)
+      return base
+        .filter(a => tierOrder.includes(a.id))
+        .sort((a, b) => {
+          const ai = tierOrder.indexOf(a.id)
+          const bi = tierOrder.indexOf(b.id)
+          return sortDir === 'desc' ? ai - bi : bi - ai
+        })
     }
 
     const isNeg = profileKeyMap[rankBy]
@@ -184,7 +205,7 @@ export default function Ranking({ onNavigateToActor }: Props) {
         if (secondary !== 0) return secondary
         return sortDir === 'desc' ? b.work_count - a.work_count : a.work_count - b.work_count
       })
-  }, [actors, settings, stats, rankBy, sortDir, masterRanks])
+  }, [actors, settings, stats, rankBy, sortDir, masterRanks, tierItems])
 
   const getSubtitle = (a: ScoredActor): string => {
     if (rankBy === 'work_count')     return `${a.work_count}편`
@@ -223,8 +244,18 @@ export default function Ranking({ onNavigateToActor }: Props) {
     )
   }
 
+  const getTierSubtitleNode = (a: ScoredActor): React.ReactNode => {
+    const t = tierMap.get(a.id)
+    if (!t) return <p className="text-xs text-gray-500 truncate">—</p>
+    return (
+      <p className="text-xs truncate font-bold" style={{ color: t.tier_color }}>
+        [{t.tier_name} #{t.tier_rank}]
+      </p>
+    )
+  }
+
   const currentLabel = RANK_ITEMS.find(i => i.value === rankBy)?.label ?? ''
-  const title = `${currentLabel === '마스터랭킹' ? '마스터' : currentLabel} 랭킹`
+  const title = `${currentLabel} 랭킹`
   const top10 = ranked.slice(0, 10)
   const rest = ranked.slice(10)
 
@@ -293,8 +324,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
                 key={a.id}
                 actor={a}
                 rank={rankBy === 'masterRanking' ? (masterRanks.get(a.id)?.rank ?? i + 1) : i + 1}
-                subtitle={rankBy !== 'masterRanking' ? getSubtitle(a) : undefined}
-                subtitleNode={rankBy === 'masterRanking' ? getMasterSubtitleNode(a) : undefined}
+                subtitle={rankBy !== 'masterRanking' && rankBy !== 'tierRanking' ? getSubtitle(a) : undefined}
+                subtitleNode={rankBy === 'masterRanking' ? getMasterSubtitleNode(a) : rankBy === 'tierRanking' ? getTierSubtitleNode(a) : undefined}
                 imgClassName="w-full h-40"
                 onClick={() => onNavigateToActor(a.id)}
                 onMouseMove={e => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
@@ -311,8 +342,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
                 key={a.id}
                 actor={a}
                 rank={rankBy === 'masterRanking' ? (masterRanks.get(a.id)?.rank ?? i + 11) : i + 11}
-                subtitle={rankBy !== 'masterRanking' ? getSubtitle(a) : undefined}
-                subtitleNode={rankBy === 'masterRanking' ? getMasterSubtitleNode(a) : undefined}
+                subtitle={rankBy !== 'masterRanking' && rankBy !== 'tierRanking' ? getSubtitle(a) : undefined}
+                subtitleNode={rankBy === 'masterRanking' ? getMasterSubtitleNode(a) : rankBy === 'tierRanking' ? getTierSubtitleNode(a) : undefined}
                 onClick={() => onNavigateToActor(a.id)}
                 onMouseMove={e => setTooltip({ type: 'actor', id: a.id, x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setTooltip(null)}

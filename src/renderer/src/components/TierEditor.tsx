@@ -141,14 +141,12 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   const calcDropIndex = (e: React.DragEvent, _levelId: number) => {
     const container = e.currentTarget as HTMLElement
     const children = Array.from(container.querySelectorAll('[data-tier-item]')) as HTMLElement[]
-    // Filter out the item being dragged so index calculation is accurate
-    const filtered = children.filter(el => el.dataset.itemId !== String(draggingId))
-    for (let i = 0; i < filtered.length; i++) {
-      const rect = filtered[i].getBoundingClientRect()
+    for (let i = 0; i < children.length; i++) {
+      const rect = children[i].getBoundingClientRect()
       if (e.clientY >= rect.top && e.clientY <= rect.bottom && e.clientX < rect.left + rect.width / 2) return i
       if (e.clientY < rect.top) return i
     }
-    return filtered.length
+    return children.length
   }
 
   const handleDragOverLevel = (e: React.DragEvent, levelId: number) => {
@@ -166,13 +164,15 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     const itemId = parseInt(e.dataTransfer.getData('text/plain'))
     if (isNaN(itemId)) return
     const idx = calcDropIndex(e, levelId)
+    const wasUnplaced = !items.some(i => i.item_id === itemId)
     await tierApi.setItem(setId, levelId, itemId, idx)
     setDraggingId(null)
     setDropIndicator(null)
     loadItems()
-    // Remove from unplaced pool (don't reload)
-    setUnplaced(prev => prev.filter(i => i.id !== itemId))
-    setUnplacedTotal(prev => prev - 1)
+    if (wasUnplaced) {
+      setUnplaced(prev => prev.filter(i => i.id !== itemId))
+      setUnplacedTotal(prev => prev - 1)
+    }
   }
 
   const handleDropOnPool = async (e: React.DragEvent) => {
@@ -273,14 +273,12 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                   onDragLeave={handleDragLeaveLevel}
                   onDrop={e => handleDropOnLevel(e, level.id)}
                 >
-                  {(() => {
-                    const filteredItems = levelItems.filter(i => i.item_id !== draggingId)
-                    return filteredItems.map((item, idx) => (
+                  {levelItems.map((item, idx) => (
                       <div key={item.item_id} style={{ height: ITEM_HEIGHT }}>
                         <div
                           data-tier-item
                           data-item-id={item.item_id}
-                          className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer transition relative ${dropIndicator?.levelId === level.id && dropIndicator.index === idx ? 'border-l-[3px] border-l-blue-500 border-y border-y-gray-600 border-r border-r-gray-600' : 'border border-gray-600 hover:border-gray-400'}`}
+                          className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer transition relative ${draggingId === item.item_id ? 'opacity-30' : ''} ${dropIndicator?.levelId === level.id && dropIndicator.index === idx ? 'border-l-[3px] border-l-blue-500 border-y border-y-gray-600 border-r border-r-gray-600' : 'border border-gray-600 hover:border-gray-400'}`}
                           draggable
                           onDragStart={e => handleDragStart(e, item.item_id)}
                           onDragEnd={handleDragEnd}
@@ -292,9 +290,8 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                           {!item.photo_path && <span className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] leading-tight text-center px-0.5">{item.name}</span>}
                         </div>
                       </div>
-                    ))
-                  })()}
-                  {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.filter(i => i.item_id !== draggingId).length && levelItems.filter(i => i.item_id !== draggingId).length > 0 && (
+                    ))}
+                  {dropIndicator?.levelId === level.id && dropIndicator.index === levelItems.length && levelItems.length > 0 && (
                     <div className="w-[3px] bg-blue-500 rounded shrink-0 self-stretch" />
                   )}
                 </div>
