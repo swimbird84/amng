@@ -214,6 +214,10 @@ export const cupApi = {
     api.invoke('cup:clear-run', tournamentId),
   pick: (matchId: number, winnerId: number | null, isDraw?: boolean) =>
     api.invoke('cup:pick', { matchId, winnerId, isDraw }),
+  swissNextRound: (runId: number, groupId: number) =>
+    api.invoke('cup:swiss-next-round', runId, groupId) as Promise<{ ok: boolean; error?: string; round?: number; totalRounds?: number; matchCount?: number }>,
+  swissInfo: (runId: number, groupId: number) =>
+    api.invoke('cup:swiss-info', runId, groupId) as Promise<{ currentRound: number; totalRounds: number; currentRoundDone: boolean; participantCount: number }>,
   tournamentRankings: (tournamentId: number, params?: { limit?: number; offset?: number; sortBy?: string; sortDir?: string; search?: string }) =>
     api.invoke('cup:tournament-rankings', { tournamentId, ...params }) as Promise<{ rows: unknown[]; total: number }>,
   runProgress: (runId: number) =>

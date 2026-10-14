@@ -388,7 +388,7 @@ export default function PlayView({
                     return (
                       <p className={`font-bold text-lg ${match.phase === 'group' || match.phase === 'tiebreak' ? 'text-purple-400' : 'text-yellow-400'}`}>
                         {match.phase === 'group'
-                          ? `${blkLabel}블록 ${(progress.groupsDone ?? 0) + 1}/${progress.groupsTotal ?? '?'}조 예선 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
+                          ? `${blkLabel}블록 ${(progress.groupsDone ?? 0) + 1}/${progress.groupsTotal ?? '?'}조 ${match.round >= 1 ? `스위스 ${match.round}R` : '예선'} — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                           : match.phase === 'tiebreak'
                             ? `${blkLabel}블록 ${(progress.groupsDone ?? 0) + 1}/${progress.groupsTotal ?? '?'}조 동점처리 — ${(progress.groupDone ?? 0) + 1}/${progress.groupTotal ?? '?'}경기`
                             : match.block_id != null
@@ -785,13 +785,18 @@ export default function PlayView({
                           if (!aDone && bDone) return 1
                           if (aDone && bDone) return b.group_id - a.group_id
                           return a.group_id - b.group_id
-                        }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms, qualifiers: gqs }) => {
-                          const groupDone = gms && gms.length > 0 && gms.every(m => m.winner_id !== null || m.is_draw) && (!tbms || tbms.length === 0 || tbms.every(m => m.winner_id !== null || m.is_draw))
+                        }).map(({ group_id, standings: gs, matches: gms, tiebreakMatches: tbms, qualifiers: gqs, ...swissFields }) => {
+                          const groupDone = gms && gms.length > 0 && gms.every(m => m.winner_id !== null || m.is_draw || m.is_bye) && (!tbms || tbms.length === 0 || tbms.every(m => m.winner_id !== null || m.is_draw))
                           const groupActive = !groupDone && activeGroupId === group_id
                           return (
                             <div key={group_id} className="bg-gray-800 rounded-xl overflow-hidden">
                               <div className="px-3 py-1.5 border-b border-gray-700 bg-gray-700/40 flex items-center gap-2">
                                 <span className="text-xs font-semibold text-white">{group_id}조</span>
+                                {(swissFields as any).isSwiss ? (() => {
+                                  const swissRound = (swissFields as any).swissRound ?? 0
+                                  const swissTotalRounds = (swissFields as any).swissTotalRounds ?? 0
+                                  return swissRound >= 1 ? <span className="text-xs text-cyan-400">스위스 {swissRound}/{swissTotalRounds}R</span> : null
+                                })() : null}
                                 {groupDone && <span className="text-xs text-red-400">종료됨</span>}
                                 {groupActive && <span className="text-xs text-green-400 animate-pulse">진행중</span>}
                               </div>
@@ -815,7 +820,7 @@ export default function PlayView({
                                     const isQualified = gqs ? gqs.includes(row.item_id) : idx < 2
                                     return (
                                       <tr key={row.item_id} className={`border-b border-gray-700/30 ${!groupPending && isQualified ? 'bg-purple-900/10' : ''}`}>
-                                        <td className="px-3 py-1.5 text-gray-500">{groupPending ? '-' : gs.findIndex(s => s.pts === row.pts && s.w === row.w) + 1}</td>
+                                        <td className="px-3 py-1.5 text-gray-500">{groupPending ? '-' : idx + 1}</td>
                                         {tournament.is_master ? (
                                           <td className={`px-1 py-1.5 text-center text-xs font-bold ${DIV_TEXT_COLOR[div] ?? DIV_TEXT_COLOR[0]}`}>
                                             {div === 0 ? '미' : `${div}부`}
@@ -834,7 +839,55 @@ export default function PlayView({
                                   })}
                                 </tbody>
                               </table>
-                              {gms && gms.length > 0 && (
+                              {gms && gms.length > 0 && (() => {
+                                const rounds = [...new Set(gms.map((m: any) => m.round ?? 0))].sort((a, b) => b - a)
+                                const isSwissList = !!(swissFields as any).isSwiss
+                                if (isSwissList) {
+                                  const swissTotalRounds = (swissFields as any).swissTotalRounds ?? Math.ceil(Math.log2(gs.length))
+                                  const currentSwissRound = Math.max(...rounds)
+                                  const currentRoundDone = (swissFields as any).swissCurrentRoundDone ?? gms.filter((m: any) => m.round === currentSwissRound).every((m: any) => m.winner_id !== null || m.is_draw || m.is_bye)
+                                  const canNextRound = currentRoundDone && currentSwissRound < swissTotalRounds
+                                  const allSwissDone = currentRoundDone && currentSwissRound >= swissTotalRounds
+                                  return (
+                                    <div className="border-t border-gray-700/50">
+                                      {rounds.map(round => {
+                                        const roundMatches = gms.filter((m: any) => (m.round ?? 0) === round)
+                                        return (
+                                          <div key={round}>
+                                            <div className="px-2 py-0.5 bg-gray-700/30">
+                                              <span className="text-[10px] text-cyan-400 font-semibold">{round}R</span>
+                                            </div>
+                                            <div className="divide-y divide-gray-700/30">
+                                              {roundMatches.map((m: any) => {
+                                                const i1 = items.get(m.item1_id)
+                                                const i2 = m.item2_id ? items.get(m.item2_id) : null
+                                                const done = m.winner_id !== null || m.is_bye
+                                                return (
+                                                  <div key={m.id} className={`px-2 py-1 flex items-center gap-1 text-xs ${done ? '' : 'opacity-40'}`}>
+                                                    <span className={`flex-1 text-right truncate ${m.is_bye ? 'text-yellow-400' : m.winner_id === m.item1_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                                                      {i1 ? <span data-tip-id={i1.id} data-tip-type={tournament?.type}>{itemPnLabel(i1)}</span> : `#${m.item1_id}`}
+                                                    </span>
+                                                    <span className="text-gray-600 w-4 text-center shrink-0">
+                                                      {m.is_bye ? 'BYE' : m.winner_id ? (m.winner_id === m.item1_id ? '>' : '<') : 'vs'}
+                                                    </span>
+                                                    <span className={`flex-1 truncate ${m.winner_id === m.item2_id ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                                                      {m.is_bye ? '-' : i2 ? <span data-tip-id={i2.id} data-tip-type={tournament?.type}>{itemPnLabel(i2)}</span> : m.item2_id ? `#${m.item2_id}` : '-'}
+                                                    </span>
+                                                  </div>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                      {allSwissDone && !groupDone && (
+                                        <div className="px-2 py-1 text-center text-xs text-green-400">스위스 라운드 완료</div>
+                                      )}
+                                    </div>
+                                  )
+                                }
+                                // 기존 풀 리그전
+                                return (
                                 <div className="border-t border-gray-700/50 divide-y divide-gray-700/30 max-h-40 overflow-y-auto">
                                   {gms.map(m => {
                                     const i1 = items.get(m.item1_id)
@@ -855,7 +908,8 @@ export default function PlayView({
                                     )
                                   })}
                                 </div>
-                              )}
+                                )
+                              })()}
                               {tbms && tbms.length > 0 && (
                                 <div className="border-t border-orange-800/40">
                                   <div className="px-2 py-0.5 bg-orange-900/20">

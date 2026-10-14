@@ -464,6 +464,12 @@ export function initDatabase(): void {
     db.prepare('ALTER TABLE cup_runs ADD COLUMN last_played_at TEXT DEFAULT NULL').run()
   }
 
+  // cup_entries.group_id 컬럼 추가 (스위스 라운드 조 구성원 추적)
+  const cupEntriesCols = (db.prepare("PRAGMA table_info(cup_entries)").all() as { name: string }[]).map(c => c.name)
+  if (!cupEntriesCols.includes('group_id')) {
+    db.prepare('ALTER TABLE cup_entries ADD COLUMN group_id INTEGER DEFAULT NULL').run()
+  }
+
   // cup_matches.block_id 컬럼 추가 (worldcup 블록 구조 UI용)
   const cupMatchesCols = (db.prepare("PRAGMA table_info(cup_matches)").all() as { name: string }[]).map(c => c.name)
   if (!cupMatchesCols.includes('block_id')) {

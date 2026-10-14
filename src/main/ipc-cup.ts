@@ -91,7 +91,7 @@ function getBasePoints(database: DB, type: string): { win: number; draw: number;
 }
 
 function computeGroupStandings(
-  matches: { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[],
+  matches: { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; is_bye?: number }[],
   pointValues: { win: number; draw: number }
 ): { item_id: number; pts: number; w: number; d: number; l: number }[] {
   const itemSet = new Set<number>()
@@ -101,7 +101,8 @@ function computeGroupStandings(
     for (const m of matches) {
       const is1 = m.item1_id === item_id, is2 = m.item2_id === item_id
       if (!is1 && !is2) continue
-      if (m.is_draw) { pts += pointValues.draw; d++ }
+      if (m.is_bye && is1) { pts += pointValues.win; w++ }
+      else if (m.is_draw) { pts += pointValues.draw; d++ }
       else if (m.winner_id === item_id) { pts += pointValues.win; w++ }
       else if (m.winner_id != null) { l++ }
     }
@@ -124,6 +125,67 @@ function getTiebreakInfo(standings: { item_id: number; pts: number; w: number }[
 }
 
 function getGroupQualifiers(database: DB, runId: number, groupId: number, format: string, type: string): number[] | null {
+  // 월드컵 스위스 라운드: 승점 → 승자승 → 타이브레이커
+  if (format === 'worldcup') {
+    const bp = getBasePoints(database, type)
+    const gms = database.prepare(
+      `SELECT * FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'group'`
+    ).all(runId, groupId) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; is_bye: number; round: number }[]
+    // 모든 라운드 완료 확인
+    const participants = new Set<number>()
+    for (const m of gms) { participants.add(m.item1_id); if (m.item2_id != null) participants.add(m.item2_id) }
+    const totalRounds = Math.ceil(Math.log2(participants.size))
+    const maxRound = Math.max(...gms.map(m => m.round), 0)
+    if (maxRound < totalRounds) return null
+    if (gms.some(m => m.winner_id == null && !m.is_draw)) return null
+    const standings = computeGroupStandings(gms, bp)
+
+    if (standings.length < 2) return standings.map(s => s.item_id)
+    // 1위 확정
+    if (standings[0].pts > standings[1].pts) {
+      // 2위 판정
+      if (standings.length < 3 || standings[1].pts > standings[2].pts) {
+        return [standings[0].item_id, standings[1].item_id]
+      }
+    }
+
+    // 2위 동점자 찾기
+    const qualifyPts = standings[1].pts
+    const clearTop = standings.filter(s => s.pts > qualifyPts).map(s => s.item_id)
+    const tied = standings.filter(s => s.pts === qualifyPts).map(s => s.item_id)
+    const qualifiersNeeded = 2 - clearTop.length
+
+    if (tied.length <= qualifiersNeeded) return [...clearTop, ...tied].slice(0, 2)
+
+    // 승자승 확인: 동점자 간 직접 대결 결과
+    if (tied.length === 2) {
+      const directMatch = gms.find(m =>
+        !m.is_bye && m.winner_id != null &&
+        ((m.item1_id === tied[0] && m.item2_id === tied[1]) || (m.item1_id === tied[1] && m.item2_id === tied[0]))
+      )
+      if (directMatch) {
+        const winner = directMatch.winner_id!
+        const loser = tied.find(id => id !== winner)!
+        return [...clearTop, winner].slice(0, 2)
+      }
+    }
+
+    // 직접 대결 없음 → 타이브레이커 필요
+    const tbms = database.prepare(
+      `SELECT * FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'tiebreak' ORDER BY round ASC, id ASC`
+    ).all(runId, groupId) as { winner_id: number | null }[]
+    if (tbms.length === 0 || tbms.some(m => m.winner_id == null)) return null
+
+    // 가운틀렛 결과로 판정
+    const N = tied.length
+    const g1Winner = (tbms[N - 2] as any)?.winner_id
+    if (!g1Winner) return null
+    if (qualifiersNeeded === 1) return [...clearTop, g1Winner].slice(0, 2)
+    const g2Winner = tbms.length >= (N - 1) + (N - 2) ? (tbms[(N - 1) + (N - 2) - 1] as any)?.winner_id : null
+    if (!g2Winner) return null
+    return [...clearTop, g1Winner, g2Winner].slice(0, 2)
+  }
+
   const bp = getBasePoints(database, type)
   const groupMatches = database.prepare(
     `SELECT * FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'group'`
@@ -154,6 +216,86 @@ function getGroupQualifiers(database: DB, runId: number, groupId: number, format
 
 // 그룹 픽 처리: 필요 시 타이브레이크 매치 생성 (N파전, 가운틀렛 방식)
 function processGroupPick(database: DB, runId: number, groupId: number, format: string, type: string): void {
+  // 월드컵 스위스: 모든 라운드 완료 후 승자승 → 타이브레이커
+  if (format === 'worldcup') {
+    const gms = database.prepare(
+      `SELECT * FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'group'`
+    ).all(runId, groupId) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; is_bye: number; round: number }[]
+    if (gms.some(m => m.winner_id == null && !m.is_draw)) return
+    const participants = new Set<number>()
+    for (const m of gms) { participants.add(m.item1_id); if (m.item2_id != null) participants.add(m.item2_id) }
+    const totalRounds = Math.ceil(Math.log2(participants.size))
+    const maxRound = Math.max(...gms.map(m => m.round), 0)
+    if (maxRound < totalRounds) return
+
+    const bp2 = getBasePoints(database, type)
+    const standings = computeGroupStandings(gms, bp2)
+    if (standings.length < 3) return
+
+    // 2위 동점자 찾기
+    const qualifyPts = standings[1].pts
+    const clearTop = standings.filter(s => s.pts > qualifyPts).map(s => s.item_id)
+    const tied = standings.filter(s => s.pts === qualifyPts)
+    const qualifiersNeeded = 2 - clearTop.length
+    if (tied.length <= qualifiersNeeded) return
+
+    // 승자승: 동점자 간 직접 대결 확인
+    if (tied.length === 2) {
+      const directMatch = gms.find(m =>
+        !m.is_bye && m.winner_id != null &&
+        ((m.item1_id === tied[0].item_id && m.item2_id === tied[1].item_id) || (m.item1_id === tied[1].item_id && m.item2_id === tied[0].item_id))
+      )
+      if (directMatch) return // 승자승으로 결정됨, 타이브레이커 불필요
+    }
+
+    // 직접 대결 없음 → 타이브레이커 매치 생성
+    const tiedIds = tied.map(s => s.item_id)
+    const tiebreakMatches = database.prepare(
+      `SELECT * FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'tiebreak' ORDER BY round ASC, id ASC`
+    ).all(runId, groupId) as { id: number; round: number; item1_id: number; item2_id: number | null; winner_id: number | null }[]
+
+    const insertMatch = (round: number, item1: number, item2: number) => {
+      const { mx } = database.prepare(`SELECT MAX(match_index) as mx FROM cup_matches WHERE run_id = ?`).get(runId) as { mx: number | null }
+      database.prepare(
+        `INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id) VALUES (?, 'tiebreak', ?, ?, ?, ?, ?)`
+      ).run(runId, groupId, round, (mx ?? -1) + 1, item1, item2)
+    }
+
+    if (tiebreakMatches.some(m => m.winner_id == null)) return
+
+    const N = tiedIds.length
+    const g1 = tiebreakMatches.slice(0, N - 1)
+    if (g1.length === 0) {
+      const players = shuffleArr([...tiedIds])
+      insertMatch(1, players[0], players[1])
+      return
+    }
+    if (g1.length < N - 1) {
+      const participated1 = new Set<number>()
+      for (const m of g1) { participated1.add(m.item1_id); if (m.item2_id != null) participated1.add(m.item2_id) }
+      const nextPlayer = tiedIds.find(p => !participated1.has(p))
+      if (nextPlayer == null) return
+      insertMatch(g1.length + 1, g1[g1.length - 1].winner_id!, nextPlayer)
+      return
+    }
+    if (qualifiersNeeded === 1) return
+    const g2Players = tiedIds.filter(p => p !== g1[g1.length - 1].winner_id!)
+    const g2 = tiebreakMatches.slice(N - 1)
+    if (g2.length === 0) {
+      const players = shuffleArr([...g2Players])
+      insertMatch(N, players[0], players[1])
+      return
+    }
+    if (g2.length < g2Players.length - 1) {
+      const participated2 = new Set<number>()
+      for (const m of g2) { participated2.add(m.item1_id); if (m.item2_id != null) participated2.add(m.item2_id) }
+      const nextPlayer = g2Players.find(p => !participated2.has(p))
+      if (nextPlayer == null) return
+      insertMatch(N + g2.length, g2[g2.length - 1].winner_id!, nextPlayer)
+    }
+    return
+  }
+
   const bp = getBasePoints(database, type)
   const groupMatches = database.prepare(
     `SELECT * FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'group'`
@@ -565,6 +707,7 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
       FROM ${fromClause}
       LEFT JOIN pts ON pts.item_id = ${itemCol}
       LEFT JOIN mrc ON mrc.item_id = ${itemCol}
+      ${t.type === 'actor' ? 'WHERE a.is_deleted = 0 AND a.is_excluded = 0' : ''}
     `).all() as { rank: number; id: number; master_run_count: number }[]
     const divBoundaries = getDivBoundaries(t.type as 'actor' | 'work')
     const divisionMap = new Map<number, number>()
@@ -675,6 +818,90 @@ function countEligibleItems(database: DB, tournamentId: number): number {
   return getEligibleItemIds(database, tournamentId).length
 }
 
+// 스위스 다음 라운드 자동 생성
+function autoSwissNextRound(database: DB, runId: number, groupId: number, type: string): boolean {
+  const allMatches = database.prepare(
+    `SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ? ORDER BY round, match_index`
+  ).all(runId, groupId) as { id: number; round: number; item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number; is_draw: number }[]
+
+  const currentRound = Math.max(...allMatches.map(m => m.round), 0)
+  const participants = new Set<number>()
+  for (const m of allMatches) { participants.add(m.item1_id); if (m.item2_id != null) participants.add(m.item2_id) }
+  const totalRounds = Math.ceil(Math.log2(participants.size))
+  if (currentRound >= totalRounds) return false
+
+  const bp = getBasePoints(database, type)
+  type PS = { id: number; pts: number; w: number; opponents: Set<number>; byeUsed: boolean }
+  const scoreMap = new Map<number, PS>()
+  for (const pid of participants) scoreMap.set(pid, { id: pid, pts: 0, w: 0, opponents: new Set(), byeUsed: false })
+
+  for (const m of allMatches) {
+    const p1 = scoreMap.get(m.item1_id)!
+    if (m.is_bye) { p1.pts += bp.win; p1.w++; p1.byeUsed = true; continue }
+    if (m.item2_id == null) continue
+    const p2 = scoreMap.get(m.item2_id)!
+    p1.opponents.add(m.item2_id); p2.opponents.add(m.item1_id)
+    if (m.is_draw) { p1.pts += bp.draw; p2.pts += bp.draw }
+    else if (m.winner_id === m.item1_id) { p1.pts += bp.win; p1.w++ }
+    else if (m.winner_id === m.item2_id) { p2.pts += bp.win; p2.w++ }
+  }
+
+  const sorted = [...scoreMap.values()].sort((a, b) => b.pts - a.pts || b.w - a.w)
+  const paired = new Set<number>()
+  const newPairs: [number, number][] = []
+  let byePlayer: number | null = null
+
+  if (sorted.length % 2 === 1) {
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (!sorted[i].byeUsed) { byePlayer = sorted[i].id; paired.add(byePlayer); break }
+    }
+    if (byePlayer === null) { byePlayer = sorted[sorted.length - 1].id; paired.add(byePlayer) }
+  }
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (paired.has(sorted[i].id)) continue
+    const p1 = sorted[i]; paired.add(p1.id)
+    let matched = false
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (paired.has(sorted[j].id)) continue
+      if (!p1.opponents.has(sorted[j].id)) { newPairs.push([p1.id, sorted[j].id]); paired.add(sorted[j].id); matched = true; break }
+    }
+    if (!matched) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (paired.has(sorted[j].id)) continue
+        newPairs.push([p1.id, sorted[j].id]); paired.add(sorted[j].id); break
+      }
+    }
+  }
+
+  const maxIdx = (database.prepare(`SELECT MAX(match_index) AS mx FROM cup_matches WHERE run_id = ?`).get(runId) as { mx: number | null }).mx ?? -1
+  let matchIdx = maxIdx + 1
+  const nextRound = currentRound + 1
+  const insert = database.prepare(`INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id, is_bye) VALUES (?, 'group', ?, ?, ?, ?, ?, ?)`)
+  for (const [a, b] of newPairs) insert.run(runId, groupId, nextRound, matchIdx++, a, b, 0)
+  if (byePlayer !== null) {
+    database.prepare(`INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id, is_bye) VALUES (?, 'group', ?, ?, ?, ?, NULL, 1)`).run(runId, groupId, nextRound, matchIdx++, byePlayer)
+  }
+  return true
+}
+
+// 스위스 라운드 1라운드 매치 생성
+function generateSwissRound1(database: DB, runId: number, groupId: number): void {
+  const members = database.prepare(`SELECT item_id FROM cup_entries WHERE run_id = ? AND group_id = ?`).all(runId, groupId) as { item_id: number }[]
+  if (members.length < 2) return
+  const ids = members.map(m => m.item_id)
+  shuffleArr(ids)
+  const maxIdx = (database.prepare(`SELECT MAX(match_index) AS mx FROM cup_matches WHERE run_id = ?`).get(runId) as { mx: number | null }).mx ?? -1
+  let matchIdx = maxIdx + 1
+  const insert = database.prepare(`INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id, is_bye) VALUES (?, 'group', ?, 1, ?, ?, ?, ?)`)
+  for (let i = 0; i + 1 < ids.length; i += 2) {
+    insert.run(runId, groupId, matchIdx++, ids[i], ids[i + 1], 0)
+  }
+  if (ids.length % 2 === 1) {
+    database.prepare(`INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id, is_bye) VALUES (?, 'group', ?, 1, ?, ?, NULL, 1)`).run(runId, groupId, matchIdx++, ids[ids.length - 1])
+  }
+}
+
 export function registerCupHandlers(): void {
   const db = () => getDatabase()
 
@@ -725,12 +952,29 @@ export function registerCupHandlers(): void {
     if (run.status === 'in_progress') {
       db().prepare(`UPDATE cup_runs SET last_played_at = datetime('now') WHERE id = ?`).run(runId)
     }
-    const currentMatch = db().prepare(`
+    let currentMatch = db().prepare(`
       SELECT * FROM cup_matches
       WHERE run_id = ? AND winner_id IS NULL AND is_draw = 0
       ORDER BY phase DESC, round DESC, match_index ASC
       LIMIT 1
     `).get(runId)
+    // 월드컵 스위스: 매치 없으면 첫 조 1라운드 자동 생성
+    if (!currentMatch && (tournament as any).format === 'worldcup' && run.status === 'in_progress') {
+      const firstUnstarted = db().prepare(`
+        SELECT group_id FROM cup_entries WHERE run_id = ? AND group_id IS NOT NULL
+        AND group_id NOT IN (SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group')
+        ORDER BY group_id LIMIT 1
+      `).get(runId, runId) as { group_id: number } | undefined
+      if (firstUnstarted) {
+        generateSwissRound1(db(), runId, firstUnstarted.group_id)
+        currentMatch = db().prepare(`
+          SELECT * FROM cup_matches
+          WHERE run_id = ? AND winner_id IS NULL AND is_draw = 0
+          ORDER BY phase DESC, round DESC, match_index ASC
+          LIMIT 1
+        `).get(runId)
+      }
+    }
     const { total: totalMatches } = db().prepare(
       `SELECT COUNT(*) as total FROM cup_matches WHERE run_id = ?`
     ).get(runId) as { total: number }
@@ -747,14 +991,15 @@ export function registerCupHandlers(): void {
       const { cnt: gd } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, cm.phase, cm.group_id) as { cnt: number }
       groupMatchDone = gd
       groupMatchTotal = gt
-      const { cnt: gsTotal } = db().prepare(`SELECT COUNT(DISTINCT group_id) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'group'`).get(runId) as { cnt: number }
+      const { cnt: gsFromEntries } = db().prepare(`SELECT COUNT(DISTINCT group_id) AS cnt FROM cup_entries WHERE run_id = ? AND group_id IS NOT NULL`).get(runId) as { cnt: number }
+      const { cnt: gsFromMatches } = db().prepare(`SELECT COUNT(DISTINCT group_id) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'group'`).get(runId) as { cnt: number }
+      groupsTotal = gsFromEntries > 0 ? gsFromEntries : gsFromMatches
       const doneGroups = db().prepare(`
         SELECT group_id FROM cup_matches WHERE run_id = ? AND phase IN ('group', 'tiebreak')
         GROUP BY group_id
         HAVING COUNT(*) = SUM(CASE WHEN winner_id IS NOT NULL OR is_draw = 1 THEN 1 ELSE 0 END)
       `).all(runId) as { group_id: number }[]
       groupsDone = doneGroups.length
-      groupsTotal = gsTotal
     }
     let mainRoundDone: number | null = null
     let mainRoundTotal: number | null = null
@@ -828,18 +1073,43 @@ export function registerCupHandlers(): void {
       ).all(runId)
       return { type: 'tournament', matches, divisionMap: getDivisionMap() }
     } else if (row.format === 'worldcup') {
-      // 조별 예선 데이터 수집
-      const allGroupIds = (db().prepare(`SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group' ORDER BY group_id`).all(runId) as { group_id: number }[]).map(r => r.group_id)
-      type GroupEntry = { group_id: number; standings: ReturnType<typeof computeGroupStandings>; matches: unknown[]; tiebreakMatches: unknown[] }
+      // 월드컵은 항상 스위스
+      const isSwiss = true
+
+      // 조별 예선 데이터 수집 (entries 기준으로 모든 조 표시)
+      const allGroupIds = (db().prepare(`SELECT DISTINCT group_id FROM cup_entries WHERE run_id = ? AND group_id IS NOT NULL ORDER BY group_id`).all(runId) as { group_id: number }[]).map(r => r.group_id)
+      type GroupEntry = { group_id: number; standings: ReturnType<typeof computeGroupStandings>; matches: unknown[]; tiebreakMatches: unknown[]; isSwiss?: boolean; swissRound?: number; swissTotalRounds?: number; swissCurrentRoundDone?: boolean }
       const blockMap = new Map<number, { block_id: number; label: string; groups: GroupEntry[] }>()
+      const bp = getBasePoints(db(), row.type)
       for (const gid of allGroupIds) {
         const blockId = Math.floor((gid - 1) / 16)
         if (!blockMap.has(blockId)) blockMap.set(blockId, { block_id: blockId, label: String.fromCharCode(65 + blockId), groups: [] })
-        const gms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ? ORDER BY match_index`).all(runId, gid) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number }[]
+        const gms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ? ORDER BY match_index`).all(runId, gid) as { item1_id: number; item2_id: number | null; winner_id: number | null; is_draw: number; round: number; is_bye: number }[]
         const tbms = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'tiebreak' AND group_id = ? ORDER BY round, match_index`).all(runId, gid)
-        const standings = computeGroupStandings(gms, getBasePoints(db(), row.type))
-        const qualifiers = getGroupQualifiers(db(), runId, gid, 'worldcup', row.type)
-        blockMap.get(blockId)!.groups.push({ group_id: gid, standings, matches: gms, tiebreakMatches: tbms, qualifiers })
+        let standings: ReturnType<typeof computeGroupStandings>
+        if (gms.length > 0) {
+          standings = computeGroupStandings(gms, bp)
+        } else {
+          // 매치 없는 조: entries에서 구성원 조회하여 빈 standings 생성
+          const members = db().prepare(`SELECT item_id FROM cup_entries WHERE run_id = ? AND group_id = ?`).all(runId, gid) as { item_id: number }[]
+          standings = members.map(m => ({ item_id: m.item_id, pts: 0, w: 0, d: 0, l: 0 }))
+        }
+        const qualifiers = gms.length > 0 ? getGroupQualifiers(db(), runId, gid, 'worldcup', row.type) : null
+        const entry: GroupEntry = { group_id: gid, standings, matches: gms, tiebreakMatches: tbms, qualifiers }
+
+        if (isSwiss && gms.length > 0) {
+          entry.isSwiss = true
+          // 라운드 정보
+          const maxRound = Math.max(...gms.map(m => m.round), 0)
+          const participants = new Set<number>()
+          for (const m of gms) { participants.add(m.item1_id); if (m.item2_id != null) participants.add(m.item2_id) }
+          entry.swissRound = maxRound
+          entry.swissTotalRounds = Math.ceil(Math.log2(participants.size))
+          const pendingInRound = gms.filter(m => m.round === maxRound && m.winner_id === null && !m.is_draw && !m.is_bye).length
+          entry.swissCurrentRoundDone = pendingInRound === 0
+        }
+
+        blockMap.get(blockId)!.groups.push(entry)
       }
       const blocks = [...blockMap.values()].sort((a, b) => a.block_id - b.block_id)
       const allGroupAndTbDone = allGroupIds.length > 0 && allGroupIds.every(gid => {
@@ -1895,28 +2165,175 @@ export function registerCupHandlers(): void {
           portStart += groupCount
         }
 
-        // 조별 매치 생성: 조 순서 유지, 조 내부 매치만 셔플
-        const wcInsert = db().prepare(`INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id) VALUES (?, 'group', ?, 0, ?, ?, ?)`)
-        let wcMatchIdx = 0
+        // 조 구성원 정보를 entries에 저장
+        const updateGroupId = db().prepare(`UPDATE cup_entries SET group_id = ? WHERE run_id = ? AND item_id = ?`)
         for (let gIdx = 0; gIdx < wcGroups.length; gIdx++) {
-          const group = wcGroups[gIdx]
-          const groupPairs: [number, number][] = []
-          for (let i = 0; i < group.length; i++) {
-            for (let j = i + 1; j < group.length; j++) {
-              groupPairs.push([group[i], group[j]])
-            }
+          for (const itemId of wcGroups[gIdx]) {
+            updateGroupId.run(gIdx + 1, runId, itemId)
           }
-          for (let k = groupPairs.length - 1; k > 0; k--) {
-            const r = Math.floor(Math.random() * (k + 1))
-            ;[groupPairs[k], groupPairs[r]] = [groupPairs[r], groupPairs[k]]
-          }
-          groupPairs.forEach(([a, b]) => wcInsert.run(runId, gIdx + 1, wcMatchIdx++, a, b))
         }
+
+        // 스위스: 매치는 생성하지 않음. 첫 매치 조회 시 자동 생성
       }
     })()
 
     const run = db().prepare(`SELECT * FROM cup_runs WHERE id = ?`).get(runId!)
     return { tournament: db().prepare(`SELECT * FROM cup_tournaments WHERE id = ?`).get(tournamentId), run }
+  })
+
+  // ========== 스위스 라운드 ==========
+
+  ipcMain.handle('cup:swiss-next-round', (_e, runId: number, groupId: number) => {
+    const run = db().prepare(`
+      SELECT r.id, r.tournament_id, t.type, t.filter_json
+      FROM cup_runs r JOIN cup_tournaments t ON t.id = r.tournament_id
+      WHERE r.id = ? AND r.status = 'in_progress'
+    `).get(runId) as { id: number; tournament_id: number; type: string; filter_json: string | null } | undefined
+    if (!run) return { ok: false, error: '진행 중인 대회를 찾을 수 없습니다' }
+
+    // 현재 그룹의 모든 매치 조회
+    const allMatches = db().prepare(
+      `SELECT * FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ? ORDER BY round, match_index`
+    ).all(runId, groupId) as { id: number; round: number; item1_id: number; item2_id: number | null; winner_id: number | null; is_bye: number; is_draw: number }[]
+
+    // 현재 라운드 확인
+    const currentRound = Math.max(...allMatches.map(m => m.round), 0)
+    const currentRoundMatches = allMatches.filter(m => m.round === currentRound)
+
+    // 현재 라운드가 완료되었는지 확인
+    const allDone = currentRoundMatches.every(m => m.winner_id !== null || m.is_draw || m.is_bye)
+    if (!allDone) return { ok: false, error: '현재 라운드가 아직 완료되지 않았습니다' }
+
+    // 참가자 목록
+    const participants = new Set<number>()
+    for (const m of allMatches) {
+      participants.add(m.item1_id)
+      if (m.item2_id != null) participants.add(m.item2_id)
+    }
+    const totalRounds = Math.ceil(Math.log2(participants.size))
+    const nextRound = currentRound + 1
+
+    if (nextRound > totalRounds) return { ok: false, error: '모든 라운드가 완료되었습니다' }
+
+    // 현재까지의 승점 계산
+    const bp = getBasePoints(db(), run.type)
+    type PlayerScore = { id: number; pts: number; w: number; d: number; l: number; opponents: Set<number>; byeUsed: boolean }
+    const scoreMap = new Map<number, PlayerScore>()
+    for (const pid of participants) {
+      scoreMap.set(pid, { id: pid, pts: 0, w: 0, d: 0, l: 0, opponents: new Set(), byeUsed: false })
+    }
+
+    for (const m of allMatches) {
+      const p1 = scoreMap.get(m.item1_id)!
+      if (m.is_bye) {
+        p1.pts += bp.win
+        p1.w++
+        p1.byeUsed = true
+        continue
+      }
+      if (m.item2_id == null) continue
+      const p2 = scoreMap.get(m.item2_id)!
+      p1.opponents.add(m.item2_id)
+      p2.opponents.add(m.item1_id)
+      if (m.is_draw) {
+        p1.pts += bp.draw; p1.d++
+        p2.pts += bp.draw; p2.d++
+      } else if (m.winner_id === m.item1_id) {
+        p1.pts += bp.win; p1.w++
+        p2.l++
+      } else if (m.winner_id === m.item2_id) {
+        p2.pts += bp.win; p2.w++
+        p1.l++
+      }
+    }
+
+    // 스위스 매칭 알고리즘
+    const sorted = [...scoreMap.values()].sort((a, b) => b.pts - a.pts || b.w - a.w)
+    const paired = new Set<number>()
+    const newPairs: [number, number][] = []
+    let byePlayer: number | null = null
+
+    // 홀수면 부전승 대상 결정 (최하위 + 아직 부전승 안 받은 사람)
+    if (sorted.length % 2 === 1) {
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        if (!sorted[i].byeUsed) {
+          byePlayer = sorted[i].id
+          paired.add(byePlayer)
+          break
+        }
+      }
+      // 모두 부전승 경험 있으면 최하위
+      if (byePlayer === null) {
+        byePlayer = sorted[sorted.length - 1].id
+        paired.add(byePlayer)
+      }
+    }
+
+    // 같은 승점끼리 매칭 (재대결 방지)
+    for (let i = 0; i < sorted.length; i++) {
+      if (paired.has(sorted[i].id)) continue
+      const p1 = sorted[i]
+      paired.add(p1.id)
+
+      // 가장 가까운 승점의 미매칭 상대 찾기 (재대결 방지)
+      let matched = false
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (paired.has(sorted[j].id)) continue
+        if (!p1.opponents.has(sorted[j].id)) {
+          newPairs.push([p1.id, sorted[j].id])
+          paired.add(sorted[j].id)
+          matched = true
+          break
+        }
+      }
+      // 재대결 방지 실패 시 아무나 매칭
+      if (!matched) {
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (paired.has(sorted[j].id)) continue
+          newPairs.push([p1.id, sorted[j].id])
+          paired.add(sorted[j].id)
+          break
+        }
+      }
+    }
+
+    // 매치 삽입
+    const maxIdx = (db().prepare(`SELECT MAX(match_index) AS mx FROM cup_matches WHERE run_id = ?`).get(runId) as { mx: number }).mx ?? 0
+    let matchIdx = maxIdx + 1
+    const insert = db().prepare(`INSERT INTO cup_matches (run_id, phase, group_id, round, match_index, item1_id, item2_id, is_bye) VALUES (?, 'group', ?, ?, ?, ?, ?, ?)`)
+    for (const [a, b] of newPairs) {
+      insert.run(runId, groupId, nextRound, matchIdx++, a, b, 0)
+    }
+    if (byePlayer !== null) {
+      insert.run(runId, groupId, nextRound, matchIdx++, byePlayer, null, null, 1)
+    }
+
+    return { ok: true, round: nextRound, totalRounds, matchCount: newPairs.length + (byePlayer ? 1 : 0) }
+  })
+
+  // 스위스 라운드 정보 (현재 라운드, 총 라운드 등)
+  ipcMain.handle('cup:swiss-info', (_e, runId: number, groupId: number) => {
+    const maxRound = (db().prepare(
+      `SELECT MAX(round) AS mr FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ?`
+    ).get(runId, groupId) as { mr: number | null }).mr ?? 0
+
+    // 참가자 수 → 총 라운드 계산
+    const participants = new Set<number>()
+    const matches = db().prepare(
+      `SELECT item1_id, item2_id FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ?`
+    ).all(runId, groupId) as { item1_id: number; item2_id: number | null }[]
+    for (const m of matches) {
+      participants.add(m.item1_id)
+      if (m.item2_id != null) participants.add(m.item2_id)
+    }
+    const totalRounds = Math.ceil(Math.log2(participants.size))
+
+    // 현재 라운드 완료 여부
+    const pendingCount = (db().prepare(
+      `SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ? AND round = ? AND winner_id IS NULL AND is_draw = 0 AND is_bye = 0`
+    ).get(runId, groupId, maxRound) as { cnt: number }).cnt
+
+    return { currentRound: maxRound, totalRounds, currentRoundDone: pendingCount === 0, participantCount: participants.size }
   })
 
   ipcMain.handle('cup:clear-run', (_e, tournamentId: number) => {
@@ -1954,15 +2371,16 @@ export function registerCupHandlers(): void {
     if (match.winner_id !== null || match.is_draw) throw new Error('이미 결과가 있는 매치입니다')
 
     const runRow = db().prepare(`
-      SELECT r.*, t.type, t.format, t.is_master FROM cup_runs r
+      SELECT r.*, t.type, t.format, t.is_master, t.filter_json FROM cup_runs r
       JOIN cup_tournaments t ON t.id = r.tournament_id
       WHERE r.id = ?
     `).get(match.run_id) as {
       id: number; tournament_id: number; type: 'actor' | 'work'; format: string; is_master: number;
-      round_total: number; settings_snapshot: string | null; status: string
+      round_total: number; settings_snapshot: string | null; status: string; filter_json: string | null
     } | undefined
     if (!runRow) throw new Error('대회를 찾을 수 없습니다')
     const tournament = runRow
+    const filterObj = tournament.filter_json ? JSON.parse(tournament.filter_json) : null
 
     const runId = match.run_id
 
@@ -1977,12 +2395,15 @@ export function registerCupHandlers(): void {
         }
       } else {
         db().prepare(`UPDATE cup_matches SET winner_id = ? WHERE id = ?`).run(winnerId, matchId)
-        const loserId = match.item1_id === winnerId ? match.item2_id : match.item1_id
-        if (winnerId !== null) {
-          db().prepare(`INSERT INTO cup_stats (type, item_id, total_matches, match_wins) VALUES (?, ?, 1, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_matches = total_matches + 1, match_wins = match_wins + 1`).run(tournament.type, winnerId)
-        }
-        if (loserId !== null) {
-          db().prepare(`INSERT INTO cup_stats (type, item_id, total_matches) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_matches = total_matches + 1`).run(tournament.type, loserId)
+        // 부전승은 cup_stats에 반영하지 않음 (실제 대결 아님)
+        if (!match.is_bye) {
+          const loserId = match.item1_id === winnerId ? match.item2_id : match.item1_id
+          if (winnerId !== null) {
+            db().prepare(`INSERT INTO cup_stats (type, item_id, total_matches, match_wins) VALUES (?, ?, 1, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_matches = total_matches + 1, match_wins = match_wins + 1`).run(tournament.type, winnerId)
+          }
+          if (loserId !== null) {
+            db().prepare(`INSERT INTO cup_stats (type, item_id, total_matches) VALUES (?, ?, 1) ON CONFLICT(type, item_id) DO UPDATE SET total_matches = total_matches + 1`).run(tournament.type, loserId)
+          }
         }
 
         // 토너먼트 / 리그전 본선: 라운드 완료 체크 → 다음 라운드 생성
@@ -2081,17 +2502,77 @@ export function registerCupHandlers(): void {
         if (pending === 0) checkLeagueGroupsAdvance(db(), runId, tournament.type)
       }
 
-      // 월드컵 조별/동점처리: 타이브레이크 생성 + 전체 그룹 완료 체크 → 블록 A 본선 시작
+      // 월드컵 조별/동점처리
       if (tournament.format === 'worldcup' && (match.phase === 'group' || match.phase === 'tiebreak')) {
         if (match.group_id != null) processGroupPick(db(), runId, match.group_id, 'worldcup', tournament.type)
-        const wcPending = (db().prepare(
-          `SELECT COUNT(*) as cnt FROM cup_matches WHERE run_id = ? AND phase IN ('group', 'tiebreak') AND winner_id IS NULL AND is_draw = 0`
-        ).get(runId) as { cnt: number }).cnt
-        if (wcPending === 0) startBlock(db(), runId, 0, tournament.type)
+
+        // 현재 조의 현재 라운드 완료 체크 → 다음 라운드 or 다음 조 자동 생성
+        if (match.group_id != null) {
+          const gid = match.group_id
+          const groupPending = (db().prepare(
+            `SELECT COUNT(*) as cnt FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase IN ('group', 'tiebreak') AND winner_id IS NULL AND is_draw = 0`
+          ).get(runId, gid) as { cnt: number }).cnt
+
+          if (groupPending === 0) {
+            // 현재 조 매치 분석
+            const gMatches = db().prepare(
+              `SELECT item1_id, item2_id, round FROM cup_matches WHERE run_id = ? AND phase = 'group' AND group_id = ?`
+            ).all(runId, gid) as { item1_id: number; item2_id: number | null; round: number }[]
+            const participants = new Set<number>()
+            for (const m of gMatches) { participants.add(m.item1_id); if (m.item2_id != null) participants.add(m.item2_id) }
+            const totalRounds = Math.ceil(Math.log2(participants.size))
+            const maxRound = Math.max(...gMatches.map(m => m.round), 0)
+
+            // 타이브레이커 진행 중이면 대기
+            const tbPending = (db().prepare(
+              `SELECT COUNT(*) as cnt FROM cup_matches WHERE run_id = ? AND group_id = ? AND phase = 'tiebreak' AND winner_id IS NULL AND is_draw = 0`
+            ).get(runId, gid) as { cnt: number }).cnt
+
+            if (maxRound < totalRounds && tbPending === 0) {
+              // 다음 스위스 라운드 자동 생성
+              const swissResult = autoSwissNextRound(db(), runId, gid, tournament.type)
+            } else if (maxRound >= totalRounds && tbPending === 0) {
+              // 이 조 완료 → 진출자 확정 확인 후 다음 조 시작
+              const qualifiers = getGroupQualifiers(db(), runId, gid, 'worldcup', tournament.type)
+              if (qualifiers && qualifiers.length >= 2) {
+                // 다음 조 찾기
+                const allGroupIds = db().prepare(`SELECT DISTINCT group_id FROM cup_entries WHERE run_id = ? ORDER BY group_id`).all(runId) as { group_id: number }[]
+                const nextGroup = allGroupIds.find(g => {
+                  const hasMatches = (db().prepare(`SELECT COUNT(*) as cnt FROM cup_matches WHERE run_id = ? AND group_id = ?`).get(runId, g.group_id) as { cnt: number }).cnt
+                  return hasMatches === 0
+                })
+                if (nextGroup) {
+                  generateSwissRound1(db(), runId, nextGroup.group_id)
+                } else {
+                  // 모든 조 완료 → 블록 본선 시작
+                  const allDone = allGroupIds.every(g => {
+                    const q = getGroupQualifiers(db(), runId, g.group_id, 'worldcup', tournament.type)
+                    return q && q.length >= 2
+                  })
+                  if (allDone) startBlock(db(), runId, 0, tournament.type)
+                }
+              }
+            }
+          }
+        }
       }
     })()
 
-    return db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND winner_id IS NULL AND is_bye = 0 AND is_draw = 0 ORDER BY phase DESC, round DESC, match_index ASC LIMIT 1`).get(runId) ?? { done: true }
+    // 다음 매치 조회 — 없으면 스위스 1조 자동 생성 시도
+    let nextMatch = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND winner_id IS NULL AND is_draw = 0 ORDER BY phase DESC, round DESC, match_index ASC LIMIT 1`).get(runId)
+    if (!nextMatch && tournament.format === 'worldcup') {
+      // 매치가 없는 첫 조 찾아서 1라운드 생성
+      const firstUnstarted = db().prepare(`
+        SELECT group_id FROM cup_entries WHERE run_id = ? AND group_id IS NOT NULL
+        AND group_id NOT IN (SELECT DISTINCT group_id FROM cup_matches WHERE run_id = ? AND phase = 'group')
+        ORDER BY group_id LIMIT 1
+      `).get(runId, runId) as { group_id: number } | undefined
+      if (firstUnstarted) {
+        generateSwissRound1(db(), runId, firstUnstarted.group_id)
+        nextMatch = db().prepare(`SELECT * FROM cup_matches WHERE run_id = ? AND winner_id IS NULL AND is_bye = 0 AND is_draw = 0 ORDER BY phase DESC, round DESC, match_index ASC LIMIT 1`).get(runId)
+      }
+    }
+    return nextMatch ?? { done: true }
   })
 
   ipcMain.handle('cup:rank-history', (_e, params: { tournamentId: number; itemId: number }) => {
@@ -2312,14 +2793,15 @@ export function registerCupHandlers(): void {
       const { cnt: gd } = db().prepare(`SELECT COUNT(*) AS cnt FROM cup_matches WHERE run_id = ? AND phase = ? AND group_id = ? AND (winner_id IS NOT NULL OR is_draw = 1)`).get(runId, match.phase, match.group_id) as { cnt: number }
       groupMatchDone = gd
       groupMatchTotal = gt
-      const { cnt: gsTotal } = db().prepare(`SELECT COUNT(DISTINCT group_id) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'group'`).get(runId) as { cnt: number }
+      const { cnt: gsFromEntries } = db().prepare(`SELECT COUNT(DISTINCT group_id) AS cnt FROM cup_entries WHERE run_id = ? AND group_id IS NOT NULL`).get(runId) as { cnt: number }
+      const { cnt: gsFromMatches } = db().prepare(`SELECT COUNT(DISTINCT group_id) AS cnt FROM cup_matches WHERE run_id = ? AND phase = 'group'`).get(runId) as { cnt: number }
+      groupsTotal = gsFromEntries > 0 ? gsFromEntries : gsFromMatches
       const doneGroups = db().prepare(`
         SELECT group_id FROM cup_matches WHERE run_id = ? AND phase IN ('group', 'tiebreak')
         GROUP BY group_id
         HAVING COUNT(*) = SUM(CASE WHEN winner_id IS NOT NULL OR is_draw = 1 THEN 1 ELSE 0 END)
       `).all(runId) as { group_id: number }[]
       groupsDone = doneGroups.length
-      groupsTotal = gsTotal
     }
     let mainRoundDone: number | null = null
     let mainRoundTotal: number | null = null
