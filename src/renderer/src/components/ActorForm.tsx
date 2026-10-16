@@ -53,17 +53,21 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     let parsed = false
     // 생년월일 : 2002-01-30
     const bdMatch = text.match(/생년월일\s*[:：]\s*(\d{4}-\d{2}-\d{2})/)
-    if (bdMatch) { setBirthday(bdMatch[1]); parsed = true }
+    if (bdMatch && !birthday) { setBirthday(bdMatch[1]); parsed = true }
     // 신장 : 148
     const htMatch = text.match(/신장\s*[:：]\s*(\d+)/)
-    if (htMatch) { setHeight(htMatch[1]); parsed = true }
+    if (htMatch && !height) { setHeight(htMatch[1]); parsed = true }
     // 신체사이즈 : B81 / W58 / H82
     const bodyMatch = text.match(/신체사이즈\s*[:：]\s*B(\d+)\s*\/\s*W(\d+)\s*\/\s*H(\d+)/)
-    if (bodyMatch) { setBust(bodyMatch[1]); setWaist(bodyMatch[2]); setHip(bodyMatch[3]); parsed = true }
+    if (bodyMatch) { if (!bust) setBust(bodyMatch[1]); if (!waist) setWaist(bodyMatch[2]); if (!hip) setHip(bodyMatch[3]); parsed = true }
     // 컵사이즈 : C
     const cupMatch = text.match(/컵사이즈\s*[:：]\s*([A-Za-z]+)/)
-    if (cupMatch) { setCup(cupMatch[1].toUpperCase()); parsed = true }
+    if (cupMatch && !cup) { setCup(cupMatch[1].toUpperCase()); parsed = true }
+    // 데뷔 : 15년 04월 데뷔
+    const debutMatch = text.match(/데뷔\s*[:：]\s*(\d{2})년\s*(\d{2})월/)
+    if (debutMatch && !debutDate) { setDebutDate(`20${debutMatch[1]}-${debutMatch[2]}-01`); parsed = true }
     // 다른이름 : #한글이름(한자)#한글이름(한자)...
+    let jpFromAlias: string[] = []
     const aliasMatch = text.match(/다른이름\s*[:：]\s*(.+)/)
     if (aliasMatch) {
       const koreanNames = [...aliasMatch[1].matchAll(/#([가-힣\s]+)/g)].map(m => m[1].trim()).filter(Boolean)
@@ -75,23 +79,34 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
         parsed = true
       }
       // 괄호 안 일본어 이름 → 본명에 추가
-      const jpFromAlias = [...aliasMatch[1].matchAll(/\(([^\x00-\x7F]+)\)/g)].map(m => m[1].trim()).filter(Boolean)
-      if (jpFromAlias.length > 0) {
-        const existingRn = realName.split(',').map(s => s.trim()).filter(Boolean)
-        const mergedRn = [...new Set([...existingRn, ...jpFromAlias])]
-        setRealName(mergedRn.join(','))
-        parsed = true
-      }
+      jpFromAlias = [...aliasMatch[1].matchAll(/\(([^\x00-\x7F]+)\)/g)].map(m => m[1].trim()).filter(Boolean)
     }
     // 일본어 이름 (히라가나/카타카나/한자로 된 줄) → 본명 메인
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
     const jpLine = lines.find(l => /^[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF00-\uFFEF\s]+$/.test(l) && l.length >= 2)
-    if (jpLine) {
+    // 본명 한 번에 모아서 설정
+    const collectedRn: string[] = []
+    if (jpLine) collectedRn.push(jpLine)
+    if (jpFromAlias.length > 0) collectedRn.push(...jpFromAlias)
+    if (collectedRn.length > 0) {
       const existingRn = realName.split(',').map(s => s.trim()).filter(Boolean)
-      if (!existingRn.includes(jpLine)) {
-        setRealName([jpLine, ...existingRn].join(','))
-      }
+      const mergedRn = [...new Set([...collectedRn, ...existingRn])]
+      setRealName(mergedRn.join(','))
       parsed = true
+    }
+    // [ 웹하드 AD ] 마지막 줄 이후: 첫 줄 → 코멘트, 전체 → 태그 매칭
+    const lastAdIdx = lines.findLastIndex(l => l.includes('[ 웹하드 AD ]'))
+    if (lastAdIdx >= 0 && lastAdIdx < lines.length - 1) {
+      const bioLines = lines.slice(lastAdIdx + 1)
+      // 첫 줄 → 코멘트 (기존 값 없을 때만)
+      if (bioLines[0] && !comment) { setComment(bioLines[0]); parsed = true }
+      // 전체 텍스트에서 태그 자동 매칭
+      const bioText = bioLines.join(' ')
+      const matchedTagIds = allTags.filter(t => bioText.includes(t.name)).map(t => t.id)
+      if (matchedTagIds.length > 0) {
+        setSelectedTagIds(prev => [...new Set([...prev, ...matchedTagIds])])
+        parsed = true
+      }
     }
     if (parsed) e.preventDefault()
   }
@@ -341,6 +356,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
                 <DateInput
                   value={debutDate}
                   onChange={setDebutDate}
+                  onPaste={handleProfilePaste}
                   className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
                 />
               </div>
@@ -481,6 +497,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
+              onPaste={handleProfilePaste}
               rows={4}
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full resize-none"
             />

@@ -818,23 +818,17 @@ export default function SearchBar(props: Props) {
                     >코멘트없음</button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-14 shrink-0">본명</span>
+                    <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
                     <button
                       type="button"
                       onClick={() => onChange({ ...aParams, realNameNull: !aParams.realNameNull } as never)}
                       className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.realNameNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >본명없음</button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-14 shrink-0">삭제예정</span>
+                    >본명 없음</button>
                     <button
                       type="button"
                       onClick={() => onChange({ ...aParams, deletePending: !aParams.deletePending } as never)}
                       className={`text-xs px-2 py-1 rounded ${aParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                     >삭제 예정</button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-14 shrink-0">제외배우</span>
                     <button
                       type="button"
                       onClick={() => onChange({ ...aParams, showExcluded: !aParams.showExcluded } as never)}
