@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work, Tag, Actor, Studio } from '../types'
-import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, masterRankingApi, searchUrlApi } from '../api'
+import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, masterRankingApi, searchUrlApi, tierApi } from '../api'
 import SearchUrlModal from '../components/SearchUrlModal'
 import SearchBar, { type WorkSearchParams, DEFAULT_WORK_SEARCH } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
@@ -32,8 +32,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
       return DEFAULT_WORK_SEARCH
     }
   })
-  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points'>(
-    (localStorage.getItem('works:sortBy') as 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points') || 'release_date'
+  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points' | 'tier'>(
+    (localStorage.getItem('works:sortBy') as 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points' | 'tier') || 'release_date'
   )
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     (localStorage.getItem('works:sortDir') as 'asc' | 'desc') || 'desc'
@@ -41,6 +41,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [masterPointsMap, setMasterPointsMap] = useState<Map<number, { rank: number; total_points: number; master_run_count: number }>>(new Map())
+  const [tierMap, setTierMap] = useState<Map<number, { tier_name: string; tier_color: string; tier_rank: number }>>(new Map())
   const [deleteMode, setDeleteMode] = useState(false)
   const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
   const [showUrlModal, setShowUrlModal] = useState(false)
@@ -108,6 +109,11 @@ export default function Works({ onNavigateToActor }: WorksProps) {
       map.set(r.id, { rank: r.rank, total_points: r.total_points, master_run_count: r.master_run_count })
     }
     setMasterPointsMap(map)
+  }, [])
+
+  const loadTierMap = useCallback(async () => {
+    const data = await tierApi.masterRanking('work')
+    setTierMap(new Map(data.map(r => [r.id, { tier_name: r.tier_name, tier_color: r.tier_color, tier_rank: r.tier_rank }])))
   }, [])
 
   const refreshWorks = useCallback((extraCount = 0) => {
@@ -189,6 +195,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     loadTags()
     loadActorList()
     loadMasterPoints()
+    loadTierMap()
     studiosApi.list().then((d) => setStudioList(d as Studio[]))
   }, [])
   useEffect(() => { localStorage.setItem('works:search', JSON.stringify(search)) }, [search])
@@ -405,7 +412,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
               >
                 <option value="release_date">발매일</option>
                 <option value="created_at">등록일</option>
-                <option value="master_points">마스터랭킹</option>
+                <option value="master_points">월드컵</option>
+                <option value="tier">티어</option>
                 <option value="actor">배우</option>
                 <option value="studio">레이블</option>
                 <option value="rating">별점</option>
@@ -467,6 +475,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 deleteSelected={selectedDeleteIds.has(w.id)}
                 filePlayable={playable[w.id]}
                 masterPoints={masterPointsMap.get(w.id)}
+                tierInfo={tierMap.get(w.id)}
                 onMouseDown={(e) => {
                   if (!deleteMode) return
                   e.preventDefault()

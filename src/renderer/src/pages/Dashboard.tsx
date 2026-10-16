@@ -67,7 +67,7 @@ function WorkMiniCard({ work, onClick, onMouseMove, onMouseLeave, dateLabel }: {
       </div>
       <div className="p-1 bg-gray-800">
         <p className="text-xs font-bold text-white truncate">{work.product_number || '-'}</p>
-        <p className="text-xs text-gray-500 truncate">{dateLabel ?? work.release_date ?? '-'}</p>
+        {(dateLabel || work.release_date) && <p className="text-xs text-gray-500 truncate">{dateLabel || work.release_date}</p>}
       </div>
     </div>
   )

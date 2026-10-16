@@ -124,10 +124,16 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
     shellApi.openPath(file.videoPath)
   }
 
+  const CONTEXT_MENU_W = 192
+  const CONTEXT_MENU_H = 120
   const handleContextMenu = (e: React.MouseEvent, fileName: string) => {
     e.preventDefault()
     if (!selected.has(fileName)) setSelected(new Set([fileName]))
-    setContextMenu({ x: e.clientX, y: e.clientY, fileName })
+    let x = e.clientX
+    let y = e.clientY
+    if (x + CONTEXT_MENU_W > window.innerWidth) x = e.clientX - CONTEXT_MENU_W
+    if (y + CONTEXT_MENU_H > window.innerHeight) y = e.clientY - CONTEXT_MENU_H
+    setContextMenu({ x, y, fileName })
   }
 
   const handleRename = async () => {
@@ -380,7 +386,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
       {/* Context menu */}
       {contextMenu && (
         <div
-          className="fixed bg-gray-800 border border-gray-600 rounded shadow-lg py-1 z-50"
+          className="fixed bg-gray-800 border border-gray-600 rounded shadow-lg py-1 z-50 w-48"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={e => e.stopPropagation()}
         >

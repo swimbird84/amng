@@ -57,7 +57,7 @@ function ratingStars(rating: number): string {
   return '★'.repeat(full) + (half ? '☆' : '')
 }
 
-function WorkContent({ work, masterTier }: { work: Work; masterTier?: { tier_name: string; tier_color: string } | null }) {
+function WorkContent({ work, masterTier }: { work: Work; masterTier?: { tier_name: string; tier_color: string; tier_rank: number } | null }) {
   const repActors = work.rep_actors ?? []
   const repIds = new Set(repActors.map((a) => a.id))
   const otherActors = (work.actors ?? [])
@@ -85,7 +85,7 @@ function WorkContent({ work, masterTier }: { work: Work; masterTier?: { tier_nam
         <div className="flex items-center justify-between">
           <p className="font-bold text-gray-300">
             {work.product_number}
-            {masterTier && <span className="ml-1 font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name}</span>}
+            {masterTier && <span className="ml-1 font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}
             {!!work.is_favorite && <span className="ml-1 text-pink-500 font-normal">♥</span>}
             {!!work.delete_pending && <span className="ml-1 text-red-500 font-normal text-[11px]">삭제예정</span>}
           </p>
@@ -99,7 +99,7 @@ function WorkContent({ work, masterTier }: { work: Work; masterTier?: { tier_nam
   )
 }
 
-function ActorContent({ actor, physScore, masterTier }: { actor: Actor; physScore: number | null; masterTier?: { tier_name: string; tier_color: string } | null }) {
+function ActorContent({ actor, physScore, masterTier }: { actor: Actor; physScore: number | null; masterTier?: { tier_name: string; tier_color: string; tier_rank: number } | null }) {
   const s = actor.scores
   const hasBody = !!(actor.height || actor.bust || actor.waist || actor.hip || actor.cup)
   const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
@@ -120,7 +120,7 @@ function ActorContent({ actor, physScore, masterTier }: { actor: Actor; physScor
     <div className="space-y-1 leading-relaxed">
       <p className="font-bold text-white text-[13px]">
         {actor.name}{' '}
-        {masterTier && <span className="font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name}</span>}{' '}
+        {masterTier && <span className="font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}{' '}
         {!!actor.is_excluded && <span className="text-red-500 font-normal text-[11px]">제외됨</span>}{' '}
         {!!actor.is_favorite && <span className="text-pink-500 font-normal">♥</span>}{' '}
         {!!actor.delete_pending && <span className="text-red-500 font-normal text-[11px]">삭제예정</span>}{' '}
@@ -194,7 +194,7 @@ export default function CardTooltip({ tooltip }: Props) {
   const [work, setWork] = useState<Work | null>(null)
   const [actor, setActor] = useState<Actor | null>(null)
   const [physScore, setPhysScore] = useState<number | null>(null)
-  const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string } | null>(null)
+  const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string; tier_rank: number } | null>(null)
 
   useEffect(() => {
     setWork(null)

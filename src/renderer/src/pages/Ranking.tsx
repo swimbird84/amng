@@ -248,8 +248,8 @@ export default function Ranking({ onNavigateToActor }: Props) {
     const t = tierMap.get(a.id)
     if (!t) return <p className="text-xs text-gray-500 truncate">—</p>
     return (
-      <p className="text-xs truncate font-bold" style={{ color: t.tier_color }}>
-        [{t.tier_name} #{t.tier_rank}]
+      <p className="text-xs truncate">
+        <span className="text-[10px] font-bold px-1 py-0.5 rounded text-white" style={{ backgroundColor: t.tier_color }}>{t.tier_name} #{t.tier_rank}</span>
       </p>
     )
   }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Actor, Tag, Work } from '../types'
-import { actorsApi, actorTagsApi, shellApi, masterRankingApi } from '../api'
+import { actorsApi, actorTagsApi, shellApi, masterRankingApi, tierApi } from '../api'
 import SearchBar, { type ActorSearchParams, DEFAULT_ACTOR_SEARCH } from '../components/SearchBar'
 import ActorForm from '../components/ActorForm'
 import ImagePreview from '../components/ImagePreview'
@@ -33,8 +33,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
       return DEFAULT_ACTOR_SEARCH
     }
   })
-  const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at' | 'master_points'>(
-    (localStorage.getItem('actors:sortBy') as 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at' | 'master_points') || 'avg_score'
+  const [sortBy, setSortBy] = useState<'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at' | 'master_points' | 'tier'>(
+    (localStorage.getItem('actors:sortBy') as 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at' | 'master_points' | 'tier') || 'avg_score'
   )
   const [showPhysical, setShowPhysical] = useState(false)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
@@ -49,6 +49,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [refreshKey, setRefreshKey] = useState(0)
   const [masterPointsMap, setMasterPointsMap] = useState<Map<number, { rank: number; total_points: number; master_run_count: number }>>(new Map())
+  const [tierMap, setTierMap] = useState<Map<number, { tier_name: string; tier_color: string; tier_rank: number }>>(new Map())
+  const [tierOrder, setTierOrder] = useState<number[]>([])
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -76,6 +78,12 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
       map.set(r.id, { rank: r.rank, total_points: r.total_points, master_run_count: r.master_run_count })
     }
     setMasterPointsMap(map)
+  }, [])
+
+  const loadTierMap = useCallback(async () => {
+    const data = await tierApi.masterRanking('actor')
+    setTierMap(new Map(data.map(r => [r.id, { tier_name: r.tier_name, tier_color: r.tier_color, tier_rank: r.tier_rank }])))
+    setTierOrder(data.map(r => r.id))
   }, [])
 
   const loadActors = useCallback(async () => {
@@ -130,7 +138,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     if (search.waistNull) params.waistNull = true
     if (search.hipNull) params.hipNull = true
     if (search.cupNull) params.cupNull = true
-    if (sortBy !== 'ratio_score' && sortBy !== 'master_points') {
+    if (sortBy !== 'ratio_score' && sortBy !== 'master_points' && sortBy !== 'tier') {
       params.sortBy = sortBy
       params.sortDir = sortDir
     }
@@ -166,13 +174,22 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
         return (b.avg_score ?? 0) - (a.avg_score ?? 0)
       })
     }
+    if (sortBy === 'tier') {
+      return [...filtered].sort((a, b) => {
+        const ai = tierOrder.indexOf(a.id)
+        const bi = tierOrder.indexOf(b.id)
+        const ao = ai === -1 ? 999999 : ai
+        const bo = bi === -1 ? 999999 : bi
+        return sortDir === 'desc' ? ao - bo : bo - ao
+      })
+    }
     if (sortBy !== 'ratio_score') return filtered
     return [...filtered].sort((a, b) => {
       const sa = physScoreMap.get(a.id) ?? -1
       const sb = physScoreMap.get(b.id) ?? -1
       return sortDir === 'desc' ? sb - sa : sa - sb
     })
-  }, [actors, sortBy, sortDir, physScoreMap, masterPointsMap])
+  }, [actors, sortBy, sortDir, physScoreMap, masterPointsMap, tierOrder])
 
   const loadTags = async () => {
     setTags(await actorTagsApi.list() as Tag[])
@@ -180,6 +197,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
 
   useEffect(() => { loadActors() }, [loadActors])
   useEffect(() => { loadMasterPoints() }, [loadMasterPoints])
+  useEffect(() => { loadTierMap() }, [loadTierMap])
   useEffect(() => { loadTags() }, [])
   useEffect(() => {
     const onMouseUp = () => { isDragging.current = false }
@@ -198,10 +216,10 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     return () => window.removeEventListener('physicalSettingsChange', computePhysScores)
   }, [computePhysScores])
   useEffect(() => {
-    const handler = () => { loadActors(); computePhysScores(); loadMasterPoints() }
+    const handler = () => { loadActors(); computePhysScores(); loadMasterPoints(); loadTierMap() }
     window.addEventListener('actorScoresUpdated', handler)
     return () => window.removeEventListener('actorScoresUpdated', handler)
-  }, [loadActors, computePhysScores, loadMasterPoints])
+  }, [loadActors, computePhysScores, loadMasterPoints, loadTierMap])
   useEffect(() => { localStorage.setItem('actors:search', JSON.stringify(search)) }, [search])
 
   const handleSelect = async (id: number) => {
@@ -303,7 +321,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                 <option value="created_at">등록일</option>
                 <option value="avg_score">평점</option>
                 <option value="ratio_score">피지컬</option>
-                <option value="master_points">마스터랭킹</option>
+                <option value="master_points">월드컵</option>
+                <option value="tier">티어</option>
                 <option value="birthday">생년월일</option>
                 <option value="debut_date">데뷔일</option>
                 <option value="work_count">작품수</option>
@@ -408,7 +427,10 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                 </div>
                 <div className="p-2 bg-gray-800 flex-1" onClick={() => { if (!deleteMode) handleSelect(a.id) }}>
                   <div className="flex items-center justify-between gap-1">
-                    <p className="text-sm font-bold text-white truncate flex-1">{a.name}</p>
+                    <div className="flex items-center gap-1 truncate flex-1">
+                      <p className="text-sm font-bold text-white truncate">{a.name}</p>
+                      {tierMap.has(a.id) && (() => { const t = tierMap.get(a.id)!; return <span className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0" style={{ backgroundColor: t.tier_color }}>{t.tier_name} #{t.tier_rank}</span> })()}
+                    </div>
                     <p className="text-sm font-bold text-yellow-400 flex-shrink-0">{(a.avg_score ?? 0).toFixed(2)}점</p>
                   </div>
                   {(() => {

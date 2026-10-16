@@ -37,7 +37,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   const [refreshKey, setRefreshKey] = useState(0)
   const [showMasterRecord, setShowMasterRecord] = useState(false)
   const [showWorksModal, setShowWorksModal] = useState(false)
-  const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string } | null>(null)
+  const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string; tier_rank: number } | null>(null)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -155,7 +155,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               <div className="flex-1 pt-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-white font-bold text-lg">{actor.name}</h3>
-                  {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name}</span>}
+                  {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}
                   {!!actor.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                   {!!actor.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                   <button

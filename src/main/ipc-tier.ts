@@ -194,12 +194,16 @@ export function registerTierHandlers(): void {
     const set = db().prepare('SELECT id FROM tier_sets WHERE type = ? AND is_master = 1').get(type) as { id: number } | undefined
     if (!set) return null
     const item = db().prepare(`
-      SELECT tl.name AS tier_name, tl.color AS tier_color
+      SELECT tl.name AS tier_name, tl.color AS tier_color, ti.level_id, ti.sort_order
       FROM tier_items ti
       JOIN tier_levels tl ON tl.id = ti.level_id
       WHERE ti.set_id = ? AND ti.item_id = ?
-    `).get(set.id, itemId) as { tier_name: string; tier_color: string } | undefined
-    return item ?? null
+    `).get(set.id, itemId) as { tier_name: string; tier_color: string; level_id: number; sort_order: number } | undefined
+    if (!item) return null
+    const rank = (db().prepare(
+      'SELECT COUNT(*) AS cnt FROM tier_items WHERE set_id = ? AND level_id = ? AND sort_order < ?'
+    ).get(set.id, item.level_id, item.sort_order) as { cnt: number }).cnt + 1
+    return { tier_name: item.tier_name, tier_color: item.tier_color, tier_rank: rank }
   })
 
   ipcMain.handle('tier:getUnplacedItems', (_e, setId: number, offset: number, limit: number, sortBy?: string) => {

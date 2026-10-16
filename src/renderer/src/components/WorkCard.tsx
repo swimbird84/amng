@@ -12,6 +12,7 @@ interface WorkCardProps {
   deleteSelected?: boolean
   filePlayable?: boolean
   masterPoints?: { rank: number; total_points: number; master_run_count: number }
+  tierInfo?: { tier_name: string; tier_color: string; tier_rank: number }
   onClick?: () => void
   onMouseDown?: (e: React.MouseEvent) => void
   onMouseEnter?: () => void
@@ -24,7 +25,7 @@ interface WorkCardProps {
 
 export default function WorkCard({
   work: w, refreshKey, selected, deleteMode, deleteSelected,
-  filePlayable, masterPoints: mp,
+  filePlayable, masterPoints: mp, tierInfo,
   onClick, onMouseDown, onMouseEnter,
   onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onSearch,
 }: WorkCardProps) {
@@ -91,7 +92,10 @@ export default function WorkCard({
       </div>
       <div className="p-2 bg-gray-800 flex-1">
         <div className="flex items-center justify-between gap-1">
-          <p className="text-sm font-bold text-white truncate flex-1">{w.product_number || '-'}</p>
+          <div className="flex items-center gap-1 truncate flex-1">
+            <p className="text-sm font-bold text-white truncate">{w.product_number || '-'}</p>
+            {tierInfo && <span className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0" style={{ backgroundColor: tierInfo.tier_color }}>{tierInfo.tier_name} #{tierInfo.tier_rank}</span>}
+          </div>
           <div className="flex-shrink-0">
             <Rating value={w.rating} readonly small />
           </div>

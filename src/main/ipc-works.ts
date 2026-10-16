@@ -17,7 +17,7 @@ export function registerWorksHandlers(): void {
     ratingTo?: number
     actorId?: number
     studioId?: number
-    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points'
+    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points' | 'tier'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
     titleSearch?: string
@@ -150,6 +150,13 @@ export function registerWorksHandlers(): void {
       sql += ` ORDER BY m.name IS NULL ${invertedDir === 'ASC' ? 'ASC' : 'DESC'}, m.name ${invertedDir}, s.name IS NULL ${invertedDir === 'ASC' ? 'ASC' : 'DESC'}, s.name ${invertedDir}, w.release_date ${invertedDir}, w.product_number ${invertedDir}`
     } else if (params?.sortBy === 'master_points') {
       sql += ` ORDER BY COALESCE((SELECT SUM(mh.points) FROM master_ranking_history mh JOIN cup_runs r ON r.id = mh.run_id JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 WHERE mh.type = 'work' AND mh.item_id = w.id AND mh.season_id IS NULL), 0) ${sortDir}, w.product_number ASC`
+    } else if (params?.sortBy === 'tier') {
+      const masterSet = db().prepare('SELECT id FROM tier_sets WHERE type = ? AND is_master = 1').get('work') as { id: number } | undefined
+      if (masterSet) {
+        sql += ` ORDER BY COALESCE((SELECT tl.sort_order * 100000 + ti.sort_order FROM tier_items ti JOIN tier_levels tl ON tl.id = ti.level_id WHERE ti.set_id = ${masterSet.id} AND ti.item_id = w.id), 99999999) ${sortDir === 'DESC' ? 'ASC' : 'DESC'}, w.product_number ASC`
+      } else {
+        sql += ` ORDER BY w.product_number ASC`
+      }
     } else if (params?.sortBy === 'product_number') {
       sql += ` ORDER BY w.product_number ${invertedDir}`
     } else {

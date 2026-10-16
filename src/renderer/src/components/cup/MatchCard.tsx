@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { cupApi, shellApi, masterRankingApi } from '../../api'
+import { cupApi, shellApi, masterRankingApi, tierApi } from '../../api'
 import ImagePreview from '../ImagePreview'
 import CardTooltip, { type TooltipState } from '../CardTooltip'
 import Rating from '../Rating'
@@ -28,6 +28,7 @@ export default function MatchCard({
   const [isFavorite, setIsFavorite] = useState(!!(item.is_favorite))
   const [isDeletePending, setIsDeletePending] = useState(!!(item.delete_pending))
   const [showWorksModal, setShowWorksModal] = useState(false)
+  const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string; tier_rank: number } | null>(null)
 
   useEffect(() => {
     setWorkRating(item.rating ?? 0)
@@ -41,6 +42,7 @@ export default function MatchCard({
     } else {
       cupApi.itemTournamentStats(tournamentId, item.id).then(s => setStats({ ...s, total_cups: s.total_runs, run_wins: s.run_wins }))
     }
+    tierApi.getMasterTier(type, item.id).then(t => setMasterTier(t))
   }, [tournamentId, item.id, isMaster, type])
 
   useEffect(() => {
@@ -89,6 +91,9 @@ export default function MatchCard({
         {/* 통계 행 */}
         {stats && (stats.total_cups ?? stats.total_runs ?? 0) > 0 ? (
           <p className="text-[0.85rem] text-gray-400 mb-1.5 text-center whitespace-nowrap flex items-center justify-center gap-1.5 flex-wrap">
+            {masterTier && (
+              <span className="text-xs px-1.5 py-0.5 rounded text-white font-bold shrink-0" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>
+            )}
             {division !== undefined && (
               <span className={`text-xs px-1.5 py-0.5 rounded border font-bold shrink-0 ${DIV_COLOR[division] ?? DIV_COLOR[0]}`}>
                 {division === 0 ? '미분류' : `${division}부`}
@@ -105,6 +110,9 @@ export default function MatchCard({
           </p>
         ) : (
           <p className="text-[0.85rem] text-gray-600 mb-1.5 text-center flex items-center justify-center gap-1.5">
+            {masterTier && (
+              <span className="text-xs px-1.5 py-0.5 rounded text-white font-bold shrink-0" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>
+            )}
             {division !== undefined && (
               <span className={`text-xs px-1.5 py-0.5 rounded border font-bold shrink-0 ${DIV_COLOR[division] ?? DIV_COLOR[0]}`}>
                 {division === 0 ? '미분류' : `${division}부`}

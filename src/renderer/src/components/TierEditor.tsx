@@ -55,11 +55,11 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [dropIndicator, setDropIndicator] = useState<{ levelId: number; index: number } | null>(null)
-  const [poolSort, setPoolSort] = useState('name')
+  const [poolSort, setPoolSort] = useState(() => localStorage.getItem(`tier:poolSort:${setType}`) || 'name')
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollAnimRef = useRef<number | null>(null)
 
-  const POOL_LIMIT = 100
+  const POOL_LIMIT = 50
 
   const loadLevels = useCallback(async () => {
     const data = await tierApi.listLevels(setId) as TierLevel[]
@@ -221,13 +221,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     }
   }
 
-  const handleFillPool = () => {
-    const newOffset = unplacedOffset + POOL_LIMIT
-    if (newOffset < unplacedTotal) loadUnplaced(newOffset)
-  }
-
   const poolDisplayCount = unplaced.length
-  const canFill = unplacedOffset + POOL_LIMIT < unplacedTotal
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -350,7 +344,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
             <span className="text-gray-300 text-sm font-bold">미배치<span className="font-normal text-gray-500">({unplacedTotal})</span></span>
             <select
               value={poolSort}
-              onChange={e => setPoolSort(e.target.value)}
+              onChange={e => { const v = e.target.value; setPoolSort(v); localStorage.setItem(`tier:poolSort:${setType}`, v) }}
               className="bg-gray-700 text-white text-xs px-2 py-1 rounded focus:outline-none"
             >
               {setType === 'actor' ? (
@@ -374,10 +368,10 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
               )}
             </select>
             <button
-              onClick={handleFillPool}
-              disabled={!canFill}
-              className={`text-xs px-3 py-1 rounded ml-auto ${canFill ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}
-            >채움</button>
+              onClick={() => loadUnplaced(0)}
+              className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+              title="새로고침"
+            >↻</button>
           </div>
           <div
             className="grid grid-cols-10 gap-1"
