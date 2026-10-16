@@ -525,12 +525,12 @@ export function registerFilesHandlers(): void {
     return { ok: true, moved, actorId }
   })
 
-  ipcMain.handle('temp:fetchCover', async (_e, productNumber: string, saveFolder: string) => {
+  ipcMain.handle('temp:fetchCover', async (_e, productNumber: string, saveFolder: string, autoPlace?: boolean) => {
     try {
       const baseUrl = 'https://www.javbus.com'
       const pageUrl = baseUrl + '/' + productNumber
 
-      const imgUrl: string | null = await new Promise((resolve) => {
+      const scraped: { imgUrl: string | null; releaseDate: string | null; actorNames: string[] } = await new Promise((resolve) => {
         const win = new BrowserWindow({
           show: false,
           width: 800,
@@ -538,7 +538,7 @@ export function registerFilesHandlers(): void {
           webPreferences: { nodeIntegration: false, contextIsolation: true },
         })
 
-        const timeout = setTimeout(() => { win.destroy(); resolve(null) }, 15000)
+        const timeout = setTimeout(() => { win.destroy(); resolve({ imgUrl: null, releaseDate: null, actorNames: [] }) }, 15000)
 
         win.webContents.on('did-finish-load', async () => {
           try {
@@ -558,47 +558,135 @@ export function registerFilesHandlers(): void {
             `)
             // Wait a bit for redirect
             await new Promise(r => setTimeout(r, 2000))
-            // Extract bigImage src
+            // Extract cover image, release date, actor names
             const result = await win.webContents.executeJavaScript(`
               (function() {
+                var imgUrl = null;
                 var el = document.querySelector('a.bigImage');
-                if (el) return el.getAttribute('href');
-                var img = document.querySelector('.screencap img');
-                if (img) return img.getAttribute('src');
-                return null;
+                if (el) imgUrl = el.getAttribute('href');
+                else { var img = document.querySelector('.screencap img'); if (img) imgUrl = img.getAttribute('src'); }
+
+                var releaseDate = null;
+                var spans = document.querySelectorAll('.info p');
+                for (var i = 0; i < spans.length; i++) {
+                  var header = spans[i].querySelector('.header');
+                  if (header && header.textContent.indexOf('發行日期') >= 0) {
+                    var text = spans[i].textContent.replace(header.textContent, '').trim();
+                    var m = text.match(/\\d{4}-\\d{2}-\\d{2}/);
+                    if (m) releaseDate = m[0];
+                    break;
+                  }
+                }
+
+                var actorNames = [];
+                var starShow = document.querySelector('.star-show');
+                if (starShow) {
+                  var next = starShow.nextElementSibling;
+                  while (next) {
+                    if (next.tagName === 'P' && next.querySelector('.genre a[href*="/star/"]')) {
+                      var links = next.querySelectorAll('.genre a[href*="/star/"]');
+                      for (var j = 0; j < links.length; j++) {
+                        var name = links[j].textContent.trim();
+                        if (name) actorNames.push(name);
+                      }
+                      break;
+                    }
+                    next = next.nextElementSibling;
+                  }
+                }
+
+                return { imgUrl: imgUrl, releaseDate: releaseDate, actorNames: actorNames };
               })()
             `)
             clearTimeout(timeout)
             win.destroy()
-            if (result) {
-              if (result.startsWith('/')) resolve(baseUrl + result)
-              else if (result.startsWith('http')) resolve(result)
-              else resolve(baseUrl + '/' + result)
-            } else {
-              resolve(null)
+            let imgUrl = result?.imgUrl || null
+            if (imgUrl) {
+              if (imgUrl.startsWith('/')) imgUrl = baseUrl + imgUrl
+              else if (!imgUrl.startsWith('http')) imgUrl = baseUrl + '/' + imgUrl
             }
+            resolve({ imgUrl, releaseDate: result?.releaseDate || null, actorNames: result?.actorNames || [] })
           } catch {
             clearTimeout(timeout)
             win.destroy()
-            resolve(null)
+            resolve({ imgUrl: null, releaseDate: null, actorNames: [] })
           }
         })
 
         win.loadURL(pageUrl)
       })
 
-      if (!imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다' }
+      if (!scraped.imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다' }
 
       // Download image
-      const imgRes = await fetch(imgUrl, {
+      const imgRes = await fetch(scraped.imgUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': baseUrl + '/' }
       })
       if (!imgRes.ok) return { ok: false, error: `이미지 다운로드 실패 HTTP ${imgRes.status}` }
       const buffer = Buffer.from(await imgRes.arrayBuffer())
-      const ext = path.extname(imgUrl).split('?')[0] || '.jpg'
+      const ext = path.extname(scraped.imgUrl).split('?')[0] || '.jpg'
       const savePath = path.join(saveFolder, productNumber + ext)
       await fs.promises.writeFile(savePath, buffer)
-      return { ok: true, savePath }
+
+      // Auto-place logic
+      if (autoPlace && scraped.releaseDate && scraped.actorNames.length === 1) {
+        const scrapedName = scraped.actorNames[0]
+        // Find actors with matching real_name
+        const allActors = db().prepare('SELECT id, name, birthday, real_name FROM actors WHERE is_deleted = 0 AND real_name IS NOT NULL').all() as { id: number; name: string; birthday: string | null; real_name: string }[]
+        const matched = allActors.filter(a => a.real_name.split(',').map(s => s.trim()).some(rn => rn === scrapedName))
+
+        let targetActor: { id: number; name: string; birthday: string | null } | null = null
+        if (matched.length === 1) {
+          targetActor = matched[0]
+        } else if (matched.length > 1) {
+          // Pick actor with most works
+          const withCounts = matched.map(a => {
+            const row = db().prepare('SELECT COUNT(*) AS cnt FROM work_actors WHERE actor_id = ?').get(a.id) as { cnt: number }
+            return { ...a, workCount: row.cnt }
+          })
+          withCounts.sort((a, b) => b.workCount - a.workCount)
+          targetActor = withCounts[0]
+        }
+
+        if (targetActor && targetActor.birthday) {
+          // Find existing actor folder from work_files
+          const actorFiles = db().prepare(`
+            SELECT wf.file_path FROM work_files wf
+            JOIN work_actors wa ON wa.work_id = wf.work_id
+            WHERE wa.actor_id = ? AND wf.type = 'local'
+            ORDER BY wf.id DESC LIMIT 1
+          `).get(targetActor.id) as { file_path: string } | undefined
+
+          let actorFolderPath: string | null = null
+          if (actorFiles) {
+            // work_file path → parent (work folder) → parent (actor folder)
+            actorFolderPath = path.dirname(path.dirname(actorFiles.file_path))
+            // Verify folder name matches actor pattern
+            const folderName = path.basename(actorFolderPath)
+            if (!folderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)) actorFolderPath = null
+          }
+
+          if (actorFolderPath && fs.existsSync(actorFolderPath)) {
+            // Find video files matching this product number in saveFolder
+            const entries = await fs.promises.readdir(saveFolder)
+            const videoExts = new Set(['.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.ts', '.m2ts', '.rmvb', '.strm'])
+            const videoFiles = entries.filter(e => {
+              const eExt = path.extname(e).toLowerCase()
+              if (!videoExts.has(eExt)) return false
+              const eBase = path.basename(e, path.extname(e))
+              const ePn = getProductNumber(eBase)
+              return ePn.toLowerCase() === productNumber.toLowerCase()
+            })
+
+            if (videoFiles.length > 0) {
+              const moved = await moveFilesToActorFolder(saveFolder, videoFiles, actorFolderPath, scraped.releaseDate, targetActor.id)
+              return { ok: true, savePath, autoPlaced: true, actorName: targetActor.name, movedCount: moved.length }
+            }
+          }
+        }
+      }
+
+      return { ok: true, savePath, autoPlaced: false }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
       return { ok: false, error: errMsg }

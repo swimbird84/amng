@@ -263,6 +263,17 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               </div>
             )}
 
+            {actor.real_name && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">본명</p>
+                <div className="flex flex-wrap gap-1">
+                  {actor.real_name.split(',').map((a) => a.trim()).filter(Boolean).map((rn) => (
+                    <span key={rn} className="text-xs px-2 py-0.5 rounded bg-blue-800 text-blue-200">{rn}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {actor.tags && actor.tags.length > 0 && (() => {
               type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof actor.tags }
               const catMap = new Map<number | null, Group>()

@@ -219,6 +219,9 @@ export function initDatabase(): void {
   if (!actorCols.includes('aliases')) {
     db.prepare('ALTER TABLE actors ADD COLUMN aliases TEXT').run()
   }
+  if (!actorCols.includes('real_name')) {
+    db.prepare('ALTER TABLE actors ADD COLUMN real_name TEXT').run()
+  }
   // score_excluded → is_excluded rename
   if (actorCols.includes('score_excluded') && !actorCols.includes('is_excluded')) {
     db.prepare('ALTER TABLE actors RENAME COLUMN score_excluded TO is_excluded').run()

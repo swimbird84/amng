@@ -45,6 +45,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     const next = new Set(prev); next.has(field) ? next.delete(field) : next.add(field); return next
   })
   const [aliases, setAliases] = useState(actor?.aliases || '')
+  const [realName, setRealName] = useState(actor?.real_name || '')
 
   const handleProfilePaste = (e: React.ClipboardEvent) => {
     const text = e.clipboardData.getData('text')
@@ -73,6 +74,24 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
         setAliases(merged.join(','))
         parsed = true
       }
+      // 괄호 안 일본어 이름 → 본명에 추가
+      const jpFromAlias = [...aliasMatch[1].matchAll(/\(([^\x00-\x7F]+)\)/g)].map(m => m[1].trim()).filter(Boolean)
+      if (jpFromAlias.length > 0) {
+        const existingRn = realName.split(',').map(s => s.trim()).filter(Boolean)
+        const mergedRn = [...new Set([...existingRn, ...jpFromAlias])]
+        setRealName(mergedRn.join(','))
+        parsed = true
+      }
+    }
+    // 일본어 이름 (히라가나/카타카나/한자로 된 줄) → 본명 메인
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    const jpLine = lines.find(l => /^[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF00-\uFFEF\s]+$/.test(l) && l.length >= 2)
+    if (jpLine) {
+      const existingRn = realName.split(',').map(s => s.trim()).filter(Boolean)
+      if (!existingRn.includes(jpLine)) {
+        setRealName([jpLine, ...existingRn].join(','))
+      }
+      parsed = true
     }
     if (parsed) e.preventDefault()
   }
@@ -166,6 +185,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
       cup: cup.trim() || null,
       phys_arbitrary: physArbitrary.size > 0 ? [...physArbitrary].join('|') : null,
       aliases: aliases.trim() || null,
+      real_name: realName.trim() || null,
       comment: comment.trim() || null,
       delete_pending: deletePending,
       is_excluded: isExcluded,
@@ -279,6 +299,7 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onPaste={handleProfilePaste}
                 className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
               />
             </div>
@@ -288,7 +309,19 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
               <input
                 value={aliases}
                 onChange={(e) => setAliases(e.target.value)}
+                onPaste={handleProfilePaste}
                 placeholder="예: 이름2, 이름3"
+                className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">본명 <span className="text-xs text-gray-500">(쉼표로 구분)</span></label>
+              <input
+                value={realName}
+                onChange={(e) => setRealName(e.target.value)}
+                onPaste={handleProfilePaste}
+                placeholder="예: 神木麗, かみき れい"
                 className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full"
               />
             </div>

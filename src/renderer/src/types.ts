@@ -76,6 +76,7 @@ export interface Actor {
   cup: string | null
   phys_arbitrary: string | null
   aliases: string | null
+  real_name: string | null
   comment: string | null
   avg_score?: number
   work_count?: number

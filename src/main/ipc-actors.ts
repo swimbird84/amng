@@ -46,6 +46,7 @@ export function registerActorsHandlers(): void {
     cupNull?: boolean
     commentSearch?: string
     commentNull?: boolean
+    realNameNull?: boolean
     deletePending?: boolean
     showExcluded?: boolean
   }) => {
@@ -103,8 +104,8 @@ export function registerActorsHandlers(): void {
     }
 
     if (params?.keyword) {
-      conditions.push('(a.name LIKE ? OR a.aliases LIKE ?)')
-      bindings.push(`%${params.keyword}%`, `%${params.keyword}%`)
+      conditions.push('(a.name LIKE ? OR a.aliases LIKE ? OR a.real_name LIKE ? OR EXISTS (SELECT 1 FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id WHERE wa2.actor_id = a.id AND w2.product_number LIKE ?))')
+      bindings.push(`%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`)
     }
     if (params?.ageFrom !== undefined) {
       conditions.push("(julianday('now') - julianday(a.birthday)) / 365.25 >= ?")
@@ -173,6 +174,7 @@ export function registerActorsHandlers(): void {
     if (params?.cupNull) { conditions.push("(a.cup IS NULL OR TRIM(a.cup) = '')") }
     if (params?.commentSearch) { conditions.push('a.comment LIKE ?'); bindings.push(`%${params.commentSearch}%`) }
     if (params?.commentNull) { conditions.push("(a.comment IS NULL OR TRIM(a.comment) = '')") }
+    if (params?.realNameNull) { conditions.push("(a.real_name IS NULL OR TRIM(a.real_name) = '')") }
     if (params?.deletePending) { conditions.push('COALESCE(a.delete_pending, 0) = 1') }
 
     if (conditions.length > 0) {
@@ -331,16 +333,17 @@ export function registerActorsHandlers(): void {
     cup?: string | null
     phys_arbitrary?: string | null
     aliases?: string | null
+    real_name?: string | null
     comment?: string | null
     scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
     const result = db().prepare(`
-      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, aliases, comment)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO actors (name, photo_path, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, aliases, real_name, comment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(data.name, data.photo_path || null, data.birthday || null, data.debut_date || null,
-      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.aliases || null, data.comment || null)
+      data.height ?? null, data.bust ?? null, data.waist ?? null, data.hip ?? null, data.cup || null, data.phys_arbitrary || null, data.aliases || null, data.real_name || null, data.comment || null)
     const actorId = result.lastInsertRowid
 
     const s = data.scores
@@ -391,6 +394,7 @@ export function registerActorsHandlers(): void {
     cup?: string | null
     phys_arbitrary?: string | null
     aliases?: string | null
+    real_name?: string | null
     comment?: string | null
     scores?: { face: number; bust: number; hip: number; physical: number; skin: number; acting: number; sexy: number; charm: number; technique: number; proportions: number }
     tag_ids?: number[]
@@ -425,6 +429,7 @@ export function registerActorsHandlers(): void {
     if (data.cup !== undefined) { fields.push('cup = ?'); values.push(data.cup) }
     if (data.phys_arbitrary !== undefined) { fields.push('phys_arbitrary = ?'); values.push(data.phys_arbitrary) }
     if (data.aliases !== undefined) { fields.push('aliases = ?'); values.push(data.aliases) }
+    if (data.real_name !== undefined) { fields.push('real_name = ?'); values.push(data.real_name) }
     if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
 
     if (fields.length > 0) {

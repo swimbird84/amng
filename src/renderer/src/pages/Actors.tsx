@@ -145,6 +145,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     if (search.favoriteOnly) params.favoriteOnly = true
     if (search.commentSearch) params.commentSearch = search.commentSearch
     if (search.commentNull) params.commentNull = true
+    if (search.realNameNull) params.realNameNull = true
     if (search.deletePending) params.deletePending = true
     if (search.showExcluded) params.showExcluded = true
     const list = await actorsApi.list(params) as Actor[]

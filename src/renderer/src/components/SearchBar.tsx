@@ -354,6 +354,7 @@ export default function SearchBar(props: Props) {
     if (ap.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...ap, favoriteOnly: false } as never) })
     if (ap.commentSearch) conditions.push({ label: `코멘트: ${ap.commentSearch}`, onClear: () => onChange({ ...ap, commentSearch: '' } as never) })
     if (ap.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...ap, commentNull: false } as never) })
+    if (ap.realNameNull) conditions.push({ label: '본명없음', onClear: () => onChange({ ...ap, realNameNull: false } as never) })
     if (ap.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...ap, deletePending: false } as never) })
     if (ap.showExcluded) conditions.push({ label: '제외배우', onClear: () => onChange({ ...ap, showExcluded: false } as never) })
   }
@@ -815,6 +816,14 @@ export default function SearchBar(props: Props) {
                       onClick={() => onChange({ ...aParams, commentNull: !aParams.commentNull, commentSearch: '' } as never)}
                       className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.commentNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                     >코멘트없음</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 w-14 shrink-0">본명</span>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...aParams, realNameNull: !aParams.realNameNull } as never)}
+                      className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.realNameNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >본명없음</button>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-14 shrink-0">삭제예정</span>

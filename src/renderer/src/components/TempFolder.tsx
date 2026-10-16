@@ -21,11 +21,12 @@ function formatFileSize(bytes: number | undefined): string {
 interface Props {
   onDragFiles: (files: TempFile[]) => void
   refreshRef?: React.MutableRefObject<(() => void) | null>
+  onTreeRefresh?: () => void
 }
 
 const TEMP_FOLDER_KEY = 'files:tempFolder'
 
-export default function TempFolder({ onDragFiles, refreshRef }: Props) {
+export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: Props) {
   const [folderPath, setFolderPath] = useState(() => localStorage.getItem(TEMP_FOLDER_KEY) || '')
   const [files, setFiles] = useState<TempFile[]>([])
   const [loading, setLoading] = useState(false)
@@ -234,13 +235,21 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
             const noThumb = files.filter(f => !f.thumbPath)
             if (noThumb.length === 0) { showToast('다운로드할 파일이 없습니다'); return }
             let count = 0
+            let placedCount = 0
             for (let i = 0; i < noThumb.length; i++) {
               showToast(`${i + 1}/${noThumb.length} 다운로드 중... (${noThumb[i].baseName})`, true)
-              const res = await tempApi.fetchCover(noThumb[i].baseName, folderPath)
-              if (res.ok) count++
+              const res = await tempApi.fetchCover(noThumb[i].baseName, folderPath, true)
+              if (res.ok) {
+                count++
+                if (res.autoPlaced) placedCount++
+              }
             }
-            showToast(`${count}/${noThumb.length}개 커버 다운로드 완료`)
+            const msg = placedCount > 0
+              ? `${count}/${noThumb.length}개 다운로드, ${placedCount}개 자동 배치`
+              : `${count}/${noThumb.length}개 커버 다운로드 완료`
+            showToast(msg)
             loadFiles()
+            if (placedCount > 0) onTreeRefresh?.()
           }}
           className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
         ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
@@ -310,7 +319,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
                       className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
                     ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                     {!file.thumbPath && <button
-                      onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
+                      onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok) { if (res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
                       className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
                     ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
                     {searchUrl && <button
@@ -364,7 +373,7 @@ export default function TempFolder({ onDragFiles, refreshRef }: Props) {
                       <span className="text-xs text-gray-500 w-16 text-right shrink-0">{formatFileSize(file.fileSize)}</span>
                       <span className="w-20 flex items-center justify-center gap-1.5 shrink-0">
                         <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-                        <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                        <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok) { if (res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } } else { showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                         {searchUrl && <button onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + file.baseName) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
                       </span>
                     </div>

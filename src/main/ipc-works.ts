@@ -66,8 +66,8 @@ export function registerWorksHandlers(): void {
     }
 
     if (params?.keyword) {
-      conditions.push('w.product_number LIKE ?')
-      bindings.push(`%${params.keyword}%`)
+      conditions.push('(w.product_number LIKE ? OR EXISTS (SELECT 1 FROM work_actors wa2 JOIN actors a2 ON a2.id = wa2.actor_id WHERE wa2.work_id = w.id AND (a2.name LIKE ? OR a2.aliases LIKE ? OR a2.real_name LIKE ?)))')
+      bindings.push(`%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`)
     }
     if (params?.releaseDateFrom) {
       conditions.push('w.release_date >= ?')
