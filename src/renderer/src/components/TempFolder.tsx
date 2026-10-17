@@ -2,6 +2,19 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { tempApi, dialogApi, shellApi, imageApi, searchUrlApi } from '../api'
 import SearchUrlModal from './SearchUrlModal'
 
+function getProductNumber(baseName: string, allBaseNames?: string[]): string {
+  const m = baseName.match(/^(.+?)_(\d+)$/)
+  if (!m) return baseName
+  if (!allBaseNames) return m[1]
+  // Only strip suffix if there are consecutive numbered files with same prefix
+  const prefix = m[1]
+  const count = allBaseNames.filter(n => {
+    const m2 = n.match(/^(.+?)_\d+$/)
+    return m2 && m2[1] === prefix
+  }).length
+  return count >= 2 ? prefix : baseName
+}
+
 interface TempFile {
   fileName: string
   baseName: string
@@ -62,6 +75,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
 
   const loadFiles = useCallback(async () => {
     if (!folderPath) return
+    const scrollTop = gridRef.current?.scrollTop ?? 0
     setLoading(true)
     setError(null)
     const res = await tempApi.listFiles(folderPath)
@@ -69,6 +83,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
       setFiles(res.files)
       setThumbCache(new Map())
       setLoading(false)
+      requestAnimationFrame(() => { if (gridRef.current) gridRef.current.scrollTop = scrollTop })
       // Load thumbnails in background
       for (const f of res.files) {
         if (f.thumbPath) {
@@ -253,6 +268,23 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
           }}
           className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
         ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
+        {folderPath && <button
+          onClick={async () => {
+            const hasThumb = files.filter(f => f.thumbPath)
+            if (hasThumb.length === 0) { showToast('배치할 파일이 없습니다'); return }
+            let placedCount = 0
+            for (let i = 0; i < hasThumb.length; i++) {
+              showToast(`${i + 1}/${hasThumb.length} 배치 중... (${hasThumb[i].baseName})`, true)
+              const res = await tempApi.fetchCover(hasThumb[i].baseName, folderPath, true)
+              if (res.ok && res.autoPlaced) placedCount++
+            }
+            showToast(placedCount > 0 ? `${placedCount}/${hasThumb.length}개 자동 배치 완료` : '배치 대상이 없습니다')
+            loadFiles()
+            if (placedCount > 0) onTreeRefresh?.()
+          }}
+          className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
+          title="자동 배치"
+        ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
         {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
         {folderPath && <button onClick={() => shellApi.openPath(folderPath)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>}
         <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
@@ -322,8 +354,12 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                       onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok) { if (res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
                       className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
                     ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
+                    {file.thumbPath && <button
+                      onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast('배치 대상이 없습니다') } }}
+                      className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
+                    ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
                     {searchUrl && <button
-                      onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + file.baseName) }}
+                      onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + getProductNumber(file.baseName, files.map(f => f.baseName))) }}
                       className="absolute bottom-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
                     ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
                   </div>
@@ -374,7 +410,8 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                       <span className="w-20 flex items-center justify-center gap-1.5 shrink-0">
                         <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                         <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok) { if (res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } } else { showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                        {searchUrl && <button onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + file.baseName) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
+                        {file.thumbPath && <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast('배치 대상이 없습니다') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
+                        {searchUrl && <button onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + getProductNumber(file.baseName, files.map(f => f.baseName))) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
                       </span>
                     </div>
                   )

@@ -7,6 +7,7 @@ import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
 import DateInput from './DateInput'
 import CardTooltip, { type TooltipState } from './CardTooltip'
+import SearchUrlModal from './SearchUrlModal'
 
 interface Props {
   work?: Work & { actors?: Actor[]; tags?: Tag[] }
@@ -26,6 +27,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [coverPath, setCoverPath] = useState(work?.cover_path || '')
   const [productNumber, setProductNumber] = useState(work?.product_number || '')
   const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
+  const [showUrlModal, setShowUrlModal] = useState(false)
   const [releaseDate, setReleaseDate] = useState(work?.release_date || '')
   const [rating, setRating] = useState(work?.rating || 0)
   const [isFavorite, setIsFavorite] = useState(work?.is_favorite ? 1 : 0)
@@ -800,6 +802,9 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                 </button>
               )}
+              <button onClick={() => setShowUrlModal(true)} className="text-gray-400 hover:text-white">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              </button>
             </div>
             <textarea
               value={comment}
@@ -825,6 +830,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         </div>
       </div>
       {actorTooltip && <CardTooltip tooltip={actorTooltip} />}
+      {showUrlModal && <SearchUrlModal onClose={() => setShowUrlModal(false)} onSelect={url => setActiveSearchUrl(url)} />}
     </div>
   )
 }

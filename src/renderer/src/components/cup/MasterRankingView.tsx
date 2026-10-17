@@ -128,7 +128,7 @@ export default function MasterRankingView({
   useEffect(() => { localStorage.setItem('masterRank:sortBy', sortBy) }, [sortBy])
   useEffect(() => { localStorage.setItem('masterRank:sortDir', sortDir) }, [sortDir])
   useEffect(() => {
-    cupApi.divisionCounts(type, selectedSeasonId ?? undefined).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+    cupApi.divisionCounts(type, selectedSeasonId ?? undefined).then(setDivisionCounts).catch(err => { console.error('[divisionCounts]', err); setDivisionCounts([]) })
   }, [type, selectedSeasonId])
   useEffect(() => {
     masterRankingApi.seasons(type).then(s => setSeasons(s.map(r => ({ id: r.id, name: r.name })))).catch(() => setSeasons([]))
@@ -318,19 +318,19 @@ export default function MasterRankingView({
                   {DIV_LABEL[division] ?? `${division}부`} <span className="opacity-70">{(type === 'actor' ? DIV_STD_SIZES_ACTOR : DIV_STD_SIZES)[division] != null ? `${(type === 'actor' ? DIV_STD_SIZES_ACTOR : DIV_STD_SIZES)[division]}(${count})` : count}</span>
                 </button>
               ))}
-              <div className="flex-1" />
-              {type === 'work' && (
-                <>
-                  <button onClick={() => setShowActorDist(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">배우분포</button>
-                  <button onClick={() => setShowLabelDist(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">레이블분포</button>
-                </>
-              )}
-              <button onClick={() => { setChartSeasonId(selectedSeasonId); setRankChartModal(true) }} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">랭킹차트</button>
-              <button onClick={() => setShowTournamentStats(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">대회통계</button>
-              <button onClick={() => setShowSettings(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">⚙ 설정</button>
-              <button onClick={() => setShowResetConfirm('actor')} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">배우 시즌종료</button>
-              <button onClick={() => setShowResetConfirm('work')} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">작품 시즌종료</button>
             </>)}
+            <div className="flex-1" />
+            {type === 'work' && (
+              <>
+                <button onClick={() => setShowActorDist(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">배우분포</button>
+                <button onClick={() => setShowLabelDist(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">레이블분포</button>
+              </>
+            )}
+            <button onClick={() => { setChartSeasonId(selectedSeasonId); setRankChartModal(true) }} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">랭킹차트</button>
+            <button onClick={() => setShowTournamentStats(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">대회통계</button>
+            <button onClick={() => setShowSettings(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">⚙ 설정</button>
+            <button onClick={() => setShowResetConfirm('actor')} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">배우 시즌종료</button>
+            <button onClick={() => setShowResetConfirm('work')} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">작품 시즌종료</button>
           </>) : (<>
             {/* 티어 레벨 필터 */}
             <button
@@ -414,7 +414,7 @@ export default function MasterRankingView({
         setShowSettings(false)
         load(type, search, page, divFilter, pageSize, sortBy, sortDir, selectedSeasonId, tierLevelFilter)
         loadTrends(type, selectedSeasonId)
-        cupApi.divisionCounts(type, selectedSeasonId ?? undefined).then(setDivisionCounts).catch(() => setDivisionCounts([]))
+        cupApi.divisionCounts(type, selectedSeasonId ?? undefined).then(setDivisionCounts).catch(err => { console.error('[divisionCounts]', err); setDivisionCounts([]) })
       }} />}
 
       {showResetConfirm && (

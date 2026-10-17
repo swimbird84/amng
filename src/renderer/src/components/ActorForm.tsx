@@ -56,10 +56,10 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     if (bdMatch && !birthday) { setBirthday(bdMatch[1]); parsed = true }
     // 신장 : 148
     const htMatch = text.match(/신장\s*[:：]\s*(\d+)/)
-    if (htMatch && !height) { setHeight(htMatch[1]); parsed = true }
+    if (htMatch && !height && htMatch[1] !== '0') { setHeight(htMatch[1]); parsed = true }
     // 신체사이즈 : B81 / W58 / H82
     const bodyMatch = text.match(/신체사이즈\s*[:：]\s*B(\d+)\s*\/\s*W(\d+)\s*\/\s*H(\d+)/)
-    if (bodyMatch) { if (!bust) setBust(bodyMatch[1]); if (!waist) setWaist(bodyMatch[2]); if (!hip) setHip(bodyMatch[3]); parsed = true }
+    if (bodyMatch) { if (!bust && bodyMatch[1] !== '0') setBust(bodyMatch[1]); if (!waist && bodyMatch[2] !== '0') setWaist(bodyMatch[2]); if (!hip && bodyMatch[3] !== '0') setHip(bodyMatch[3]); parsed = true }
     // 컵사이즈 : C
     const cupMatch = text.match(/컵사이즈\s*[:：]\s*([A-Za-z]+)/)
     if (cupMatch && !cup) { setCup(cupMatch[1].toUpperCase()); parsed = true }
@@ -98,8 +98,11 @@ export default function ActorForm({ actor, onSave, onCancel }: Props) {
     const lastAdIdx = lines.findLastIndex(l => l.includes('[ 웹하드 AD ]'))
     if (lastAdIdx >= 0 && lastAdIdx < lines.length - 1) {
       const bioLines = lines.slice(lastAdIdx + 1)
-      // 첫 줄 → 코멘트 (기존 값 없을 때만)
-      if (bioLines[0] && !comment) { setComment(bioLines[0]); parsed = true }
+      // 첫 줄 → 코멘트 (비어있으면 설정, 있으면 중복 아닐 때 아래 추가)
+      if (bioLines[0]) {
+        if (!comment) { setComment(bioLines[0]); parsed = true }
+        else if (!comment.includes(bioLines[0])) { setComment(comment + '\n' + bioLines[0]); parsed = true }
+      }
       // 전체 텍스트에서 태그 자동 매칭
       const bioText = bioLines.join(' ')
       const matchedTagIds = allTags.filter(t => bioText.includes(t.name)).map(t => t.id)

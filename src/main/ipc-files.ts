@@ -370,7 +370,7 @@ export function registerFilesHandlers(): void {
   }
 
   // Move files to actor folder, grouping _N suffixed files under same product number
-  async function moveFilesToActorFolder(srcFolder: string, fileNames: string[], targetActorFolder: string, releaseDate: string, actorId: number | null): Promise<string[]> {
+  async function moveFilesToActorFolder(srcFolder: string, fileNames: string[], targetActorFolder: string, releaseDate: string, actorId: number | null, extraActorIds?: number[]): Promise<string[]> {
     const moved: string[] = []
 
     // Group files by product number
@@ -439,9 +439,16 @@ export function registerFilesHandlers(): void {
           db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, ?)').run(workId, movedVideoPaths[i], 'local', i)
         }
 
-        // Link actor
+        // Link actors
         if (actorId) {
           db().prepare('INSERT OR IGNORE INTO work_actors (work_id, actor_id, is_rep) VALUES (?, ?, 1)').run(workId, actorId)
+        }
+        if (extraActorIds) {
+          for (const eId of extraActorIds) {
+            if (eId !== actorId) {
+              db().prepare('INSERT OR IGNORE INTO work_actors (work_id, actor_id, is_rep) VALUES (?, ?, 1)').run(workId, eId)
+            }
+          }
         }
       } catch { /* skip */ }
     }
@@ -525,8 +532,23 @@ export function registerFilesHandlers(): void {
     return { ok: true, moved, actorId }
   })
 
-  ipcMain.handle('temp:fetchCover', async (_e, productNumber: string, saveFolder: string, autoPlace?: boolean) => {
+  ipcMain.handle('temp:fetchCover', async (_e, rawProductNumber: string, saveFolder: string, autoPlace?: boolean) => {
     try {
+      // Only strip _N suffix if consecutive numbered files exist in folder
+      let productNumber = rawProductNumber
+      const suffixMatch = rawProductNumber.match(/^(.+?)_(\d+)$/)
+      if (suffixMatch) {
+        try {
+          const entries = await fs.promises.readdir(saveFolder)
+          const prefix = suffixMatch[1]
+          const count = entries.filter(e => {
+            const base = path.basename(e, path.extname(e))
+            const m = base.match(/^(.+?)_\d+$/)
+            return m && m[1] === prefix
+          }).length
+          if (count >= 2) productNumber = prefix
+        } catch { /* use raw */ }
+      }
       const baseUrl = 'https://www.javbus.com'
       const pageUrl = baseUrl + '/' + productNumber
 
@@ -629,11 +651,13 @@ export function registerFilesHandlers(): void {
       await fs.promises.writeFile(savePath, buffer)
 
       // Auto-place logic
-      if (autoPlace && scraped.releaseDate && scraped.actorNames.length === 1) {
-        const scrapedName = scraped.actorNames[0]
-        // Find actors with matching real_name
+      if (autoPlace && scraped.releaseDate && scraped.actorNames.length >= 1) {
+        // Find actors with matching real_name from all scraped names
         const allActors = db().prepare('SELECT id, name, birthday, real_name FROM actors WHERE is_deleted = 0 AND real_name IS NOT NULL').all() as { id: number; name: string; birthday: string | null; real_name: string }[]
-        const matched = allActors.filter(a => a.real_name.split(',').map(s => s.trim()).some(rn => rn === scrapedName))
+        const matched = allActors.filter(a => {
+          const realNames = a.real_name.split(',').map(s => s.trim())
+          return scraped.actorNames.some(sn => realNames.includes(sn))
+        })
 
         let targetActor: { id: number; name: string; birthday: string | null } | null = null
         if (matched.length === 1) {
@@ -679,7 +703,8 @@ export function registerFilesHandlers(): void {
             })
 
             if (videoFiles.length > 0) {
-              const moved = await moveFilesToActorFolder(saveFolder, videoFiles, actorFolderPath, scraped.releaseDate, targetActor.id)
+              const allMatchedIds = matched.map(a => a.id)
+              const moved = await moveFilesToActorFolder(saveFolder, videoFiles, actorFolderPath, scraped.releaseDate, targetActor.id, allMatchedIds)
               return { ok: true, savePath, autoPlaced: true, actorName: targetActor.name, movedCount: moved.length }
             }
           }
