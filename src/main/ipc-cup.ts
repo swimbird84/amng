@@ -1664,9 +1664,9 @@ export function registerCupHandlers(): void {
         ${itemCol} AS id,
         COALESCE(mrc.master_run_count, 0) AS master_run_count
       FROM ${fromClause}
-      ${type === 'actor' ? 'WHERE a.is_deleted = 0 AND a.is_excluded = 0' : ''}
       LEFT JOIN pts ON pts.item_id = ${itemCol}
       LEFT JOIN mrc ON mrc.item_id = ${itemCol}
+      ${type === 'actor' ? 'WHERE a.is_deleted = 0 AND a.is_excluded = 0' : ''}
     `).all(type) as { rank: number; id: number; master_run_count: number }[]
 
     const countMap = new Map<number, number>()
