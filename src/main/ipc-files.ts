@@ -1,4 +1,4 @@
-import { ipcMain, shell, BrowserWindow } from 'electron'
+import { ipcMain, shell, BrowserWindow, net } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import { getDatabase } from './db'
@@ -298,7 +298,7 @@ export function registerFilesHandlers(): void {
         }
       }
 
-      const result: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null; fileSize: number }[] = []
+      const result: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null; fileSize: number; mtime: number }[] = []
       for (const name of fileNames) {
         const ext = path.extname(name).toLowerCase()
         if (!VIDEO_EXTS.has(ext)) continue
@@ -310,8 +310,9 @@ export function registerFilesHandlers(): void {
           if (prefixMatch) thumb = imageMap.get(prefixMatch[1].toLowerCase()) ?? null
         }
         let fileSize = 0
-        try { fileSize = (await fs.promises.stat(path.join(folderPath, name))).size } catch { /* skip */ }
-        result.push({ fileName: name, baseName: base, videoPath: path.join(folderPath, name), thumbPath: thumb, fileSize })
+        let mtime = 0
+        try { const st = await fs.promises.stat(path.join(folderPath, name)); fileSize = st.size; mtime = st.mtimeMs } catch { /* skip */ }
+        result.push({ fileName: name, baseName: base, videoPath: path.join(folderPath, name), thumbPath: thumb, fileSize, mtime })
       }
       result.sort((a, b) => a.fileName.localeCompare(b.fileName))
       return { ok: true, files: result }
@@ -562,10 +563,13 @@ export function registerFilesHandlers(): void {
 
         const timeout = setTimeout(() => { win.destroy(); resolve({ imgUrl: null, releaseDate: null, actorNames: [] }) }, 15000)
 
+        let resolved = false
+        let retried = false
         win.webContents.on('did-finish-load', async () => {
+          if (resolved) return
           try {
             // Click age verification if present
-            await win.webContents.executeJavaScript(`
+            const clicked = await win.webContents.executeJavaScript(`
               (function() {
                 var links = document.querySelectorAll('a');
                 for (var i = 0; i < links.length; i++) {
@@ -578,8 +582,19 @@ export function registerFilesHandlers(): void {
                 return 'none';
               })()
             `)
-            // Wait a bit for redirect
-            await new Promise(r => setTimeout(r, 2000))
+            // If age verification was clicked, wait for next page load
+            if (clicked === 'clicked') return
+
+            // Detect 404 page — skip retry and fail immediately
+            const is404 = await win.webContents.executeJavaScript(`document.title.indexOf('404') >= 0`)
+            if (is404) {
+              resolved = true
+              clearTimeout(timeout)
+              win.destroy()
+              resolve({ imgUrl: null, releaseDate: null, actorNames: [] })
+              return
+            }
+
             // Extract cover image, release date, actor names
             const result = await win.webContents.executeJavaScript(`
               (function() {
@@ -620,6 +635,15 @@ export function registerFilesHandlers(): void {
                 return { imgUrl: imgUrl, releaseDate: releaseDate, actorNames: actorNames };
               })()
             `)
+
+            // If no image found and haven't retried, retry once after 2s (DNS delay)
+            if (!result?.imgUrl && !retried) {
+              retried = true
+              setTimeout(() => { if (!resolved) win.loadURL(pageUrl) }, 2000)
+              return
+            }
+
+            resolved = true
             clearTimeout(timeout)
             win.destroy()
             let imgUrl = result?.imgUrl || null
@@ -629,9 +653,12 @@ export function registerFilesHandlers(): void {
             }
             resolve({ imgUrl, releaseDate: result?.releaseDate || null, actorNames: result?.actorNames || [] })
           } catch {
-            clearTimeout(timeout)
-            win.destroy()
-            resolve({ imgUrl: null, releaseDate: null, actorNames: [] })
+            if (!resolved) {
+              resolved = true
+              clearTimeout(timeout)
+              win.destroy()
+              resolve({ imgUrl: null, releaseDate: null, actorNames: [] })
+            }
           }
         })
 
@@ -641,7 +668,7 @@ export function registerFilesHandlers(): void {
       if (!scraped.imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다' }
 
       // Download image
-      const imgRes = await fetch(scraped.imgUrl, {
+      const imgRes = await net.fetch(scraped.imgUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': baseUrl + '/' }
       })
       if (!imgRes.ok) return { ok: false, error: `이미지 다운로드 실패 HTTP ${imgRes.status}` }
@@ -674,20 +701,29 @@ export function registerFilesHandlers(): void {
 
         if (targetActor && targetActor.birthday) {
           // Find existing actor folder from work_files
-          const actorFiles = db().prepare(`
+          const actorFileRows = db().prepare(`
             SELECT wf.file_path FROM work_files wf
             JOIN work_actors wa ON wa.work_id = wf.work_id
             WHERE wa.actor_id = ? AND wf.type = 'local'
-            ORDER BY wf.id DESC LIMIT 1
-          `).get(targetActor.id) as { file_path: string } | undefined
+            ORDER BY wf.id DESC
+          `).all(targetActor.id) as { file_path: string }[]
+
+          // Load actor aliases for folder name matching
+          const actorRow = db().prepare('SELECT aliases FROM actors WHERE id = ?').get(targetActor.id) as { aliases: string | null } | undefined
+          const actorNames = [targetActor.name]
+          if (actorRow?.aliases) actorNames.push(...actorRow.aliases.split(',').map(s => s.trim()).filter(Boolean))
 
           let actorFolderPath: string | null = null
-          if (actorFiles) {
-            // work_file path → parent (work folder) → parent (actor folder)
-            actorFolderPath = path.dirname(path.dirname(actorFiles.file_path))
-            // Verify folder name matches actor pattern
-            const folderName = path.basename(actorFolderPath)
-            if (!folderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)) actorFolderPath = null
+          for (const af of actorFileRows) {
+            const candidate = path.dirname(path.dirname(af.file_path))
+            const folderName = path.basename(candidate)
+            const fm = folderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
+            if (!fm) continue
+            // Verify folder name matches targetActor's name/aliases + birthday
+            if (fm[2] === targetActor.birthday && actorNames.includes(fm[1].trim())) {
+              actorFolderPath = candidate
+              break
+            }
           }
 
           if (actorFolderPath && fs.existsSync(actorFolderPath)) {

@@ -1,6 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { tempApi, dialogApi, shellApi, imageApi, searchUrlApi } from '../api'
 import SearchUrlModal from './SearchUrlModal'
+
+function copyText(text: string) {
+  const ta = document.createElement('textarea')
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+  document.body.appendChild(ta); ta.select(); document.execCommand('copy')
+  document.body.removeChild(ta)
+}
 
 function getProductNumber(baseName: string, allBaseNames?: string[]): string {
   const m = baseName.match(/^(.+?)_(\d+)$/)
@@ -21,7 +28,10 @@ interface TempFile {
   videoPath: string
   thumbPath: string | null
   fileSize: number
+  mtime: number
 }
+
+type SortBy = 'name' | 'thumb' | 'size' | 'date'
 
 function formatFileSize(bytes: number | undefined): string {
   if (!bytes || isNaN(bytes)) return '-'
@@ -62,7 +72,8 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [removeStr, setRemoveStr] = useState(() => localStorage.getItem('files:removeString') || '')
   const [viewMode, setViewMode] = useState<'icon' | 'list'>(() => (localStorage.getItem('files:viewMode') as 'icon' | 'list') || 'icon')
-  const [listSort, setListSort] = useState<{ col: 'name' | 'ext' | 'size'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' })
+  const [sortBy, setSortBy] = useState<SortBy>(() => (localStorage.getItem('files:sortBy') as SortBy) || 'name')
+  const [sortAsc, setSortAsc] = useState(() => localStorage.getItem('files:sortAsc') !== 'false')
   const [newName, setNewName] = useState('')
   const [thumbCache, setThumbCache] = useState<Map<string, string>>(new Map())
 
@@ -230,6 +241,41 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
     height: Math.abs(dragCurrent.y - dragStart.y),
   } : null
 
+  const toggleSort = (col: SortBy) => {
+    if (sortBy === col) {
+      const next = !sortAsc
+      setSortAsc(next); localStorage.setItem('files:sortAsc', String(next))
+    } else {
+      setSortBy(col); localStorage.setItem('files:sortBy', col)
+      setSortAsc(true); localStorage.setItem('files:sortAsc', 'true')
+    }
+  }
+  const sortArrow = (col: SortBy) => sortBy === col ? (sortAsc ? ' ↑' : ' ↓') : ''
+
+  const sortedFiles = useMemo(() => {
+    const m = sortAsc ? 1 : -1
+    return [...files].sort((a, b) => {
+      switch (sortBy) {
+        case 'thumb': {
+          const at = a.thumbPath ? 1 : 0, bt = b.thumbPath ? 1 : 0
+          return at !== bt ? m * (bt - at) : a.fileName.localeCompare(b.fileName)
+        }
+        case 'size': return m * (b.fileSize - a.fileSize) || a.fileName.localeCompare(b.fileName)
+        case 'date': return m * (b.mtime - a.mtime) || a.fileName.localeCompare(b.fileName)
+        default: return m * a.fileName.localeCompare(b.fileName)
+      }
+    })
+  }, [files, sortBy, sortAsc])
+
+  const origIndexMap = useMemo(() => new Map(files.map((f, i) => [f.fileName, i])), [files])
+
+  const formatDate = (ms: number) => {
+    if (!ms) return ''
+    const d = new Date(ms)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  }
+
   return (
     <div className="h-full flex flex-col" onClick={() => setContextMenu(null)}>
       {/* Header */}
@@ -250,21 +296,13 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
             const noThumb = files.filter(f => !f.thumbPath)
             if (noThumb.length === 0) { showToast('다운로드할 파일이 없습니다'); return }
             let count = 0
-            let placedCount = 0
             for (let i = 0; i < noThumb.length; i++) {
               showToast(`${i + 1}/${noThumb.length} 다운로드 중... (${noThumb[i].baseName})`, true)
-              const res = await tempApi.fetchCover(noThumb[i].baseName, folderPath, true)
-              if (res.ok) {
-                count++
-                if (res.autoPlaced) placedCount++
-              }
+              const res = await tempApi.fetchCover(noThumb[i].baseName, folderPath)
+              if (res.ok) count++
             }
-            const msg = placedCount > 0
-              ? `${count}/${noThumb.length}개 다운로드, ${placedCount}개 자동 배치`
-              : `${count}/${noThumb.length}개 커버 다운로드 완료`
-            showToast(msg)
+            showToast(`${count}/${noThumb.length}개 커버 다운로드 완료`)
             loadFiles()
-            if (placedCount > 0) onTreeRefresh?.()
           }}
           className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
         ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
@@ -287,14 +325,14 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
         ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
         {folderPath && <button onClick={loadFiles} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></button>}
         {folderPath && <button onClick={() => shellApi.openPath(folderPath)} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>}
-        <button onClick={handleSelectFolder} className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded">폴더 선택</button>
+        <button onClick={handleSelectFolder} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded" title="폴더 선택"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><circle cx="14.5" cy="14.5" r="3"/><path d="M18.5 18.5l-2-2"/></svg></button>
         {folderPath && <span className="text-gray-500 text-xs truncate min-w-0">{folderPath}</span>}
         <div className="flex items-center gap-1 ml-auto">
           <input
             value={removeStr}
             onChange={e => { setRemoveStr(e.target.value); localStorage.setItem('files:removeString', e.target.value) }}
             placeholder="제거할 문자열"
-            className="bg-gray-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-44"
+            className="bg-gray-700 text-white text-xs px-2 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-24"
           />
           <button
             onClick={async () => {
@@ -304,8 +342,22 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
               if (res.ok) { loadFiles() }
               else alert(res.error || '제거 실패')
             }}
-            className="text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded"
-          >제거</button>
+            className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded" title="문자열 제거"
+          ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <select
+            value={sortBy}
+            onChange={e => { const v = e.target.value as SortBy; setSortBy(v); localStorage.setItem('files:sortBy', v) }}
+            className="bg-gray-700 text-gray-300 text-xs px-1.5 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+          >
+            <option value="name">파일명</option>
+            <option value="thumb">썸네일</option>
+            <option value="size">크기</option>
+            <option value="date">등록일</option>
+          </select>
+          <button
+            onClick={() => { const next = !sortAsc; setSortAsc(next); localStorage.setItem('files:sortAsc', String(next)) }}
+            className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded text-xs font-bold w-7 text-center"
+          >{sortAsc ? '↑' : '↓'}</button>
         </div>
       </div>
 
@@ -329,12 +381,14 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
         >
           {viewMode === 'icon' ? (
             <div className="grid grid-cols-4 gap-2 p-1">
-              {files.map((file, index) => (
+              {sortedFiles.map((file) => {
+                const origIdx = origIndexMap.get(file.fileName) ?? 0
+                return (
                 <div
                   key={file.fileName}
                   ref={el => { if (el) itemRefs.current.set(file.fileName, el); else itemRefs.current.delete(file.fileName) }}
                   className={`flex flex-col items-center p-2 rounded cursor-pointer transition ${selected.has(file.fileName) ? 'bg-blue-600/30 ring-1 ring-blue-500' : 'hover:bg-gray-800'}`}
-                  onClick={e => { e.stopPropagation(); handleClick(index, e) }}
+                  onClick={e => { e.stopPropagation(); handleClick(origIdx, e) }}
                   onDoubleClick={() => handleDoubleClick(file)}
                   onContextMenu={e => handleContextMenu(e, file.fileName)}
                   draggable
@@ -347,11 +401,11 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                       <span className="text-3xl">📹</span>
                     )}
                     <button
-                      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
+                      onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
                       className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
                     ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                     {!file.thumbPath && <button
-                      onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok) { if (res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
+                      onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
                       className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
                     ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
                     {file.thumbPath && <button
@@ -365,33 +419,18 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                   </div>
                   <span className="text-xs text-gray-300 text-center truncate w-full" title={file.baseName}>{file.baseName}</span>
                 </div>
-              ))}
+              )})}
             </div>
-          ) : (() => {
-            const getExt = (f: TempFile) => f.fileName.includes('.') ? f.fileName.split('.').pop()!.toLowerCase() : ''
-            const sorted = [...files].sort((a, b) => {
-              const m = listSort.dir === 'asc' ? 1 : -1
-              switch (listSort.col) {
-                case 'ext': return m * getExt(a).localeCompare(getExt(b))
-                case 'size': return m * ((a.fileSize || 0) - (b.fileSize || 0))
-                default: return m * a.baseName.localeCompare(b.baseName)
-              }
-            })
-            const toggleSort = (col: 'name' | 'ext' | 'size') => {
-              setListSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
-            }
-            const arrow = (col: string) => listSort.col === col ? (listSort.dir === 'asc' ? ' ↑' : ' ↓') : ''
-            // Map sorted index back to original index for selection
-            const origIndexMap = new Map(files.map((f, i) => [f.fileName, i]))
-            return (
+          ) : (
               <div className="p-1">
                 <div className="flex items-center gap-2 px-2 py-1 border-b border-gray-700 text-xs text-gray-400">
-                  <span className="flex-1 min-w-0 cursor-pointer hover:text-white" onClick={() => toggleSort('name')}>파일명{arrow('name')}</span>
-                  <span className="w-14 text-center cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('ext')}>형식{arrow('ext')}</span>
-                  <span className="w-16 text-right cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('size')}>용량{arrow('size')}</span>
+                  <span className="w-6 text-center shrink-0 cursor-pointer hover:text-white" onClick={() => toggleSort('thumb')}>썸{sortArrow('thumb')}</span>
+                  <span className="flex-1 min-w-0 cursor-pointer hover:text-white" onClick={() => toggleSort('name')}>파일명{sortArrow('name')}</span>
+                  <span className="w-16 text-right cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('size')}>용량{sortArrow('size')}</span>
                   <span className="w-20 text-center shrink-0">기능</span>
+                  <span className="w-36 text-center cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('date')}>등록일{sortArrow('date')}</span>
                 </div>
-                {sorted.map(file => {
+                {sortedFiles.map(file => {
                   const origIdx = origIndexMap.get(file.fileName) ?? 0
                   return (
                     <div
@@ -404,21 +443,21 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                       draggable
                       onDragStart={e => handleDragStart(e, file)}
                     >
+                      <span className="w-6 text-center shrink-0">{file.thumbPath ? <span className="text-green-400 text-xs">●</span> : <span className="text-gray-600 text-xs">○</span>}</span>
                       <span className="text-sm text-gray-300 truncate flex-1 min-w-0" title={file.baseName}>{file.baseName}</span>
-                      <span className="text-xs text-gray-500 w-14 text-center shrink-0">{getExt(file)}</span>
                       <span className="text-xs text-gray-500 w-16 text-right shrink-0">{formatFileSize(file.fileSize)}</span>
                       <span className="w-20 flex items-center justify-center gap-1.5 shrink-0">
-                        <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-                        <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok) { if (res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } } else { showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                        {file.thumbPath && <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast('배치 대상이 없습니다') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
+                        <button onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                         {searchUrl && <button onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + getProductNumber(file.baseName, files.map(f => f.baseName))) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
+                        <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                        <button onClick={async e => { e.stopPropagation(); if (!file.thumbPath) return; showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { showToast('배치 대상이 없습니다') } }} className={file.thumbPath ? 'text-white hover:text-blue-400' : 'text-gray-600 cursor-default'}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
                       </span>
+                      <span className="text-xs text-gray-500 w-36 text-center shrink-0">{formatDate(file.mtime)}</span>
                     </div>
                   )
                 })}
               </div>
-            )
-          })()}
+          )}
           {/* Drag selection rectangle */}
           {dragRect && (
             <div
@@ -439,7 +478,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
           <button
             onClick={() => {
               const names = files.filter(f => selected.has(f.fileName)).map(f => f.baseName).join('\n')
-              navigator.clipboard.writeText(names)
+              copyText(names)
               setContextMenu(null)
             }}
             className="w-full text-left text-sm text-gray-300 hover:bg-gray-700 px-4 py-1.5"
