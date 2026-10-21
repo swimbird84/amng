@@ -336,11 +336,28 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
           />
           <button
             onClick={async () => {
-              if (!removeStr.trim() || !folderPath) return
-              if (!confirm(`모든 파일명에서 "${removeStr}"를 제거하시겠습니까?`)) return
-              const res = await tempApi.removeString(folderPath, removeStr.trim())
-              if (res.ok) { loadFiles() }
-              else alert(res.error || '제거 실패')
+              if (!folderPath) return
+              if (removeStr.trim()) {
+                if (!confirm(`모든 파일명에서 "${removeStr}"를 제거하시겠습니까?`)) return
+                const res = await tempApi.removeString(folderPath, removeStr.trim())
+                if (res.ok) { loadFiles() }
+                else alert(res.error || '제거 실패')
+              } else {
+                const atFiles = files.filter(f => f.fileName.includes('@'))
+                if (atFiles.length === 0) { showToast('@가 포함된 파일이 없습니다'); return }
+                if (!confirm(`${atFiles.length}개 파일에서 @ 앞 문자열을 제거하시겠습니까?`)) return
+                let count = 0
+                for (const f of atFiles) {
+                  const idx = f.fileName.indexOf('@')
+                  const newName = f.fileName.substring(idx + 1)
+                  if (newName) {
+                    const res = await tempApi.renameFile(folderPath, f.fileName, newName)
+                    if (res.ok) count++
+                  }
+                }
+                showToast(`${count}/${atFiles.length}개 파일 @ 제거 완료`)
+                loadFiles()
+              }
             }}
             className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded" title="문자열 제거"
           ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>

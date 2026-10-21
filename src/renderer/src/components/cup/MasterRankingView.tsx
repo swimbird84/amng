@@ -329,8 +329,7 @@ export default function MasterRankingView({
             <button onClick={() => { setChartSeasonId(selectedSeasonId); setRankChartModal(true) }} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">랭킹차트</button>
             <button onClick={() => setShowTournamentStats(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">대회통계</button>
             <button onClick={() => setShowSettings(true)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700 hover:opacity-80">⚙ 설정</button>
-            <button onClick={() => setShowResetConfirm('actor')} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">배우 시즌종료</button>
-            <button onClick={() => setShowResetConfirm('work')} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">작품 시즌종료</button>
+            <button onClick={() => setShowResetConfirm(type)} className="px-2.5 py-1 rounded text-xs font-medium transition bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-700 hover:opacity-80">시즌종료</button>
           </>) : (<>
             {/* 티어 레벨 필터 */}
             <button
