@@ -780,7 +780,12 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
           </div>
 
           <div>
-            <label className="text-sm text-gray-400 block mb-1">코멘트</label>
+            <div className="flex items-center gap-2 mb-1">
+              <label className="text-sm text-gray-400">코멘트</label>
+              <button onClick={() => { const ids = allTags.filter(t => workComment.includes(t.name)).map(t => t.id); if (ids.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...ids])]) }} className="text-gray-400 hover:text-white" title="태그 자동 매칭">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              </button>
+            </div>
             <textarea
               value={workComment}
               onChange={(e) => setWorkComment(e.target.value)}
@@ -803,6 +808,9 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <label className="text-sm text-gray-400">타이틀</label>
+              <button onClick={() => { const ids = allTags.filter(t => comment.includes(t.name)).map(t => t.id); if (ids.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...ids])]) }} className="text-gray-400 hover:text-white" title="태그 자동 매칭">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              </button>
               {activeSearchUrl && productNumber && (
                 <button onClick={() => shellApi.openExternal(activeSearchUrl + productNumber)} className="text-gray-400 hover:text-white">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
