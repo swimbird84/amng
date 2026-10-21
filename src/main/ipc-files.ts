@@ -553,7 +553,7 @@ export function registerFilesHandlers(): void {
       const baseUrl = 'https://www.javbus.com'
       const pageUrl = baseUrl + '/' + productNumber
 
-      const scraped: { imgUrl: string | null; releaseDate: string | null; actorNames: string[] } = await new Promise((resolve) => {
+      const scraped: { imgUrl: string | null; releaseDate: string | null; actorNames: string[]; debug?: string } = await new Promise((resolve) => {
         const win = new BrowserWindow({
           show: false,
           width: 800,
@@ -561,13 +561,33 @@ export function registerFilesHandlers(): void {
           webPreferences: { nodeIntegration: false, contextIsolation: true },
         })
 
-        const timeout = setTimeout(() => { win.destroy(); resolve({ imgUrl: null, releaseDate: null, actorNames: [] }) }, 15000)
+        const debugLog: string[] = []
+        const timeout = setTimeout(() => { debugLog.push('TIMEOUT 15s'); win.destroy(); resolve({ imgUrl: null, releaseDate: null, actorNames: [], debug: debugLog.join(' | ') }) }, 15000)
 
         let resolved = false
         let retried = false
         win.webContents.on('did-finish-load', async () => {
           if (resolved) return
           try {
+            // Collect page diagnostics
+            const diag = await win.webContents.executeJavaScript(`
+              (function() {
+                var title = document.title;
+                var url = location.href;
+                var hasBigImage = !!document.querySelector('a.bigImage');
+                var hasScreencap = !!document.querySelector('.screencap img');
+                var linkTexts = [];
+                var links = document.querySelectorAll('a');
+                for (var i = 0; i < Math.min(links.length, 20); i++) {
+                  var t = (links[i].textContent || '').trim().substring(0, 40);
+                  if (t) linkTexts.push(t);
+                }
+                var bodySnippet = (document.body?.innerText || '').substring(0, 300);
+                return { title: title, url: url, hasBigImage: hasBigImage, hasScreencap: hasScreencap, linkTexts: linkTexts, bodySnippet: bodySnippet };
+              })()
+            `)
+            debugLog.push('title=' + diag.title, 'url=' + diag.url, 'bigImage=' + diag.hasBigImage, 'screencap=' + diag.hasScreencap, 'links=[' + diag.linkTexts.join(', ') + ']', 'body=' + diag.bodySnippet.substring(0, 200))
+
             // Click age verification if present
             const clicked = await win.webContents.executeJavaScript(`
               (function() {
@@ -582,16 +602,18 @@ export function registerFilesHandlers(): void {
                 return 'none';
               })()
             `)
+            debugLog.push('ageClick=' + clicked)
             // If age verification was clicked, wait for next page load
             if (clicked === 'clicked') return
 
             // Detect 404 page — skip retry and fail immediately
             const is404 = await win.webContents.executeJavaScript(`document.title.indexOf('404') >= 0`)
             if (is404) {
+              debugLog.push('404detected')
               resolved = true
               clearTimeout(timeout)
               win.destroy()
-              resolve({ imgUrl: null, releaseDate: null, actorNames: [] })
+              resolve({ imgUrl: null, releaseDate: null, actorNames: [], debug: debugLog.join(' | ') })
               return
             }
 
@@ -635,6 +657,7 @@ export function registerFilesHandlers(): void {
                 return { imgUrl: imgUrl, releaseDate: releaseDate, actorNames: actorNames };
               })()
             `)
+            debugLog.push('extractedImg=' + (result?.imgUrl || 'null'), 'retry=' + retried)
 
             // If no image found and haven't retried, retry once after 2s (DNS delay)
             if (!result?.imgUrl && !retried) {
@@ -651,13 +674,14 @@ export function registerFilesHandlers(): void {
               if (imgUrl.startsWith('/')) imgUrl = baseUrl + imgUrl
               else if (!imgUrl.startsWith('http')) imgUrl = baseUrl + '/' + imgUrl
             }
-            resolve({ imgUrl, releaseDate: result?.releaseDate || null, actorNames: result?.actorNames || [] })
-          } catch {
+            resolve({ imgUrl, releaseDate: result?.releaseDate || null, actorNames: result?.actorNames || [], debug: debugLog.join(' | ') })
+          } catch (err) {
+            debugLog.push('ERROR=' + String(err))
             if (!resolved) {
               resolved = true
               clearTimeout(timeout)
               win.destroy()
-              resolve({ imgUrl: null, releaseDate: null, actorNames: [] })
+              resolve({ imgUrl: null, releaseDate: null, actorNames: [], debug: debugLog.join(' | ') })
             }
           }
         })
@@ -665,7 +689,7 @@ export function registerFilesHandlers(): void {
         win.loadURL(pageUrl)
       })
 
-      if (!scraped.imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다' }
+      if (!scraped.imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다 [DEBUG] ' + (scraped.debug || 'no-debug') }
 
       // Download image
       const imgRes = await net.fetch(scraped.imgUrl, {

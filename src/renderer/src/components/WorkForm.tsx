@@ -784,6 +784,12 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
             <textarea
               value={workComment}
               onChange={(e) => setWorkComment(e.target.value)}
+              onPaste={(e) => {
+                const text = e.clipboardData.getData('text')
+                if (!text) return
+                const matchedIds = allTags.filter(t => text.includes(t.name)).map(t => t.id)
+                if (matchedIds.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...matchedIds])])
+              }}
               rows={3}
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full resize-none"
             />
@@ -809,6 +815,12 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
+              onPaste={(e) => {
+                const text = e.clipboardData.getData('text')
+                if (!text) return
+                const matchedIds = allTags.filter(t => text.includes(t.name)).map(t => t.id)
+                if (matchedIds.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...matchedIds])])
+              }}
               rows={4}
               className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-full resize-none"
             />
