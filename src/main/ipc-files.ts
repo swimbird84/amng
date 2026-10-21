@@ -1,4 +1,4 @@
-import { ipcMain, shell, BrowserWindow, net } from 'electron'
+import { ipcMain, shell, BrowserWindow, net, session } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import { getDatabase } from './db'
@@ -533,6 +533,182 @@ export function registerFilesHandlers(): void {
     return { ok: true, moved, actorId }
   })
 
+  // Persistent session for DNS cache + cookie persistence
+  const scrapeSession = session.fromPartition('persist:scraper')
+
+  // Cache scraped data to avoid re-scraping on auto-place
+  const scrapeCache = new Map<string, { releaseDate: string | null; actorNames: string[] }>()
+
+  // Parse HTML to extract cover image, release date, actor names
+  function parsePageHtml(html: string, baseUrl: string): { imgUrl: string | null; releaseDate: string | null; actorNames: string[] } {
+    let imgUrl: string | null = null
+    // a.bigImage href
+    const bigImgMatch = html.match(/<a\s+class="bigImage"[^>]*href="([^"]+)"/)
+    if (bigImgMatch) imgUrl = bigImgMatch[1]
+    else {
+      // .screencap img src
+      const screencapMatch = html.match(/<div[^>]*class="[^"]*screencap[^"]*"[^>]*>.*?<img[^>]*src="([^"]+)"/s)
+      if (screencapMatch) imgUrl = screencapMatch[1]
+    }
+    if (imgUrl) {
+      if (imgUrl.startsWith('/')) imgUrl = baseUrl + imgUrl
+      else if (!imgUrl.startsWith('http')) imgUrl = baseUrl + '/' + imgUrl
+    }
+
+    // Release date
+    let releaseDate: string | null = null
+    const dateMatch = html.match(/發行日期[^<]*<\/span>\s*([\d-]+)/)
+    if (dateMatch) releaseDate = dateMatch[1]
+
+    // Actor names - find links with /star/ in href after star-show
+    const actorNames: string[] = []
+    const starSection = html.match(/class="star-show"[\s\S]*?<\/ul>\s*<p>([\s\S]*?)<\/p>/)
+    if (starSection) {
+      const linkRe = /href="[^"]*\/star\/[^"]*"[^>]*>([^<]+)<\/a>/g
+      let m: RegExpExecArray | null
+      while ((m = linkRe.exec(starSection[1])) !== null) {
+        const name = m[1].trim()
+        if (name) actorNames.push(name)
+      }
+    }
+
+    return { imgUrl, releaseDate, actorNames }
+  }
+
+  // Scrape page: 1st net.fetch, 2nd BrowserWindow fallback
+  async function scrapePage(pageUrl: string, baseUrl: string): Promise<{ imgUrl: string | null; releaseDate: string | null; actorNames: string[]; debug: string }> {
+    const debugLog: string[] = []
+
+    // 1st: net.fetch with persistent session
+    try {
+      const fetchOpts = {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Cookie': 'age=verified' },
+        session: scrapeSession,
+      }
+      const res = await net.fetch(pageUrl, fetchOpts)
+      if (res.ok) {
+        const html = await res.text()
+        debugLog.push('fetch=ok')
+        // Check if age verification page
+        if (html.includes('進入') || html.includes('I am 18') || html.includes('18歲')) {
+          debugLog.push('ageVerification=detected')
+          // Set cookie and retry
+          await scrapeSession.cookies.set({ url: baseUrl, name: 'age', value: 'verified', domain: new URL(baseUrl).hostname })
+          const res2 = await net.fetch(pageUrl, fetchOpts)
+          if (res2.ok) {
+            const html2 = await res2.text()
+            const parsed = parsePageHtml(html2, baseUrl)
+            if (parsed.imgUrl) {
+              debugLog.push('retryAfterAge=ok')
+              return { ...parsed, debug: debugLog.join(' | ') }
+            }
+          }
+        } else if (!html.includes('404')) {
+          const parsed = parsePageHtml(html, baseUrl)
+          if (parsed.imgUrl) {
+            debugLog.push('parsed=ok')
+            return { ...parsed, debug: debugLog.join(' | ') }
+          }
+          debugLog.push('parsed=noImg')
+        } else {
+          debugLog.push('fetch=404')
+          return { imgUrl: null, releaseDate: null, actorNames: [], debug: debugLog.join(' | ') }
+        }
+      } else {
+        debugLog.push('fetch=HTTP' + res.status)
+      }
+    } catch (err) {
+      debugLog.push('fetch=ERR:' + String(err).substring(0, 100))
+    }
+
+    // 2nd: BrowserWindow fallback with persistent session
+    debugLog.push('fallback=BrowserWindow')
+    const result = await new Promise<{ imgUrl: string | null; releaseDate: string | null; actorNames: string[] }>((resolve) => {
+      const win = new BrowserWindow({
+        show: false, width: 800, height: 600,
+        webPreferences: { nodeIntegration: false, contextIsolation: true, session: scrapeSession },
+      })
+
+      const timeout = setTimeout(() => { debugLog.push('TIMEOUT 15s'); win.destroy(); resolve({ imgUrl: null, releaseDate: null, actorNames: [] }) }, 15000)
+
+      let resolved = false
+      let retried = false
+      win.webContents.on('did-finish-load', async () => {
+        if (resolved) return
+        try {
+          const clicked = await win.webContents.executeJavaScript(`
+            (function() {
+              var links = document.querySelectorAll('a');
+              for (var i = 0; i < links.length; i++) {
+                if ((links[i].textContent || '').match(/進入|Enter|I am 18|18歲/i)) { links[i].click(); return 'clicked'; }
+              }
+              return 'none';
+            })()
+          `)
+          if (clicked === 'clicked') return
+
+          const is404 = await win.webContents.executeJavaScript(`document.title.indexOf('404') >= 0`)
+          if (is404) { resolved = true; clearTimeout(timeout); win.destroy(); resolve({ imgUrl: null, releaseDate: null, actorNames: [] }); return }
+
+          const r = await win.webContents.executeJavaScript(`
+            (function() {
+              var imgUrl = null;
+              var el = document.querySelector('a.bigImage');
+              if (el) imgUrl = el.getAttribute('href');
+              else { var img = document.querySelector('.screencap img'); if (img) imgUrl = img.getAttribute('src'); }
+              var releaseDate = null;
+              var spans = document.querySelectorAll('.info p');
+              for (var i = 0; i < spans.length; i++) {
+                var header = spans[i].querySelector('.header');
+                if (header && header.textContent.indexOf('發行日期') >= 0) {
+                  var text = spans[i].textContent.replace(header.textContent, '').trim();
+                  var m = text.match(/\\d{4}-\\d{2}-\\d{2}/);
+                  if (m) releaseDate = m[0];
+                  break;
+                }
+              }
+              var actorNames = [];
+              var starShow = document.querySelector('.star-show');
+              if (starShow) {
+                var next = starShow.nextElementSibling;
+                while (next) {
+                  if (next.tagName === 'P' && next.querySelector('.genre a[href*="/star/"]')) {
+                    var links = next.querySelectorAll('.genre a[href*="/star/"]');
+                    for (var j = 0; j < links.length; j++) { var name = links[j].textContent.trim(); if (name) actorNames.push(name); }
+                    break;
+                  }
+                  next = next.nextElementSibling;
+                }
+              }
+              return { imgUrl: imgUrl, releaseDate: releaseDate, actorNames: actorNames };
+            })()
+          `)
+
+          if (!r?.imgUrl && !retried) { retried = true; setTimeout(() => { if (!resolved) win.loadURL(pageUrl) }, 2000); return }
+
+          resolved = true; clearTimeout(timeout); win.destroy()
+          let imgUrl = r?.imgUrl || null
+          if (imgUrl) {
+            if (imgUrl.startsWith('/')) imgUrl = baseUrl + imgUrl
+            else if (!imgUrl.startsWith('http')) imgUrl = baseUrl + '/' + imgUrl
+          }
+          resolve({ imgUrl, releaseDate: r?.releaseDate || null, actorNames: r?.actorNames || [] })
+        } catch {
+          if (!resolved) { resolved = true; clearTimeout(timeout); win.destroy(); resolve({ imgUrl: null, releaseDate: null, actorNames: [] }) }
+        }
+      })
+
+      win.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
+        debugLog.push(`FAIL-LOAD code=${errorCode} desc=${errorDescription} url=${validatedURL}`)
+      })
+
+      win.loadURL(pageUrl)
+    })
+
+    debugLog.push('bw_img=' + (result.imgUrl || 'null'))
+    return { ...result, debug: debugLog.join(' | ') }
+  }
+
   ipcMain.handle('temp:fetchCover', async (_e, rawProductNumber: string, saveFolder: string, autoPlace?: boolean) => {
     try {
       // Only strip _N suffix if consecutive numbered files exist in folder
@@ -553,168 +729,43 @@ export function registerFilesHandlers(): void {
       const baseUrl = 'https://www.javbus.com'
       const pageUrl = baseUrl + '/' + productNumber
 
-      const scraped: { imgUrl: string | null; releaseDate: string | null; actorNames: string[]; debug?: string } = await new Promise((resolve) => {
-        const win = new BrowserWindow({
-          show: false,
-          width: 800,
-          height: 600,
-          webPreferences: { nodeIntegration: false, contextIsolation: true },
-        })
+      // Auto-place mode: use cache first, skip scraping if possible
+      if (autoPlace) {
+        const cached = scrapeCache.get(productNumber.toUpperCase())
+        const placeDebug: string[] = []
 
-        const debugLog: string[] = []
-        const timeout = setTimeout(() => { debugLog.push('TIMEOUT 15s'); win.destroy(); resolve({ imgUrl: null, releaseDate: null, actorNames: [], debug: debugLog.join(' | ') }) }, 15000)
-
-        let resolved = false
-        let retried = false
-        win.webContents.on('did-finish-load', async () => {
-          if (resolved) return
-          try {
-            // Collect page diagnostics
-            const diag = await win.webContents.executeJavaScript(`
-              (function() {
-                var title = document.title;
-                var url = location.href;
-                var hasBigImage = !!document.querySelector('a.bigImage');
-                var hasScreencap = !!document.querySelector('.screencap img');
-                var linkTexts = [];
-                var links = document.querySelectorAll('a');
-                for (var i = 0; i < Math.min(links.length, 20); i++) {
-                  var t = (links[i].textContent || '').trim().substring(0, 40);
-                  if (t) linkTexts.push(t);
-                }
-                var bodySnippet = (document.body?.innerText || '').substring(0, 300);
-                return { title: title, url: url, hasBigImage: hasBigImage, hasScreencap: hasScreencap, linkTexts: linkTexts, bodySnippet: bodySnippet };
-              })()
-            `)
-            debugLog.push('title=' + diag.title, 'url=' + diag.url, 'bigImage=' + diag.hasBigImage, 'screencap=' + diag.hasScreencap, 'links=[' + diag.linkTexts.join(', ') + ']', 'body=' + diag.bodySnippet.substring(0, 200))
-
-            // Click age verification if present
-            const clicked = await win.webContents.executeJavaScript(`
-              (function() {
-                var links = document.querySelectorAll('a');
-                for (var i = 0; i < links.length; i++) {
-                  var text = links[i].textContent || '';
-                  if (text.match(/進入|Enter|I am 18|18歲/i)) {
-                    links[i].click();
-                    return 'clicked';
-                  }
-                }
-                return 'none';
-              })()
-            `)
-            debugLog.push('ageClick=' + clicked)
-            // If age verification was clicked, wait for next page load
-            if (clicked === 'clicked') return
-
-            // Detect 404 page — skip retry and fail immediately
-            const is404 = await win.webContents.executeJavaScript(`document.title.indexOf('404') >= 0`)
-            if (is404) {
-              debugLog.push('404detected')
-              resolved = true
-              clearTimeout(timeout)
-              win.destroy()
-              resolve({ imgUrl: null, releaseDate: null, actorNames: [], debug: debugLog.join(' | ') })
-              return
-            }
-
-            // Extract cover image, release date, actor names
-            const result = await win.webContents.executeJavaScript(`
-              (function() {
-                var imgUrl = null;
-                var el = document.querySelector('a.bigImage');
-                if (el) imgUrl = el.getAttribute('href');
-                else { var img = document.querySelector('.screencap img'); if (img) imgUrl = img.getAttribute('src'); }
-
-                var releaseDate = null;
-                var spans = document.querySelectorAll('.info p');
-                for (var i = 0; i < spans.length; i++) {
-                  var header = spans[i].querySelector('.header');
-                  if (header && header.textContent.indexOf('發行日期') >= 0) {
-                    var text = spans[i].textContent.replace(header.textContent, '').trim();
-                    var m = text.match(/\\d{4}-\\d{2}-\\d{2}/);
-                    if (m) releaseDate = m[0];
-                    break;
-                  }
-                }
-
-                var actorNames = [];
-                var starShow = document.querySelector('.star-show');
-                if (starShow) {
-                  var next = starShow.nextElementSibling;
-                  while (next) {
-                    if (next.tagName === 'P' && next.querySelector('.genre a[href*="/star/"]')) {
-                      var links = next.querySelectorAll('.genre a[href*="/star/"]');
-                      for (var j = 0; j < links.length; j++) {
-                        var name = links[j].textContent.trim();
-                        if (name) actorNames.push(name);
-                      }
-                      break;
-                    }
-                    next = next.nextElementSibling;
-                  }
-                }
-
-                return { imgUrl: imgUrl, releaseDate: releaseDate, actorNames: actorNames };
-              })()
-            `)
-            debugLog.push('extractedImg=' + (result?.imgUrl || 'null'), 'retry=' + retried)
-
-            // If no image found and haven't retried, retry once after 2s (DNS delay)
-            if (!result?.imgUrl && !retried) {
-              retried = true
-              setTimeout(() => { if (!resolved) win.loadURL(pageUrl) }, 2000)
-              return
-            }
-
-            resolved = true
-            clearTimeout(timeout)
-            win.destroy()
-            let imgUrl = result?.imgUrl || null
-            if (imgUrl) {
-              if (imgUrl.startsWith('/')) imgUrl = baseUrl + imgUrl
-              else if (!imgUrl.startsWith('http')) imgUrl = baseUrl + '/' + imgUrl
-            }
-            resolve({ imgUrl, releaseDate: result?.releaseDate || null, actorNames: result?.actorNames || [], debug: debugLog.join(' | ') })
-          } catch (err) {
-            debugLog.push('ERROR=' + String(err))
-            if (!resolved) {
-              resolved = true
-              clearTimeout(timeout)
-              win.destroy()
-              resolve({ imgUrl: null, releaseDate: null, actorNames: [], debug: debugLog.join(' | ') })
-            }
+        let placeData: { releaseDate: string | null; actorNames: string[] }
+        if (cached) {
+          placeData = cached
+          placeDebug.push('source=cache')
+        } else {
+          // No cache — scrape
+          const scraped = await scrapePage(pageUrl, baseUrl)
+          placeData = { releaseDate: scraped.releaseDate, actorNames: scraped.actorNames }
+          placeDebug.push('source=scrape', 'scrapeDebug=' + scraped.debug)
+          if (placeData.releaseDate || placeData.actorNames.length > 0) {
+            scrapeCache.set(productNumber.toUpperCase(), placeData)
           }
-        })
+        }
 
-        win.loadURL(pageUrl)
-      })
+        placeDebug.push('releaseDate=' + (placeData.releaseDate || 'null'))
+        placeDebug.push('actorNames=[' + placeData.actorNames.join(',') + ']')
 
-      if (!scraped.imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다 [DEBUG] ' + (scraped.debug || 'no-debug') }
+        if (!placeData.releaseDate || placeData.actorNames.length === 0) {
+          return { ok: true, savePath: '', autoPlaced: false, debug: '배치 스킵: ' + placeDebug.join(' | ') }
+        }
 
-      // Download image
-      const imgRes = await net.fetch(scraped.imgUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': baseUrl + '/' }
-      })
-      if (!imgRes.ok) return { ok: false, error: `이미지 다운로드 실패 HTTP ${imgRes.status}` }
-      const buffer = Buffer.from(await imgRes.arrayBuffer())
-      const ext = path.extname(scraped.imgUrl).split('?')[0] || '.jpg'
-      const savePath = path.join(saveFolder, productNumber + ext)
-      await fs.promises.writeFile(savePath, buffer)
-
-      // Auto-place logic
-      if (autoPlace && scraped.releaseDate && scraped.actorNames.length >= 1) {
-        // Find actors with matching real_name from all scraped names
         const allActors = db().prepare('SELECT id, name, birthday, real_name FROM actors WHERE is_deleted = 0 AND real_name IS NOT NULL').all() as { id: number; name: string; birthday: string | null; real_name: string }[]
         const matched = allActors.filter(a => {
           const realNames = a.real_name.split(',').map(s => s.trim())
-          return scraped.actorNames.some(sn => realNames.includes(sn))
+          return placeData.actorNames.some(sn => realNames.includes(sn))
         })
+        placeDebug.push('matched=' + matched.length + '(' + matched.map(a => a.name).join(',') + ')')
 
         let targetActor: { id: number; name: string; birthday: string | null } | null = null
         if (matched.length === 1) {
           targetActor = matched[0]
         } else if (matched.length > 1) {
-          // Pick actor with most works
           const withCounts = matched.map(a => {
             const row = db().prepare('SELECT COUNT(*) AS cnt FROM work_actors WHERE actor_id = ?').get(a.id) as { cnt: number }
             return { ...a, workCount: row.cnt }
@@ -723,55 +774,86 @@ export function registerFilesHandlers(): void {
           targetActor = withCounts[0]
         }
 
-        if (targetActor && targetActor.birthday) {
-          // Find existing actor folder from work_files
-          const actorFileRows = db().prepare(`
-            SELECT wf.file_path FROM work_files wf
-            JOIN work_actors wa ON wa.work_id = wf.work_id
-            WHERE wa.actor_id = ? AND wf.type = 'local'
-            ORDER BY wf.id DESC
-          `).all(targetActor.id) as { file_path: string }[]
+        if (!targetActor) {
+          return { ok: true, savePath: '', autoPlaced: false, debug: '매칭 배우 없음: ' + placeDebug.join(' | ') }
+        }
+        placeDebug.push('target=' + targetActor.name + '(id=' + targetActor.id + ')')
 
-          // Load actor aliases for folder name matching
-          const actorRow = db().prepare('SELECT aliases FROM actors WHERE id = ?').get(targetActor.id) as { aliases: string | null } | undefined
-          const actorNames = [targetActor.name]
-          if (actorRow?.aliases) actorNames.push(...actorRow.aliases.split(',').map(s => s.trim()).filter(Boolean))
+        if (!targetActor.birthday) {
+          return { ok: true, savePath: '', autoPlaced: false, debug: '생일 없음: ' + placeDebug.join(' | ') }
+        }
 
-          let actorFolderPath: string | null = null
-          for (const af of actorFileRows) {
-            const candidate = path.dirname(path.dirname(af.file_path))
-            const folderName = path.basename(candidate)
-            const fm = folderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
-            if (!fm) continue
-            // Verify folder name matches targetActor's name/aliases + birthday
-            if (fm[2] === targetActor.birthday && actorNames.includes(fm[1].trim())) {
-              actorFolderPath = candidate
-              break
-            }
-          }
+        const actorFileRows = db().prepare(`
+          SELECT wf.file_path FROM work_files wf
+          JOIN work_actors wa ON wa.work_id = wf.work_id
+          WHERE wa.actor_id = ? AND wf.type = 'local'
+          ORDER BY wf.id DESC
+        `).all(targetActor.id) as { file_path: string }[]
+        placeDebug.push('fileRows=' + actorFileRows.length)
 
-          if (actorFolderPath && fs.existsSync(actorFolderPath)) {
-            // Find video files matching this product number in saveFolder
-            const entries = await fs.promises.readdir(saveFolder)
-            const videoExts = new Set(['.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.ts', '.m2ts', '.rmvb', '.strm'])
-            const videoFiles = entries.filter(e => {
-              const eExt = path.extname(e).toLowerCase()
-              if (!videoExts.has(eExt)) return false
-              const eBase = path.basename(e, path.extname(e))
-              const ePn = getProductNumber(eBase)
-              return ePn.toLowerCase() === productNumber.toLowerCase()
-            })
+        const actorRow = db().prepare('SELECT aliases FROM actors WHERE id = ?').get(targetActor.id) as { aliases: string | null } | undefined
+        const actorNames = [targetActor.name]
+        if (actorRow?.aliases) actorNames.push(...actorRow.aliases.split(',').map(s => s.trim()).filter(Boolean))
 
-            if (videoFiles.length > 0) {
-              const allMatchedIds = matched.map(a => a.id)
-              const moved = await moveFilesToActorFolder(saveFolder, videoFiles, actorFolderPath, scraped.releaseDate, targetActor.id, allMatchedIds)
-              return { ok: true, savePath, autoPlaced: true, actorName: targetActor.name, movedCount: moved.length }
-            }
+        let actorFolderPath: string | null = null
+        for (const af of actorFileRows) {
+          const candidate = path.dirname(path.dirname(af.file_path))
+          const folderName = path.basename(candidate)
+          const fm = folderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
+          if (!fm) continue
+          if (fm[2] === targetActor.birthday && actorNames.includes(fm[1].trim())) {
+            actorFolderPath = candidate
+            break
           }
         }
+        placeDebug.push('folderPath=' + (actorFolderPath || 'null'))
+
+        if (!actorFolderPath || !fs.existsSync(actorFolderPath)) {
+          return { ok: true, savePath: '', autoPlaced: false, debug: '폴더 없음: ' + placeDebug.join(' | ') }
+        }
+
+        const entries = await fs.promises.readdir(saveFolder)
+        const videoExts = new Set(['.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.ts', '.m2ts', '.rmvb', '.strm'])
+        const videoFiles = entries.filter(e => {
+          const eExt = path.extname(e).toLowerCase()
+          if (!videoExts.has(eExt)) return false
+          const eBase = path.basename(e, path.extname(e))
+          const ePn = getProductNumber(eBase)
+          return ePn.toLowerCase() === productNumber.toLowerCase()
+        })
+        placeDebug.push('videoFiles=' + videoFiles.length + '(' + videoFiles.join(',') + ')')
+
+        if (videoFiles.length === 0) {
+          return { ok: true, savePath: '', autoPlaced: false, debug: '비디오 없음: ' + placeDebug.join(' | ') }
+        }
+
+        const allMatchedIds = matched.map(a => a.id)
+        const moved = await moveFilesToActorFolder(saveFolder, videoFiles, actorFolderPath, placeData.releaseDate, targetActor.id, allMatchedIds)
+        return { ok: true, savePath: '', autoPlaced: true, actorName: targetActor.name, movedCount: moved.length }
       }
 
-      return { ok: true, savePath, autoPlaced: false }
+      // Cover download mode
+      const scraped = await scrapePage(pageUrl, baseUrl)
+
+      if (!scraped.imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다 [DEBUG] ' + (scraped.debug || 'no-debug') }
+
+      // Download image
+      const imgRes = await net.fetch(scraped.imgUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': baseUrl + '/' },
+        session: scrapeSession,
+      })
+      if (!imgRes.ok) return { ok: false, error: `이미지 다운로드 실패 HTTP ${imgRes.status}` }
+      const buffer = Buffer.from(await imgRes.arrayBuffer())
+      const ext = path.extname(scraped.imgUrl).split('?')[0] || '.jpg'
+      const savePath = path.join(saveFolder, productNumber + ext)
+      await fs.promises.writeFile(savePath, buffer)
+
+      // Cache scraped data for later auto-place
+      if (scraped.releaseDate || scraped.actorNames.length > 0) {
+        scrapeCache.set(productNumber.toUpperCase(), { releaseDate: scraped.releaseDate, actorNames: scraped.actorNames })
+      }
+
+      return { ok: true, savePath }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
       return { ok: false, error: errMsg }
