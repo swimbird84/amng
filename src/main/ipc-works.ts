@@ -477,6 +477,16 @@ export function registerWorksHandlers(): void {
     return { ok: true, newCoverPath }
   })
 
+  ipcMain.handle('work-files:replaceUrl', (_e, oldStr: string, newStr: string) => {
+    const count = (db().prepare("SELECT COUNT(*) AS cnt FROM work_files WHERE type = 'url' AND file_path LIKE ?").get(`%${oldStr}%`) as { cnt: number }).cnt
+    return { count }
+  })
+
+  ipcMain.handle('work-files:replaceUrlExec', (_e, oldStr: string, newStr: string) => {
+    const result = db().prepare("UPDATE work_files SET file_path = REPLACE(file_path, ?, ?) WHERE type = 'url' AND file_path LIKE ?").run(oldStr, newStr, `%${oldStr}%`)
+    return { updated: result.changes }
+  })
+
   ipcMain.handle('work-files:listByWorkIds', (_e, workIds: number[]) => {
     if (workIds.length === 0) return []
     const ph = workIds.map(() => '?').join(',')

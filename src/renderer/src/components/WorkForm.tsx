@@ -243,11 +243,23 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   }, [])
 
   async function handleSave() {
-    if (fileEntries.length === 0) return alert('파일 경로 또는 URL을 추가하세요')
+    // Auto-add urlInput if present
+    const pendingUrl = urlInput.trim()
+    let entries = fileEntries
+    if (pendingUrl) {
+      if (!pendingUrl.startsWith('http://') && !pendingUrl.startsWith('https://')) return alert('URL은 http:// 또는 https://로 시작해야 합니다')
+      if (!entries.some(e => e.path === pendingUrl)) {
+        entries = [...entries, { path: pendingUrl, type: 'url' as const }]
+        setFileEntries(entries)
+        setUrlInput('')
+        setUrlInputOpen(false)
+      }
+    }
+    if (entries.length === 0) return alert('파일 경로 또는 URL을 추가하세요')
 
     if (work) {
       const res = await worksApi.update(work.id, {
-        file_entries: fileEntries,
+        file_entries: entries,
         cover_path: coverPath || undefined,
         product_number: productNumber.trim() || undefined,
         release_date: releaseDate || undefined,
@@ -270,7 +282,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
       }
     } else {
       const id = await worksApi.create({
-        file_entries: fileEntries,
+        file_entries: entries,
         cover_path: coverPath || undefined,
         product_number: productNumber.trim() || undefined,
         release_date: releaseDate || undefined,

@@ -8,6 +8,7 @@ import WorkForm from '../components/WorkForm'
 import WorkDetailModal from '../components/WorkDetailModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import WorkCard from '../components/WorkCard'
+import UrlReplaceModal from '../components/UrlReplaceModal'
 
 const BATCH_SIZE = 100
 
@@ -45,6 +46,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const [deleteMode, setDeleteMode] = useState(false)
   const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
   const [showUrlModal, setShowUrlModal] = useState(false)
+  const [showReplaceModal, setShowReplaceModal] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [scanProgress, setScanProgress] = useState<{ phase: 'scanning' | 'registering' | 'done'; current: number; total: number; fileName: string; result?: { added: number; duplicates: number } } | null>(null)
@@ -492,6 +494,9 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                     </button>
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-gray-300 text-xs rounded whitespace-nowrap opacity-0 group-hover/url:opacity-100 pointer-events-none transition-opacity">{activeSearchUrl || '검색 URL 미설정'}</div>
                   </div>
+                  <button onClick={() => setShowReplaceModal(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center" title="URL 일괄 교체">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+                  </button>
                 </>
               )}
             </div>
@@ -582,6 +587,10 @@ export default function Works({ onNavigateToActor }: WorksProps) {
           onClose={() => setShowUrlModal(false)}
           onSelect={url => setActiveSearchUrl(url)}
         />
+      )}
+
+      {showReplaceModal && (
+        <UrlReplaceModal onClose={() => setShowReplaceModal(false)} />
       )}
 
       {showForm && (

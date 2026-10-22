@@ -141,6 +141,8 @@ export const workFilesApi = {
   firstByWorkIds: (workIds: number[]) => api.invoke('work-files:firstByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string }[]>,
   add: (workId: number, filePath: string) => api.invoke('work-files:add', workId, filePath),
   delete: (fileId: number) => api.invoke('work-files:delete', fileId),
+  replaceUrl: (oldStr: string, newStr: string) => api.invoke('work-files:replaceUrl', oldStr, newStr) as Promise<{ count: number }>,
+  replaceUrlExec: (oldStr: string, newStr: string) => api.invoke('work-files:replaceUrlExec', oldStr, newStr) as Promise<{ updated: number }>,
 }
 
 // 셸
