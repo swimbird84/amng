@@ -88,6 +88,7 @@ function WorkContent({ work, masterTier }: { work: Work; masterTier?: { tier_nam
             {masterTier && <span className="ml-1 font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}
             {!!work.is_favorite && <span className="ml-1 text-pink-500 font-normal">♥</span>}
             {!!work.delete_pending && <span className="ml-1 text-red-500 font-normal text-[11px]">삭제예정</span>}
+            {!!work.is_excluded && <span className="ml-1 text-orange-400 font-normal text-[11px]">제외됨</span>}
           </p>
           <span className="text-yellow-400">{ratingStars(work.rating ?? 0)}</span>
         </div>

@@ -94,6 +94,7 @@ export default function WorkCard({
         <div className="flex items-center justify-between gap-1">
           <div className="flex items-center gap-1 truncate flex-1">
             <p className="text-sm font-bold text-white truncate">{w.product_number || '-'}</p>
+            {!!w.is_excluded && <span className="text-[10px] px-1 py-0.5 rounded bg-orange-900/60 text-orange-400 shrink-0">제외</span>}
             {tierInfo && <span className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0" style={{ backgroundColor: tierInfo.tier_color }}>{tierInfo.tier_name} #{tierInfo.tier_rank}</span>}
           </div>
           <div className="flex-shrink-0">

@@ -33,6 +33,7 @@ export interface Work {
   rating: number
   is_favorite: number
   delete_pending: number
+  is_excluded: number
   comment: string | null
   studio_id: number | null
   studio_name: string | null

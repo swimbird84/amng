@@ -77,6 +77,8 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
     params.sortDir = sortDir
     if (search.favoriteOnly) params.favoriteOnly = true
     if (search.deletePending) params.deletePending = true
+    if (search.excludeFilter !== 'hide') params.excludeFilter = search.excludeFilter
+    if (search.fileStatus !== 'all') params.fileStatus = search.fileStatus
     params.limit = limit
     params.offset = offset
     const result = await worksApi.list(params) as { items: Work[]; total: number }

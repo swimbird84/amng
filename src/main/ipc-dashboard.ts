@@ -14,7 +14,8 @@ export function registerDashboardHandlers(): void {
           WHERE wa2.work_id = w.id
         ), 0) AS actor_avg_score
       FROM works w
-      WHERE w.release_date IS NOT NULL AND w.release_date != ''
+      WHERE COALESCE(w.is_excluded, 0) = 0
+        AND w.release_date IS NOT NULL AND w.release_date != ''
         AND w.release_date >= date('now', '-1 months')
       ORDER BY w.release_date DESC, w.rating DESC, actor_avg_score DESC
     `).all() as Array<Record<string, unknown>>
@@ -54,7 +55,8 @@ export function registerDashboardHandlers(): void {
           WHERE wa2.work_id = w.id
         ), 0) AS actor_avg_score
       FROM works w
-      WHERE w.created_at IS NOT NULL
+      WHERE COALESCE(w.is_excluded, 0) = 0
+        AND w.created_at IS NOT NULL
         AND w.created_at >= datetime('now', '-1 months')
       ORDER BY w.created_at DESC, w.rating DESC, actor_avg_score DESC
     `).all() as Array<Record<string, unknown>>
@@ -99,7 +101,7 @@ export function registerDashboardHandlers(): void {
   ipcMain.handle('dashboard:release-years', () => {
     return db().prepare(`
       SELECT strftime('%Y', release_date) AS year, COUNT(*) AS count
-      FROM works WHERE release_date IS NOT NULL AND release_date != ''
+      FROM works WHERE COALESCE(is_excluded, 0) = 0 AND release_date IS NOT NULL AND release_date != ''
       GROUP BY year ORDER BY year DESC
     `).all()
   })
@@ -107,7 +109,7 @@ export function registerDashboardHandlers(): void {
   ipcMain.handle('dashboard:release-months', (_e, year: string) => {
     const rows = db().prepare(`
       SELECT CAST(strftime('%m', release_date) AS INTEGER) AS month, COUNT(*) AS count
-      FROM works WHERE release_date IS NOT NULL AND release_date != ''
+      FROM works WHERE COALESCE(is_excluded, 0) = 0 AND release_date IS NOT NULL AND release_date != ''
       AND strftime('%Y', release_date) = ?
       GROUP BY month ORDER BY month
     `).all(year) as Array<{ month: number; count: number }>
@@ -123,7 +125,8 @@ export function registerDashboardHandlers(): void {
       FROM works w
       LEFT JOIN studios s ON s.id = w.studio_id
       LEFT JOIN makers m ON m.id = s.maker_id
-      WHERE w.release_date IS NOT NULL AND w.release_date != ''
+      WHERE COALESCE(w.is_excluded, 0) = 0
+      AND w.release_date IS NOT NULL AND w.release_date != ''
       AND strftime('%Y', w.release_date) = ?
       AND CAST(strftime('%m', w.release_date) AS INTEGER) = ?
       ORDER BY w.release_date DESC, w.rating DESC
@@ -159,7 +162,7 @@ export function registerDashboardHandlers(): void {
   ipcMain.handle('dashboard:rating-dist', () => {
     const rows = db().prepare(`
       SELECT ROUND(rating * 2) / 2.0 AS bucket, COUNT(*) AS count
-      FROM works GROUP BY bucket ORDER BY bucket
+      FROM works WHERE COALESCE(is_excluded, 0) = 0 GROUP BY bucket ORDER BY bucket
     `).all() as Array<{ bucket: number; count: number }>
     const map = new Map(rows.map(r => [r.bucket, r.count]))
     const buckets: number[] = []
@@ -470,7 +473,7 @@ export function registerDashboardHandlers(): void {
   ipcMain.handle('dashboard:rating-works', (_e, bucket: number) => {
     const works = db().prepare(`
       SELECT * FROM works
-      WHERE ROUND(rating * 2) / 2.0 = ?
+      WHERE COALESCE(is_excluded, 0) = 0 AND ROUND(rating * 2) / 2.0 = ?
       ORDER BY release_date DESC, created_at DESC
     `).all(bucket) as Array<Record<string, unknown>>
     if (works.length === 0) return []

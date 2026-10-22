@@ -58,7 +58,7 @@ export function registerTierHandlers(): void {
       if (s.type === 'actor') {
         s.total_items = (db().prepare('SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0 AND is_excluded = 0').get() as { cnt: number }).cnt
       } else {
-        s.total_items = (db().prepare('SELECT COUNT(*) AS cnt FROM works').get() as { cnt: number }).cnt
+        s.total_items = (db().prepare('SELECT COUNT(*) AS cnt FROM works WHERE COALESCE(is_excluded, 0) = 0').get() as { cnt: number }).cnt
       }
     }
 
@@ -230,7 +230,7 @@ export function registerTierHandlers(): void {
       `).all(setId, limit, offset)
       return { items, total }
     } else {
-      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM works WHERE ${notIn}`).get(setId) as { cnt: number }).cnt
+      const total = (db().prepare(`SELECT COUNT(*) AS cnt FROM works WHERE COALESCE(is_excluded, 0) = 0 AND ${notIn}`).get(setId) as { cnt: number }).cnt
       let orderBy = 'w.product_number, w.title'
       switch (sortBy) {
         case 'release_date': orderBy = 'w.release_date DESC'; break
@@ -241,7 +241,7 @@ export function registerTierHandlers(): void {
       const items = db().prepare(`
         SELECT w.id, COALESCE(w.product_number, w.title) AS name, w.cover_path AS photo_path
         FROM works w
-        WHERE w.${notIn}
+        WHERE COALESCE(w.is_excluded, 0) = 0 AND w.${notIn}
         ORDER BY ${orderBy}
         LIMIT ? OFFSET ?
       `).all(setId, limit, offset)
@@ -296,10 +296,10 @@ export function registerTierHandlers(): void {
       GROUP BY tl.id
       ORDER BY tl.sort_order
     `).all(set.id, set.id)
-    const placedCount = (db().prepare(`SELECT COUNT(*) AS cnt FROM tier_items ti ${type === 'actor' ? 'JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0 AND a.is_excluded = 0' : ''} WHERE ti.set_id = ?`).get(set.id) as { cnt: number }).cnt
+    const placedCount = (db().prepare(`SELECT COUNT(*) AS cnt FROM tier_items ti ${type === 'actor' ? 'JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0 AND a.is_excluded = 0' : 'JOIN works w ON w.id = ti.item_id AND COALESCE(w.is_excluded, 0) = 0'} WHERE ti.set_id = ?`).get(set.id) as { cnt: number }).cnt
     const totalItems = type === 'actor'
       ? (db().prepare('SELECT COUNT(*) AS cnt FROM actors WHERE is_deleted = 0 AND is_excluded = 0').get() as { cnt: number }).cnt
-      : (db().prepare('SELECT COUNT(*) AS cnt FROM works').get() as { cnt: number }).cnt
+      : (db().prepare('SELECT COUNT(*) AS cnt FROM works WHERE COALESCE(is_excluded, 0) = 0').get() as { cnt: number }).cnt
     return { levels, unplacedCount: totalItems - placedCount }
   })
 
@@ -387,6 +387,7 @@ export function registerTierHandlers(): void {
           JOIN tier_levels tl ON tl.id = ti.level_id
           ${set ? `JOIN tier_sets ts ON ts.id = ti.set_id AND ts.type = 'work' AND ts.is_master = 1` : 'WHERE 0'}
         ) td ON td.item_id = w.id
+        WHERE COALESCE(w.is_excluded, 0) = 0
       `).all()
       return { items, tierLevels }
     }
@@ -419,6 +420,7 @@ export function registerTierHandlers(): void {
     const cupRanks = db().prepare(`
       SELECT w.id, RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank
       FROM works w LEFT JOIN ${ptsCte} ON pts.item_id = w.id
+      WHERE COALESCE(w.is_excluded, 0) = 0
     `).all() as { id: number; rank: number }[]
     const cupRankMap = new Map<number, number>()
     for (const r of cupRanks) cupRankMap.set(r.id, r.rank)
@@ -508,6 +510,7 @@ export function registerTierHandlers(): void {
     const cupRanks = db().prepare(`
       SELECT w.id, RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank
       FROM works w LEFT JOIN ${ptsCte} ON pts.item_id = w.id
+      WHERE COALESCE(w.is_excluded, 0) = 0
     `).all() as { id: number; rank: number }[]
     const cupRankMap = new Map<number, number>()
     for (const r of cupRanks) cupRankMap.set(r.id, r.rank)
@@ -578,6 +581,7 @@ export function registerTierHandlers(): void {
     const cupRanks = db().prepare(`
       SELECT w.id, RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank
       FROM works w LEFT JOIN ${ptsCte} ON pts.item_id = w.id
+      WHERE COALESCE(w.is_excluded, 0) = 0
     `).all() as { id: number; rank: number }[]
     const cupRankMap = new Map<number, number>()
     for (const r of cupRanks) cupRankMap.set(r.id, r.rank)

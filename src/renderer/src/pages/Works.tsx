@@ -85,6 +85,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     params.sortDir = sortDir
     if (search.favoriteOnly) params.favoriteOnly = true
     if (search.deletePending) params.deletePending = true
+    if (search.excludeFilter !== 'hide') params.excludeFilter = search.excludeFilter
+    if (search.fileStatus !== 'all') params.fileStatus = search.fileStatus
     params.limit = limit
     params.offset = offset
     const result = await worksApi.list(params) as { items: Work[]; total: number }
@@ -234,12 +236,18 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     const progressHandler = scanApi.onProgress((count: number) => {
       setScanProgress({ phase: 'scanning', current: count, total: 0, fileName: '' })
     })
-    const { newFiles, duplicates } = await scanApi.folder(folder) as { newFiles: { videoPath: string, imagePath: string | null }[], duplicates: string[] }
+    const { newFiles, duplicates, coverNew, coverRestore, coverConflict } = await scanApi.folder(folder) as {
+      newFiles: { videoPath: string, imagePath: string | null }[]
+      duplicates: string[]
+      coverNew: { imagePath: string; parentDir: string; releaseDate: string | null; productNumber: string }[]
+      coverRestore: { imagePath: string; parentDir: string; releaseDate: string | null; productNumber: string; workId: number }[]
+      coverConflict: { imagePath: string; parentDir: string; releaseDate: string | null; productNumber: string; workId: number; existingCoverPath: string }[]
+    }
     scanApi.offProgress(progressHandler)
 
-    if (newFiles.length === 0 && duplicates.length === 0) {
+    if (newFiles.length === 0 && duplicates.length === 0 && coverNew.length === 0 && coverRestore.length === 0) {
       setScanProgress(null)
-      return alert('동영상 파일이 없습니다')
+      return alert('등록할 파일이 없습니다')
     }
 
     let added = 0
@@ -271,8 +279,34 @@ export default function Works({ onNavigateToActor }: WorksProps) {
       }
     }
 
-    setScanProgress({ phase: 'done', current: 0, total: 0, fileName: '', result: { added, duplicates: duplicates.length } })
-    refreshWorks(added)
+    // Process cover images — new works (no video, cover only)
+    let coverAdded = 0
+    for (const ci of coverNew) {
+      try {
+        const parentFolder = ci.parentDir.replace(/\\/g, '/').split('/').pop() || ''
+        const actorMatch = parentFolder.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
+        const codeMatch = ci.productNumber.match(/^(.+)-\d/)
+        const suffixMatch = !codeMatch ? null : ci.productNumber.match(/^\d[\d-]*-([A-Za-z]+)$/)
+        const studioCode = suffixMatch ? suffixMatch[1] : codeMatch ? codeMatch[1] : null
+        const studioId = studioCode ? await studioCodesApi.lookup(studioCode) : null
+        const actorId = actorMatch ? await actorsApi.findOrCreate(actorMatch[1], actorMatch[2]) : null
+        const workId = await worksApi.create({ file_path: '', product_number: ci.productNumber, release_date: ci.releaseDate || undefined, cover_path: ci.imagePath, studio_id: studioId, actor_ids: actorId ? [actorId] : undefined, rep_actor_ids: actorId ? [actorId] : undefined }) as number
+        if (workId) coverAdded++
+      } catch { /* skip duplicates */ }
+    }
+
+    // Process cover images — restore missing covers
+    for (const ci of coverRestore) {
+      try {
+        await worksApi.update(ci.workId, { cover_path: ci.imagePath })
+      } catch { /* skip */ }
+    }
+
+    // coverConflict is left for future modal UI (Phase 4-2)
+
+    const totalAdded = added + coverAdded
+    setScanProgress({ phase: 'done', current: 0, total: 0, fileName: '', result: { added: totalAdded, duplicates: duplicates.length } })
+    refreshWorks(totalAdded)
   }
 
   const handleRating = async (id: number, rating: number) => {
@@ -329,13 +363,14 @@ export default function Works({ onNavigateToActor }: WorksProps) {
 
   const handleBulkTrashFolders = async () => {
     const ids = [...selectedDeleteIds]
-    const files = await workFilesApi.listByWorkIds(ids)
-    const filePaths = files.map(f => f.file_path)
-    if (filePaths.length > 0) {
-      const deleted = await shellApi.trashFolders(filePaths)
-      if (deleted > 0) alert(`${deleted}개 폴더를 휴지통으로 이동했습니다`)
+    let archived = 0
+    for (const id of ids) {
+      const res = await worksApi.archiveFolder(id)
+      if (res.ok) archived++
     }
+    if (archived > 0) alert(`${archived}개 작품 폴더 삭제 및 커버 아카이빙 완료`)
     setDeleteConfirm(false)
+    refreshWorks()
   }
 
   const handlePlay = (workId: number) => {

@@ -1,4 +1,6 @@
-import { ipcMain } from 'electron'
+import { ipcMain, shell } from 'electron'
+import * as path from 'path'
+import * as fs from 'fs'
 import { getDatabase } from './db'
 import { deleteImagesByPattern } from './ipc-system'
 
@@ -26,6 +28,8 @@ export function registerWorksHandlers(): void {
     commentNull?: boolean
     releaseDateNull?: boolean
     deletePending?: boolean
+    excludeFilter?: 'hide' | 'include' | 'only'
+    fileStatus?: 'all' | 'file' | 'link' | 'none'
     actorCountFrom?: number
     actorCountTo?: number
     actorCountNull?: boolean
@@ -117,6 +121,21 @@ export function registerWorksHandlers(): void {
     if (params?.releaseDateNull) {
       conditions.push("(w.release_date IS NULL OR TRIM(w.release_date) = '')")
     }
+    // 제외 필터
+    if (!params?.excludeFilter || params.excludeFilter === 'hide') {
+      conditions.push('COALESCE(w.is_excluded, 0) = 0')
+    } else if (params.excludeFilter === 'only') {
+      conditions.push('w.is_excluded = 1')
+    }
+    // 파일상태 필터
+    if (params?.fileStatus === 'file') {
+      conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'local')")
+    } else if (params?.fileStatus === 'link') {
+      conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'url') AND NOT EXISTS (SELECT 1 FROM work_files wf2 WHERE wf2.work_id = w.id AND wf2.type = 'local')")
+    } else if (params?.fileStatus === 'none') {
+      conditions.push('NOT EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id)')
+    }
+
     if (params?.actorCountFrom !== undefined) {
       conditions.push('(SELECT COUNT(*) FROM work_actors wa2 WHERE wa2.work_id = w.id) >= ?')
       bindings.push(params.actorCountFrom)
@@ -316,6 +335,7 @@ export function registerWorksHandlers(): void {
     comment?: string | null
     studio_id?: number | null
     delete_pending?: number
+    is_excluded?: number
     actor_ids?: number[]
     rep_actor_ids?: number[]
     tag_ids?: number[]
@@ -346,6 +366,7 @@ export function registerWorksHandlers(): void {
     if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
     if (data.studio_id !== undefined) { fields.push('studio_id = ?'); values.push(data.studio_id) }
     if (data.delete_pending !== undefined) { fields.push('delete_pending = ?'); values.push(data.delete_pending) }
+    if (data.is_excluded !== undefined) { fields.push('is_excluded = ?'); values.push(data.is_excluded) }
 
     if (fields.length > 0) {
       values.push(id)
@@ -396,6 +417,52 @@ export function registerWorksHandlers(): void {
     db().prepare(`DELETE FROM cup_stats WHERE type = 'work' AND item_id = ?`).run(id)
     db().prepare(`DELETE FROM cup_rank_snapshots WHERE item_id = ? AND tournament_id IN (SELECT id FROM cup_tournaments WHERE type = 'work')`).run(id)
     return { blocked: false }
+  })
+
+  ipcMain.handle('works:archiveFolder', async (_e, workId: number) => {
+    const work = db().prepare('SELECT id, cover_path FROM works WHERE id = ?').get(workId) as { id: number; cover_path: string | null } | undefined
+    if (!work) return { ok: false, error: '작품을 찾을 수 없습니다' }
+
+    const localFiles = db().prepare("SELECT id, file_path FROM work_files WHERE work_id = ? AND type = 'local'").all(workId) as { id: number; file_path: string }[]
+    if (localFiles.length === 0) return { ok: false, error: '로컬 파일이 없습니다' }
+
+    // Collect unique folders
+    const folders = [...new Set(localFiles.map(f => path.dirname(f.file_path)))]
+
+    let newCoverPath: string | null = null
+    for (const folder of folders) {
+      if (!fs.existsSync(folder)) continue
+      const parentDir = path.dirname(folder)
+      const folderName = path.basename(folder)
+      const coverImagesDir = path.join(parentDir, 'cover images')
+
+      // Find cover image in this folder
+      const entries = fs.readdirSync(folder)
+      const imageExts = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'])
+      const coverFile = entries.find(e => imageExts.has(path.extname(e).toLowerCase()))
+
+      if (coverFile) {
+        fs.mkdirSync(coverImagesDir, { recursive: true })
+        const destPath = path.join(coverImagesDir, folderName + path.extname(coverFile))
+        try {
+          fs.copyFileSync(path.join(folder, coverFile), destPath)
+          if (!newCoverPath) newCoverPath = destPath
+        } catch { /* skip */ }
+      }
+
+      // Trash the folder
+      try { await shell.trashItem(folder) } catch { /* skip */ }
+    }
+
+    // Update cover_path if we saved a cover
+    if (newCoverPath) {
+      db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(newCoverPath, workId)
+    }
+
+    // Delete local work_files records (keep URL records)
+    db().prepare("DELETE FROM work_files WHERE work_id = ? AND type = 'local'").run(workId)
+
+    return { ok: true, newCoverPath }
   })
 
   ipcMain.handle('work-files:listByWorkIds', (_e, workIds: number[]) => {

@@ -20,6 +20,8 @@ export interface WorkSearchParams {
   actorCountNull: boolean
   favoriteOnly: boolean
   deletePending: boolean
+  excludeFilter: 'hide' | 'include' | 'only'
+  fileStatus: 'all' | 'file' | 'link' | 'none'
 }
 
 export interface ActorSearchParams {
@@ -63,7 +65,7 @@ export interface ActorSearchParams {
   commentNull: boolean
   realNameNull: boolean
   deletePending: boolean
-  showExcluded: boolean
+  excludeFilter: 'hide' | 'include' | 'only'
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
@@ -73,6 +75,8 @@ export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
   actorCountFrom: '', actorCountTo: '', actorCountNull: false,
   favoriteOnly: false,
   deletePending: false,
+  excludeFilter: 'hide',
+  fileStatus: 'all',
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
@@ -93,5 +97,5 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   commentSearch: '', commentNull: false,
   realNameNull: false,
   deletePending: false,
-  showExcluded: false,
+  excludeFilter: 'hide',
 }

@@ -68,7 +68,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   useEffect(() => { loadActor() }, [actorId])
 
   const sortedWorks = useMemo(() => {
-    const list = [...(actor?.works ?? [])]
+    const list = [...(actor?.works ?? [])].filter(w => !w.is_excluded)
     list.sort((a, b) => {
       let v = 0
       if (workSort === 'rating') {
@@ -336,7 +336,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                 <>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-xs text-gray-500">출연작 ({actor.works.length})</p>
+                      <p className="text-xs text-gray-500">출연작 ({sortedWorks.length})</p>
                       <button
                         type="button"
                         onClick={async () => {

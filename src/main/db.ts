@@ -235,6 +235,9 @@ export function initDatabase(): void {
   if (!workCols.includes('delete_pending')) {
     db.prepare('ALTER TABLE works ADD COLUMN delete_pending INTEGER DEFAULT 0').run()
   }
+  if (!workCols.includes('is_excluded')) {
+    db.prepare('ALTER TABLE works ADD COLUMN is_excluded INTEGER NOT NULL DEFAULT 0').run()
+  }
 
   // studios color 컬럼 추가 마이그레이션
   const studioCols = (db.prepare("PRAGMA table_info(studios)").all() as { name: string }[]).map(c => c.name)

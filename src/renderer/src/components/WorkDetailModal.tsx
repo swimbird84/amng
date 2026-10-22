@@ -127,6 +127,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                 )}
                 {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}
                 {!!work.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
+                {!!work.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                 <button
                   onClick={handleToggleFavorite}
                   className={`text-2xl leading-none ${work.is_favorite ? 'text-red-500' : 'text-gray-500 hover:text-red-400'}`}
@@ -252,11 +253,10 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
               </div>
               <button
                 onClick={async () => {
-                  if (!confirm('파일이 있는 폴더를 휴지통으로 보내시겠습니까?')) return
-                  const filePaths = (work.files ?? []).filter((f) => f.type === 'local').map((f) => f.file_path)
-                  const deleted = await shellApi.trashFolders(filePaths)
-                  alert(`${deleted}개 폴더를 휴지통으로 이동했습니다`)
-                  loadWork()
+                  if (!confirm('폴더를 삭제하고 커버 이미지를 아카이빙하시겠습니까?')) return
+                  const res = await worksApi.archiveFolder(work.id)
+                  if (res.ok) { alert('폴더 삭제 및 커버 아카이빙 완료'); loadWork() }
+                  else alert(res.error || '아카이빙 실패')
                 }}
                 className="w-full bg-orange-700 hover:bg-orange-600 text-white text-sm px-3 py-1.5 rounded"
               >

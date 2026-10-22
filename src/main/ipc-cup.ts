@@ -707,7 +707,7 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
       FROM ${fromClause}
       LEFT JOIN pts ON pts.item_id = ${itemCol}
       LEFT JOIN mrc ON mrc.item_id = ${itemCol}
-      ${t.type === 'actor' ? 'WHERE a.is_deleted = 0 AND a.is_excluded = 0' : ''}
+      ${t.type === 'actor' ? 'WHERE a.is_deleted = 0 AND a.is_excluded = 0' : 'WHERE COALESCE(w.is_excluded, 0) = 0'}
     `).all() as { rank: number; id: number; master_run_count: number }[]
     const divBoundaries = getDivBoundaries(t.type as 'actor' | 'work')
     const divisionMap = new Map<number, number>()
@@ -810,7 +810,7 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
   if (t.type === 'actor') {
     return (database.prepare(`SELECT DISTINCT a.id FROM actors a${extraJoins} WHERE a.is_deleted = 0 AND is_excluded = 0${filterWhere}`).all(...extraBindings) as { id: number }[]).map(r => r.id)
   } else {
-    return (database.prepare(`SELECT DISTINCT w.id FROM works w${extraJoins} WHERE 1=1${filterWhere}`).all(...extraBindings) as { id: number }[]).map(r => r.id)
+    return (database.prepare(`SELECT DISTINCT w.id FROM works w${extraJoins} WHERE COALESCE(w.is_excluded, 0) = 0${filterWhere}`).all(...extraBindings) as { id: number }[]).map(r => r.id)
   }
 }
 

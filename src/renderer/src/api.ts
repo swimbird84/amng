@@ -7,6 +7,7 @@ export const worksApi = {
   create: (data: object) => api.invoke('works:create', data),
   update: (id: number, data: object) => api.invoke('works:update', id, data),
   delete: (id: number) => api.invoke('works:delete', id),
+  archiveFolder: (id: number) => api.invoke('works:archiveFolder', id) as Promise<{ ok: boolean; error?: string; newCoverPath?: string }>,
 }
 
 // 배우

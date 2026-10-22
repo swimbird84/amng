@@ -32,6 +32,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   const [rating, setRating] = useState(work?.rating || 0)
   const [isFavorite, setIsFavorite] = useState(work?.is_favorite ? 1 : 0)
   const [deletePending, setDeletePending] = useState(work?.delete_pending ?? 0)
+  const [isExcluded, setIsExcluded] = useState(work?.is_excluded ?? 0)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>(work?.tags?.map((t) => t.id) || [])
   const [repTagIds, setRepTagIds] = useState<number[]>(work?.rep_tags?.map((t) => t.id) || [])
   const [selectedActorIds, setSelectedActorIds] = useState<number[]>(work?.actors?.map((a) => a.id) || [])
@@ -253,6 +254,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         rating,
         is_favorite: isFavorite,
         delete_pending: deletePending,
+        is_excluded: isExcluded,
         title: comment.trim() || null,
         comment: workComment.trim() || null,
         studio_id: studioId,
@@ -396,6 +398,15 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                   className="accent-red-500"
                 />
                 <span className="text-xs text-red-400">삭제예정</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!isExcluded}
+                  onChange={e => setIsExcluded(e.target.checked ? 1 : 0)}
+                  className="accent-orange-500"
+                />
+                <span className="text-xs text-orange-400">제외</span>
               </label>
             </div>
             <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm">

@@ -49,6 +49,7 @@ export function registerActorsHandlers(): void {
     realNameNull?: boolean
     deletePending?: boolean
     showExcluded?: boolean
+    excludeFilter?: 'hide' | 'include' | 'only'
   }) => {
     let sql = `
       WITH stats AS (
@@ -81,10 +82,11 @@ export function registerActorsHandlers(): void {
       LEFT JOIN actor_scores s ON s.actor_id = a.id
     `
     const conditions: string[] = ['a.is_deleted = 0']
-    if (params?.showExcluded) {
-      conditions.push('a.is_excluded = 1')
-    } else if (!params?.showExcluded) {
+    const ef = params?.excludeFilter ?? (params?.showExcluded ? 'only' : 'hide')
+    if (ef === 'hide') {
       conditions.push('a.is_excluded = 0')
+    } else if (ef === 'only') {
+      conditions.push('a.is_excluded = 1')
     }
     const bindings: unknown[] = []
 

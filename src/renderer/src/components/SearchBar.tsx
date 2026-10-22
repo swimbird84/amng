@@ -318,6 +318,8 @@ export default function SearchBar(props: Props) {
     if (wp.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...wp, commentNull: false } as never) })
     if (wp.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...wp, favoriteOnly: false } as never) })
     if (wp.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...wp, deletePending: false } as never) })
+    if (wp.excludeFilter !== 'hide') conditions.push({ label: wp.excludeFilter === 'only' ? '제외한정' : '제외포함', onClear: () => onChange({ ...wp, excludeFilter: 'hide' } as never) })
+    if (wp.fileStatus !== 'all') conditions.push({ label: wp.fileStatus === 'file' ? '파일' : wp.fileStatus === 'link' ? '링크' : '없음', onClear: () => onChange({ ...wp, fileStatus: 'all' } as never) })
   }
 
   if (type === 'actors' && aParams) {
@@ -356,7 +358,7 @@ export default function SearchBar(props: Props) {
     if (ap.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...ap, commentNull: false } as never) })
     if (ap.realNameNull) conditions.push({ label: '본명없음', onClear: () => onChange({ ...ap, realNameNull: false } as never) })
     if (ap.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...ap, deletePending: false } as never) })
-    if (ap.showExcluded) conditions.push({ label: '제외배우', onClear: () => onChange({ ...ap, showExcluded: false } as never) })
+    if (ap.excludeFilter !== 'hide') conditions.push({ label: ap.excludeFilter === 'only' ? '제외한정' : '제외포함', onClear: () => onChange({ ...ap, excludeFilter: 'hide' } as never) })
   }
 
   // ── render ────────────────────────────────────────────────────────
@@ -679,12 +681,31 @@ export default function SearchBar(props: Props) {
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-14 shrink-0">삭제예정</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
                   <button
                     type="button"
                     onClick={() => onChange({ ...wParams, deletePending: !wParams.deletePending } as never)}
                     className={`text-xs px-2 py-1 rounded ${wParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >삭제 예정</button>
+                  >삭제예정</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = wParams.excludeFilter === 'hide' ? 'include' : wParams.excludeFilter === 'include' ? 'only' : 'hide'
+                      onChange({ ...wParams, excludeFilter: next } as never)
+                    }}
+                    className={`text-xs px-2 py-1 rounded ${wParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : wParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
+                  >{wParams.excludeFilter === 'hide' ? '제외숨김' : wParams.excludeFilter === 'include' ? '제외포함' : '제외한정'}</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 w-14 shrink-0">파일상태</span>
+                  {(['all', 'file', 'link', 'none'] as const).map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => onChange({ ...wParams, fileStatus: s } as never)}
+                      className={`text-xs px-2 py-1 rounded ${wParams.fileStatus === s ? 'bg-blue-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >{s === 'all' ? '전체' : s === 'file' ? '파일' : s === 'link' ? '링크' : '없음'}</button>
+                  ))}
                 </div>
               </>
             )}
@@ -831,9 +852,12 @@ export default function SearchBar(props: Props) {
                     >삭제 예정</button>
                     <button
                       type="button"
-                      onClick={() => onChange({ ...aParams, showExcluded: !aParams.showExcluded } as never)}
-                      className={`text-xs px-2 py-1 rounded ${aParams.showExcluded ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >제외 배우</button>
+                      onClick={() => {
+                        const next = aParams.excludeFilter === 'hide' ? 'include' : aParams.excludeFilter === 'include' ? 'only' : 'hide'
+                        onChange({ ...aParams, excludeFilter: next } as never)
+                      }}
+                      className={`text-xs px-2 py-1 rounded ${aParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : aParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
+                    >{aParams.excludeFilter === 'hide' ? '제외숨김' : aParams.excludeFilter === 'include' ? '제외포함' : '제외한정'}</button>
                   </div>
                 </>
               )}

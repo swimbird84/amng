@@ -120,13 +120,34 @@ export function registerSystemHandlers(): void {
     const videoExtensions = ['.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.m2ts']
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp']
     const files: string[] = []
+    const coverImageFiles: { imagePath: string; parentDir: string; releaseDate: string | null; productNumber: string }[] = []
 
     async function scanDir(dir: string) {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true })
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name)
         if (entry.isDirectory()) {
-          await scanDir(fullPath)
+          if (entry.name === 'cover images') {
+            // Scan cover images folder
+            const imgEntries = await fs.promises.readdir(fullPath, { withFileTypes: true })
+            for (const imgEntry of imgEntries) {
+              if (!imgEntry.isFile()) continue
+              const ext = path.extname(imgEntry.name).toLowerCase()
+              if (!imageExtensions.includes(ext)) continue
+              const baseName = path.basename(imgEntry.name, ext)
+              const dateMatch = baseName.match(/^(\d{4}-\d{2}-\d{2})\s+(.+)$/)
+              if (dateMatch) {
+                coverImageFiles.push({
+                  imagePath: path.join(fullPath, imgEntry.name),
+                  parentDir: dir,
+                  releaseDate: dateMatch[1],
+                  productNumber: dateMatch[2],
+                })
+              }
+            }
+          } else {
+            await scanDir(fullPath)
+          }
         } else if (videoExtensions.includes(path.extname(entry.name).toLowerCase())) {
           files.push(fullPath)
           e.sender.send('scan:progress', files.length)
@@ -145,7 +166,27 @@ export function registerSystemHandlers(): void {
       return { videoPath, imagePath }
     })
     const duplicates = files.filter(f => existingPaths.has(f))
-    return { newFiles, duplicates }
+
+    // Check cover images against existing works
+    const existingPNs = new Map<string, { id: number; cover_path: string | null }>(
+      (db().prepare('SELECT id, product_number, cover_path FROM works WHERE product_number IS NOT NULL').all() as { id: number; product_number: string; cover_path: string | null }[])
+        .map(r => [r.product_number.toUpperCase(), { id: r.id, cover_path: r.cover_path }])
+    )
+    const coverNew: typeof coverImageFiles = []
+    const coverRestore: (typeof coverImageFiles[0] & { workId: number })[] = []
+    const coverConflict: (typeof coverImageFiles[0] & { workId: number; existingCoverPath: string })[] = []
+    for (const ci of coverImageFiles) {
+      const existing = existingPNs.get(ci.productNumber.toUpperCase())
+      if (!existing) {
+        coverNew.push(ci)
+      } else if (!existing.cover_path || !fs.existsSync(existing.cover_path)) {
+        coverRestore.push({ ...ci, workId: existing.id })
+      } else {
+        coverConflict.push({ ...ci, workId: existing.id, existingCoverPath: existing.cover_path })
+      }
+    }
+
+    return { newFiles, duplicates, coverNew, coverRestore, coverConflict }
   })
 
   // ========== 파일 실행 (기본 프로그램) ==========
