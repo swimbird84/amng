@@ -262,7 +262,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         rep_actor_ids: repActorIds,
         tag_ids: selectedTagIds,
         rep_tag_ids: repTagIds,
-      ) as any
+      }) as any
       if (res?.blocked) { alert('진행 중인 대회에 참가한 작품은 제외할 수 없습니다'); return }
       if (coverPath && coverPath !== work.cover_path) {
         const newPath = await imageApi.copy(coverPath, 'works', work.id) as string
