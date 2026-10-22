@@ -603,7 +603,7 @@ export function registerFilesHandlers(): void {
               return { ...parsed, debug: debugLog.join(' | ') }
             }
           }
-        } else if (!html.includes('404')) {
+        } else if (!/<title>[^<]*404[^<]*<\/title>/i.test(html)) {
           const parsed = parsePageHtml(html, baseUrl)
           if (parsed.imgUrl) {
             debugLog.push('parsed=ok')
