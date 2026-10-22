@@ -366,7 +366,19 @@ export function registerWorksHandlers(): void {
     if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
     if (data.studio_id !== undefined) { fields.push('studio_id = ?'); values.push(data.studio_id) }
     if (data.delete_pending !== undefined) { fields.push('delete_pending = ?'); values.push(data.delete_pending) }
-    if (data.is_excluded !== undefined) { fields.push('is_excluded = ?'); values.push(data.is_excluded) }
+    if (data.is_excluded !== undefined) {
+      if (data.is_excluded === 1) {
+        const blocked = db().prepare(`
+          SELECT 1 FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.type = 'work'
+          WHERE r.status = 'in_progress' AND e.item_id = ?
+          LIMIT 1
+        `).get(id)
+        if (blocked) return { blocked: true }
+      }
+      fields.push('is_excluded = ?'); values.push(data.is_excluded)
+    }
 
     if (fields.length > 0) {
       values.push(id)
