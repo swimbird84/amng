@@ -599,4 +599,22 @@ export function initDatabase(): void {
     )
   `)
 
+  // tier_items 정리: 제외/삭제된 배우·작품 제거 + sort_order re-index
+  const tierSets = db.prepare('SELECT id, type FROM tier_sets').all() as { id: number; type: string }[]
+  for (const ts of tierSets) {
+    let removed = 0
+    if (ts.type === 'actor') {
+      removed = db.prepare(`DELETE FROM tier_items WHERE set_id = ? AND item_id IN (SELECT id FROM actors WHERE is_deleted = 1 OR is_excluded = 1)`).run(ts.id).changes
+    } else {
+      removed = db.prepare(`DELETE FROM tier_items WHERE set_id = ? AND item_id IN (SELECT id FROM works WHERE is_excluded = 1)`).run(ts.id).changes
+    }
+    if (removed > 0) {
+      const levels = db.prepare('SELECT id FROM tier_levels WHERE set_id = ?').all(ts.id) as { id: number }[]
+      for (const lv of levels) {
+        const items = db.prepare('SELECT id FROM tier_items WHERE set_id = ? AND level_id = ? ORDER BY sort_order').all(ts.id, lv.id) as { id: number }[]
+        items.forEach((row, i) => db.prepare('UPDATE tier_items SET sort_order = ? WHERE id = ?').run(i, row.id))
+      }
+    }
+  }
+
 }

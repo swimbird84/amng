@@ -255,7 +255,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         setUrlInputOpen(false)
       }
     }
-    if (entries.length === 0) return alert('파일 경로 또는 URL을 추가하세요')
+    if (!productNumber.trim()) return alert('품번을 입력하세요')
 
     if (work) {
       const res = await worksApi.update(work.id, {

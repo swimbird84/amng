@@ -165,17 +165,33 @@ export function registerTierHandlers(): void {
     }
   })
 
+  // Re-index sort_order for a tier level (remove gaps)
+  function reindexTierLevel(setId: number, levelId: number): void {
+    const items = db().prepare(
+      'SELECT id FROM tier_items WHERE set_id = ? AND level_id = ? ORDER BY sort_order'
+    ).all(setId, levelId) as { id: number }[]
+    items.forEach((row, i) => {
+      db().prepare('UPDATE tier_items SET sort_order = ? WHERE id = ?').run(i, row.id)
+    })
+  }
+
   ipcMain.handle('tier:setItem', (_e, setId: number, levelId: number, itemId: number, sortOrder: number) => {
     const txn = db().transaction(() => {
+      // Find previous level (for re-index after move)
+      const prev = db().prepare('SELECT level_id FROM tier_items WHERE set_id = ? AND item_id = ?').get(setId, itemId) as { level_id: number } | undefined
+      const prevLevelId = prev?.level_id
+
       // Remove existing placement if any
       db().prepare('DELETE FROM tier_items WHERE set_id = ? AND item_id = ?').run(setId, itemId)
-      // Re-number existing items in target level to remove gaps
-      const existing = db().prepare(
-        'SELECT id FROM tier_items WHERE set_id = ? AND level_id = ? ORDER BY sort_order'
-      ).all(setId, levelId) as { id: number }[]
-      existing.forEach((row, i) => {
-        db().prepare('UPDATE tier_items SET sort_order = ? WHERE id = ?').run(i, row.id)
-      })
+
+      // Re-index previous level if different from target
+      if (prevLevelId !== undefined && prevLevelId !== levelId) {
+        reindexTierLevel(setId, prevLevelId)
+      }
+
+      // Re-number target level to remove gaps
+      reindexTierLevel(setId, levelId)
+
       // Shift items at and after sortOrder
       db().prepare('UPDATE tier_items SET sort_order = sort_order + 1 WHERE set_id = ? AND level_id = ? AND sort_order >= ?').run(setId, levelId, sortOrder)
       // Insert

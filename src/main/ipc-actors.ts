@@ -423,6 +423,12 @@ export function registerActorsHandlers(): void {
         if (blocked) return { blocked: true }
       }
       fields.push('is_excluded = ?'); values.push(data.is_excluded)
+      // Re-index tier levels where this actor is placed
+      const tierPlacements = db().prepare('SELECT set_id, level_id FROM tier_items WHERE item_id = ?').all(id) as { set_id: number; level_id: number }[]
+      for (const tp of tierPlacements) {
+        const items = db().prepare('SELECT id FROM tier_items WHERE set_id = ? AND level_id = ? ORDER BY sort_order').all(tp.set_id, tp.level_id) as { id: number }[]
+        items.forEach((row, i) => db().prepare('UPDATE tier_items SET sort_order = ? WHERE id = ?').run(i, row.id))
+      }
     }
     if (data.height !== undefined) { fields.push('height = ?'); values.push(data.height) }
     if (data.bust !== undefined) { fields.push('bust = ?'); values.push(data.bust) }

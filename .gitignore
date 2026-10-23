@@ -5,8 +5,8 @@ out/
 .claude/
 img/
 CLAUDE.md
-develop.MD
-install.MD
-project.MD
-research.MD
-ACTDEL.md
+docs/develop.MD
+docs/install.MD
+docs/project.MD
+docs/research.MD
+docs/ACTDEL.md
