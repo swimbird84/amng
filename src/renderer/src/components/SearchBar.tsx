@@ -320,6 +320,7 @@ export default function SearchBar(props: Props) {
     if (wp.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...wp, deletePending: false } as never) })
     if (wp.excludeFilter !== 'hide') conditions.push({ label: wp.excludeFilter === 'only' ? '제외한정' : '제외포함', onClear: () => onChange({ ...wp, excludeFilter: 'hide' } as never) })
     if (wp.fileStatus !== 'all') conditions.push({ label: wp.fileStatus === 'file' ? '파일' : wp.fileStatus === 'link' ? '링크' : '없음', onClear: () => onChange({ ...wp, fileStatus: 'all' } as never) })
+    if (wp.untiered) conditions.push({ label: '미배치티어', onClear: () => onChange({ ...wp, untiered: false } as never) })
   }
 
   if (type === 'actors' && aParams) {
@@ -359,6 +360,7 @@ export default function SearchBar(props: Props) {
     if (ap.realNameNull) conditions.push({ label: '본명없음', onClear: () => onChange({ ...ap, realNameNull: false } as never) })
     if (ap.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...ap, deletePending: false } as never) })
     if (ap.excludeFilter !== 'hide') conditions.push({ label: ap.excludeFilter === 'only' ? '제외한정' : '제외포함', onClear: () => onChange({ ...ap, excludeFilter: 'hide' } as never) })
+    if (ap.untiered) conditions.push({ label: '미배치티어', onClear: () => onChange({ ...ap, untiered: false } as never) })
   }
 
   // ── render ────────────────────────────────────────────────────────
@@ -695,6 +697,11 @@ export default function SearchBar(props: Props) {
                     }}
                     className={`text-xs px-2 py-1 rounded ${wParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : wParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
                   >{wParams.excludeFilter === 'hide' ? '제외숨김' : wParams.excludeFilter === 'include' ? '제외포함' : '제외한정'}</button>
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...wParams, untiered: !wParams.untiered } as never)}
+                    className={`text-xs px-2 py-1 rounded ${wParams.untiered ? 'bg-purple-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >미배치티어</button>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-14 shrink-0">파일상태</span>
@@ -858,6 +865,11 @@ export default function SearchBar(props: Props) {
                       }}
                       className={`text-xs px-2 py-1 rounded ${aParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : aParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
                     >{aParams.excludeFilter === 'hide' ? '제외숨김' : aParams.excludeFilter === 'include' ? '제외포함' : '제외한정'}</button>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...aParams, untiered: !aParams.untiered } as never)}
+                      className={`text-xs px-2 py-1 rounded ${aParams.untiered ? 'bg-purple-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >미배치티어</button>
                   </div>
                 </>
               )}

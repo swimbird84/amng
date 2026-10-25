@@ -9,6 +9,7 @@ import CardTooltip, { type TooltipState } from './CardTooltip'
 import { hashColor, studioColor } from '../utils/colorHelpers'
 import { emitDataChanged } from '../dataEvents'
 import MasterRecordModal from './cup/MasterRecordModal'
+import TierEditor from './TierEditor'
 
 interface Props {
   workId: number
@@ -26,6 +27,8 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
   const [actorTooltip, setActorTooltip] = useState<TooltipState | null>(null)
   const [showMasterRecord, setShowMasterRecord] = useState(false)
   const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string; tier_rank: number } | null>(null)
+  const [showTierEditor, setShowTierEditor] = useState(false)
+  const [masterTierSetId, setMasterTierSetId] = useState<number | null>(null)
   const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
 
   const onCloseRef = useRef(onClose)
@@ -43,6 +46,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
     const results = await Promise.all(files.map((f) => f.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(f.file_path)))
     setFileStatuses(Object.fromEntries(files.map((f, i) => [f.id, results[i]])))
     tierApi.getMasterTier('work', workId).then(t => setMasterTier(t))
+    tierApi.listSets({ type: 'work', isMaster: true }).then((sets: any) => { if (sets.length > 0) setMasterTierSetId(sets[0].id) })
     searchUrlApi.getActive().then(url => setActiveSearchUrl(url))
   }
 
@@ -125,7 +129,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                   </button>
                 )}
-                {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}
+                <button onClick={() => masterTierSetId && setShowTierEditor(true)} className="text-xs px-1.5 py-0.5 rounded text-white cursor-pointer hover:opacity-80" style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '-'}</button>
                 {!!work.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                 {!!work.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                 <button
@@ -348,6 +352,21 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
           itemImage={work.cover_path ?? null}
           onClose={() => setShowMasterRecord(false)}
         />
+      )}
+      {showTierEditor && masterTierSetId && work && (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center">
+          <div className="bg-gray-900 rounded-xl w-full h-[calc(100vh-40px)] overflow-hidden">
+            <TierEditor
+              setId={masterTierSetId}
+              setName="마스터 작품 티어"
+              setType="work"
+              onBack={() => { setShowTierEditor(false); loadWork() }}
+              onNavigateToActor={() => {}}
+              onNavigateToWork={() => {}}
+              focusItemId={work.id}
+            />
+          </div>
+        </div>
       )}
     </>
   )

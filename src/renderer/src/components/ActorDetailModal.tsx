@@ -12,6 +12,7 @@ import { getAge, getDebutAge } from '../utils/dateHelpers'
 import { emitDataChanged } from '../dataEvents'
 import MasterRecordModal from './cup/MasterRecordModal'
 import ActorWorksModal from './ActorWorksModal'
+import TierEditor from './TierEditor'
 
 interface Props {
   actorId: number
@@ -38,6 +39,8 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   const [showMasterRecord, setShowMasterRecord] = useState(false)
   const [showWorksModal, setShowWorksModal] = useState(false)
   const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string; tier_rank: number } | null>(null)
+  const [showTierEditor, setShowTierEditor] = useState(false)
+  const [masterTierSetId, setMasterTierSetId] = useState<number | null>(null)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -63,6 +66,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
       if (me && stats) setPhysScore(calcPhysicalScore(me, settings, stats) ?? null)
     } catch { /* ignore */ }
     tierApi.getMasterTier('actor', actorId).then(t => setMasterTier(t))
+    tierApi.listSets({ type: 'actor', isMaster: true }).then((sets: any) => { if (sets.length > 0) setMasterTierSetId(sets[0].id) })
   }
 
   useEffect(() => { loadActor() }, [actorId])
@@ -155,7 +159,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               <div className="flex-1 pt-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-white font-bold text-lg">{actor.name}</h3>
-                  {masterTier && <span className="text-xs px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}
+                  <button onClick={() => masterTierSetId && setShowTierEditor(true)} className="text-xs px-1.5 py-0.5 rounded text-white cursor-pointer hover:opacity-80" style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '-'}</button>
                   {!!actor.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                   {!!actor.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                   <button
@@ -503,6 +507,21 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
             actorName={actor.name}
             onClose={() => setShowWorksModal(false)}
           />
+        </div>
+      )}
+      {showTierEditor && masterTierSetId && actor && (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center">
+          <div className="bg-gray-900 rounded-xl w-full h-[calc(100vh-40px)] overflow-hidden">
+            <TierEditor
+              setId={masterTierSetId}
+              setName="마스터 배우 티어"
+              setType="actor"
+              onBack={() => { setShowTierEditor(false); loadActor() }}
+              onNavigateToActor={onViewActor}
+              onNavigateToWork={() => {}}
+              focusItemId={actor.id}
+            />
+          </div>
         </div>
       )}
     </>

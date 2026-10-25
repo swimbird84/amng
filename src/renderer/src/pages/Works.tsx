@@ -9,6 +9,7 @@ import WorkDetailModal from '../components/WorkDetailModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import WorkCard from '../components/WorkCard'
 import UrlReplaceModal from '../components/UrlReplaceModal'
+import TierEditor from '../components/TierEditor'
 
 const BATCH_SIZE = 100
 
@@ -47,6 +48,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [showReplaceModal, setShowReplaceModal] = useState(false)
+  const [tierEditorWorkId, setTierEditorWorkId] = useState<number | null>(null)
+  const [masterWorkTierSetId, setMasterWorkTierSetId] = useState<number | null>(null)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [scanProgress, setScanProgress] = useState<{ phase: 'scanning' | 'registering' | 'done'; current: number; total: number; fileName: string; result?: { added: number; duplicates: number } } | null>(null)
@@ -89,6 +92,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     if (search.deletePending) params.deletePending = true
     if (search.excludeFilter !== 'hide') params.excludeFilter = search.excludeFilter
     if (search.fileStatus !== 'all') params.fileStatus = search.fileStatus
+    if (search.untiered) params.untiered = true
     params.limit = limit
     params.offset = offset
     const result = await worksApi.list(params) as { items: Work[]; total: number }
@@ -134,6 +138,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   }
 
   useEffect(() => { searchUrlApi.getActive().then(url => setActiveSearchUrl(url)) }, [])
+  useEffect(() => { tierApi.listSets({ type: 'work', isMaster: true }).then((sets: any) => { if (sets.length > 0) setMasterWorkTierSetId(sets[0].id) }) }, [])
 
   useEffect(() => {
     setHasMore(true)
@@ -542,6 +547,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 onToggleFavorite={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
                 onPlay={() => handlePlay(w.id)}
                 onSearch={activeSearchUrl && w.product_number ? (e) => { e.stopPropagation(); shellApi.openExternal(activeSearchUrl + w.product_number) } : undefined}
+                onTierClick={() => { setTierEditorWorkId(w.id) }}
               />
             ))}
           </div>
@@ -591,6 +597,22 @@ export default function Works({ onNavigateToActor }: WorksProps) {
 
       {showReplaceModal && (
         <UrlReplaceModal onClose={() => setShowReplaceModal(false)} />
+      )}
+
+      {tierEditorWorkId && masterWorkTierSetId && (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center">
+          <div className="bg-gray-900 rounded-xl w-full h-[calc(100vh-40px)] overflow-hidden">
+            <TierEditor
+              setId={masterWorkTierSetId}
+              setName="마스터 작품 티어"
+              setType="work"
+              onBack={() => { setTierEditorWorkId(null); refreshWorks(); loadMasterPoints() }}
+              onNavigateToActor={() => {}}
+              onNavigateToWork={(id) => { setTierEditorWorkId(null); handleSelect(id) }}
+              focusItemId={tierEditorWorkId}
+            />
+          </div>
+        </div>
       )}
 
       {showForm && (

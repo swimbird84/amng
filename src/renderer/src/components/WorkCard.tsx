@@ -21,13 +21,14 @@ interface WorkCardProps {
   onToggleFavorite?: (e: React.MouseEvent) => void
   onPlay?: (e: React.MouseEvent) => void
   onSearch?: (e: React.MouseEvent) => void
+  onTierClick?: (e: React.MouseEvent) => void
 }
 
 export default function WorkCard({
   work: w, refreshKey, selected, deleteMode, deleteSelected,
   filePlayable, masterPoints: mp, tierInfo,
   onClick, onMouseDown, onMouseEnter,
-  onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onSearch,
+  onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onSearch, onTierClick,
 }: WorkCardProps) {
   return (
     <div
@@ -95,7 +96,7 @@ export default function WorkCard({
           <div className="flex items-center gap-1 truncate flex-1">
             <p className="text-sm font-bold text-white truncate">{w.product_number || '-'}</p>
             {!!w.is_excluded && <span className="text-[10px] px-1 py-0.5 rounded bg-orange-900/60 text-orange-400 shrink-0">제외</span>}
-            {tierInfo && <span className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0" style={{ backgroundColor: tierInfo.tier_color }}>{tierInfo.tier_name} #{tierInfo.tier_rank}</span>}
+            <button onClick={e => { e.stopPropagation(); onTierClick?.(e) }} className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0 hover:opacity-80" style={{ backgroundColor: tierInfo?.tier_color ?? '#4b5563' }}>{tierInfo ? `${tierInfo.tier_name} #${tierInfo.tier_rank}` : '-'}</button>
           </div>
           <div className="flex-shrink-0">
             <Rating value={w.rating} readonly small />

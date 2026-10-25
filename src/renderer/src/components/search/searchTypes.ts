@@ -22,6 +22,7 @@ export interface WorkSearchParams {
   deletePending: boolean
   excludeFilter: 'hide' | 'include' | 'only'
   fileStatus: 'all' | 'file' | 'link' | 'none'
+  untiered: boolean
 }
 
 export interface ActorSearchParams {
@@ -66,6 +67,7 @@ export interface ActorSearchParams {
   realNameNull: boolean
   deletePending: boolean
   excludeFilter: 'hide' | 'include' | 'only'
+  untiered: boolean
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
@@ -77,6 +79,7 @@ export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
   deletePending: false,
   excludeFilter: 'hide',
   fileStatus: 'all',
+  untiered: false,
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
@@ -98,4 +101,5 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   realNameNull: false,
   deletePending: false,
   excludeFilter: 'hide',
+  untiered: false,
 }

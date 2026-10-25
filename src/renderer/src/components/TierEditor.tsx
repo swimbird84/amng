@@ -34,11 +34,12 @@ interface Props {
   onBack: () => void
   onNavigateToActor: (id: number) => void
   onNavigateToWork: (id: number) => void
+  focusItemId?: number
 }
 
 const DEFAULT_COLORS = ['#ff7f7f', '#ffbf7f', '#ffdf7f', '#ffff7f', '#bfff7f', '#7fffff', '#7fbfff', '#bf7fff']
 
-export default function TierEditor({ setId, setName, setType, onBack, onNavigateToActor, onNavigateToWork }: Props) {
+export default function TierEditor({ setId, setName, setType, onBack, onNavigateToActor, onNavigateToWork, focusItemId }: Props) {
   const [levels, setLevels] = useState<TierLevel[]>([])
   const [items, setItems] = useState<TierItem[]>([])
   const [unplaced, setUnplaced] = useState<UnplacedItem[]>([])
@@ -72,11 +73,26 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   }, [setId])
 
   const loadUnplaced = useCallback(async (offset: number) => {
+    if (focusItemId !== undefined) {
+      // Focus mode: only show the focused item if unplaced
+      const isPlaced = items.some(i => i.item_id === focusItemId)
+      if (!isPlaced) {
+        const data = await tierApi.getUnplacedItems(setId, 0, 99999, poolSort)
+        const focusItem = data.items.find((i: UnplacedItem) => i.id === focusItemId)
+        setUnplaced(focusItem ? [focusItem] : [])
+        setUnplacedTotal(focusItem ? 1 : 0)
+      } else {
+        setUnplaced([])
+        setUnplacedTotal(0)
+      }
+      setUnplacedOffset(0)
+      return
+    }
     const data = await tierApi.getUnplacedItems(setId, offset, POOL_LIMIT, poolSort)
     setUnplaced(data.items)
     setUnplacedTotal(data.total)
     setUnplacedOffset(offset)
-  }, [setId, poolSort])
+  }, [setId, poolSort, focusItemId, items])
 
   useEffect(() => {
     loadLevels()
@@ -272,7 +288,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                         <div
                           data-tier-item
                           data-item-id={item.item_id}
-                          className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer transition relative ${draggingId === item.item_id ? 'opacity-30' : ''} ${dropIndicator?.levelId === level.id && dropIndicator.index === idx ? 'border-l-[3px] border-l-blue-500 border-y border-y-gray-600 border-r border-r-gray-600' : 'border border-gray-600 hover:border-gray-400'}`}
+                          className={`h-full ${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer transition relative ${draggingId === item.item_id ? 'opacity-30' : ''} ${focusItemId === item.item_id ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-gray-900' : ''} ${dropIndicator?.levelId === level.id && dropIndicator.index === idx ? 'border-l-[3px] border-l-blue-500 border-y border-y-gray-600 border-r border-r-gray-600' : 'border border-gray-600 hover:border-gray-400'}`}
                           draggable
                           onDragStart={e => handleDragStart(e, item.item_id)}
                           onDragEnd={handleDragEnd}
@@ -381,7 +397,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
             {unplaced.map(item => (
               <div
                 key={item.id}
-                className={`${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer border border-gray-700 hover:border-gray-500 transition ${draggingId === item.id ? 'opacity-30' : ''} relative`}
+                className={`${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer border border-gray-700 hover:border-gray-500 transition ${draggingId === item.id ? 'opacity-30' : ''} ${focusItemId === item.id ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-gray-900' : ''} relative`}
                 draggable
                 onDragStart={e => handleDragStart(e, item.id)}
                 onDragEnd={handleDragEnd}

@@ -76,6 +76,21 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
   const [sortAsc, setSortAsc] = useState(() => localStorage.getItem('files:sortAsc') !== 'false')
   const [newName, setNewName] = useState('')
   const [thumbCache, setThumbCache] = useState<Map<string, string>>(new Map())
+  const [previewImage, setPreviewImage] = useState<{ path: string; fileName: string } | null>(null)
+  const [previewBase64, setPreviewBase64] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!previewImage) { setPreviewBase64(null); return }
+    imageApi.read(previewImage.path).then(b64 => setPreviewBase64(b64 as string | null)).catch(() => setPreviewBase64(null))
+  }, [previewImage])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' && selected.size > 0 && !renaming) handleDelete()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [selected, renaming])
 
   // Drag selection state
   const [dragSelecting, setDragSelecting] = useState(false)
@@ -418,22 +433,28 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                     ) : (
                       <span className="text-3xl">📹</span>
                     )}
-                    <button
-                      onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
-                      className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
-                    ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-                    {!file.thumbPath && <button
-                      onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
-                      className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
-                    ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>}
-                    {file.thumbPath && <button
-                      onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { if (res.debug) console.log('[autoPlace]', file.baseName, res.debug); showToast('배치 대상이 없습니다') } }}
-                      className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
-                    ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
-                    {searchUrl && <button
-                      onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + getProductNumber(file.baseName, files.map(f => f.baseName))) }}
-                      className="absolute bottom-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover/thumb:opacity-100 transition"
-                    ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
+                    <div className="absolute bottom-1 left-1 flex gap-1 opacity-0 group-hover/thumb:opacity-100 transition">
+                      <button
+                        onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
+                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                      ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                      {searchUrl && <button
+                        onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + getProductNumber(file.baseName, files.map(f => f.baseName))) }}
+                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                      ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
+                      {!file.thumbPath ? <button
+                        onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
+                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                      ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                      : <button
+                        onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { if (res.debug) console.log('[autoPlace]', file.baseName, res.debug); showToast('배치 대상이 없습니다') } }}
+                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                      ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
+                      {file.thumbPath && <button
+                        onClick={e => { e.stopPropagation(); setPreviewImage({ path: file.thumbPath!, fileName: file.fileName }) }}
+                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                      ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>}
+                    </div>
                   </div>
                   <span className="text-xs text-gray-300 text-center truncate w-full" title={file.baseName}>{file.baseName}</span>
                 </div>
@@ -445,7 +466,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                   <span className="w-6 text-center shrink-0 cursor-pointer hover:text-white" onClick={() => toggleSort('thumb')}>썸{sortArrow('thumb')}</span>
                   <span className="flex-1 min-w-0 cursor-pointer hover:text-white" onClick={() => toggleSort('name')}>파일명{sortArrow('name')}</span>
                   <span className="w-16 text-right cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('size')}>용량{sortArrow('size')}</span>
-                  <span className="w-20 text-center shrink-0">기능</span>
+                  <span className="w-24 text-center shrink-0">기능</span>
                   <span className="w-36 text-center cursor-pointer hover:text-white shrink-0" onClick={() => toggleSort('date')}>등록일{sortArrow('date')}</span>
                 </div>
                 {sortedFiles.map(file => {
@@ -464,11 +485,12 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                       <span className="w-6 text-center shrink-0">{file.thumbPath ? <span className="text-green-400 text-xs">●</span> : <span className="text-gray-600 text-xs">○</span>}</span>
                       <span className="text-sm text-gray-300 truncate flex-1 min-w-0" title={file.baseName}>{file.baseName}</span>
                       <span className="text-xs text-gray-500 w-16 text-right shrink-0">{formatFileSize(file.fileSize)}</span>
-                      <span className="w-20 flex items-center justify-center gap-1.5 shrink-0">
+                      <span className="w-24 flex items-center justify-center gap-1.5 shrink-0">
                         <button onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                         {searchUrl && <button onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + getProductNumber(file.baseName, files.map(f => f.baseName))) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
                         <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                         <button onClick={async e => { e.stopPropagation(); if (!file.thumbPath) return; showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { if (res.debug) console.log('[autoPlace]', file.baseName, res.debug); showToast('배치 대상이 없습니다') } }} className={file.thumbPath ? 'text-white hover:text-blue-400' : 'text-gray-600 cursor-default'}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
+                        <button onClick={e => { e.stopPropagation(); if (!file.thumbPath) return; setPreviewImage({ path: file.thumbPath, fileName: file.fileName }) }} className={file.thumbPath ? 'text-white hover:text-blue-400' : 'text-gray-600 cursor-default'}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                       </span>
                       <span className="text-xs text-gray-500 w-36 text-center shrink-0">{formatDate(file.mtime)}</span>
                     </div>
@@ -540,6 +562,30 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
           onClose={() => setShowUrlModal(false)}
           onSelect={url => setSearchUrl(url)}
         />
+      )}
+
+      {/* Image preview modal */}
+      {previewImage && previewBase64 && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <img src={previewBase64} className="max-w-full max-h-[90vh] object-contain rounded" />
+            <div className="absolute top-2 right-2 flex gap-1">
+              <button
+                onClick={async () => {
+                  if (!confirm(`${previewImage.fileName}의 커버 이미지를 삭제하시겠습니까?`)) return
+                  await shellApi.deleteFiles([previewImage.path])
+                  setPreviewImage(null)
+                  loadFiles()
+                }}
+                className="bg-black/60 hover:bg-red-600 text-white p-1.5 rounded"
+              ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="bg-black/60 hover:bg-black/80 text-white p-1.5 rounded"
+              ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast */}

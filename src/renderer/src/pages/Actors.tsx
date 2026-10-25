@@ -13,6 +13,7 @@ import PhysicalCorrectionModal, { calcPhysicalScore, computeStats, loadSettings,
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import { getDivision, DIV_LABEL, DIV_COLOR } from '../components/cup/cupConstants'
 import { getAge, getDebutAge } from '../utils/dateHelpers'
+import TierEditor from '../components/TierEditor'
 
 interface ActorsProps {
   onNavigateToWork?: (id: number) => void
@@ -50,6 +51,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
   const [refreshKey, setRefreshKey] = useState(0)
   const [masterPointsMap, setMasterPointsMap] = useState<Map<number, { rank: number; total_points: number; master_run_count: number }>>(new Map())
   const [tierMap, setTierMap] = useState<Map<number, { tier_name: string; tier_color: string; tier_rank: number }>>(new Map())
+  const [tierEditorActorId, setTierEditorActorId] = useState<number | null>(null)
+  const [masterActorTierSetId, setMasterActorTierSetId] = useState<number | null>(null)
   const [tierOrder, setTierOrder] = useState<number[]>([])
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
@@ -84,6 +87,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     const data = await tierApi.masterRanking('actor')
     setTierMap(new Map(data.map(r => [r.id, { tier_name: r.tier_name, tier_color: r.tier_color, tier_rank: r.tier_rank }])))
     setTierOrder(data.map(r => r.id))
+    tierApi.listSets({ type: 'actor', isMaster: true }).then((sets: any) => { if (sets.length > 0) setMasterActorTierSetId(sets[0].id) })
   }, [])
 
   const loadActors = useCallback(async () => {
@@ -148,6 +152,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     if (search.realNameNull) params.realNameNull = true
     if (search.deletePending) params.deletePending = true
     if (search.excludeFilter !== 'hide') params.excludeFilter = search.excludeFilter
+    if (search.untiered) params.untiered = true
     const list = await actorsApi.list(params) as Actor[]
     setActors(list)
   }, [search, sortBy, sortDir])
@@ -430,7 +435,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                   <div className="flex items-center justify-between gap-1">
                     <div className="flex items-center gap-1 truncate flex-1">
                       <p className="text-sm font-bold text-white truncate">{a.name}</p>
-                      {tierMap.has(a.id) && (() => { const t = tierMap.get(a.id)!; return <span className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0" style={{ backgroundColor: t.tier_color }}>{t.tier_name} #{t.tier_rank}</span> })()}
+                      {(() => { const t = tierMap.get(a.id); return <button onClick={e => { e.stopPropagation(); setTierEditorActorId(a.id) }} className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0 hover:opacity-80" style={{ backgroundColor: t?.tier_color ?? '#4b5563' }}>{t ? `${t.tier_name} #${t.tier_rank}` : '-'}</button> })()}
                     </div>
                     <p className="text-sm font-bold text-yellow-400 flex-shrink-0">{(a.avg_score ?? 0).toFixed(2)}점</p>
                   </div>
@@ -577,6 +582,22 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
 
       {showPhysical && (
         <PhysicalCorrectionModal onClose={() => setShowPhysical(false)} onViewActor={onNavigateToActor} />
+      )}
+
+      {tierEditorActorId && masterActorTierSetId && (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center">
+          <div className="bg-gray-900 rounded-xl w-full h-[calc(100vh-40px)] overflow-hidden">
+            <TierEditor
+              setId={masterActorTierSetId}
+              setName="마스터 배우 티어"
+              setType="actor"
+              onBack={() => { setTierEditorActorId(null); loadActors(); loadTierMap() }}
+              onNavigateToActor={onNavigateToActor}
+              onNavigateToWork={(id) => onNavigateToWork?.(id)}
+              focusItemId={tierEditorActorId}
+            />
+          </div>
+        </div>
       )}
     </div>
   )

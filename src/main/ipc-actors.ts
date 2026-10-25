@@ -50,6 +50,7 @@ export function registerActorsHandlers(): void {
     deletePending?: boolean
     showExcluded?: boolean
     excludeFilter?: 'hide' | 'include' | 'only'
+    untiered?: boolean
   }) => {
     let sql = `
       WITH stats AS (
@@ -178,6 +179,9 @@ export function registerActorsHandlers(): void {
     if (params?.commentNull) { conditions.push("(a.comment IS NULL OR TRIM(a.comment) = '')") }
     if (params?.realNameNull) { conditions.push("(a.real_name IS NULL OR TRIM(a.real_name) = '')") }
     if (params?.deletePending) { conditions.push('COALESCE(a.delete_pending, 0) = 1') }
+    if (params?.untiered) {
+      conditions.push("NOT EXISTS (SELECT 1 FROM tier_items ti JOIN tier_sets ts ON ts.id = ti.set_id AND ts.type = 'actor' AND ts.is_master = 1 WHERE ti.item_id = a.id)")
+    }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')

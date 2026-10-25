@@ -30,6 +30,7 @@ export function registerWorksHandlers(): void {
     deletePending?: boolean
     excludeFilter?: 'hide' | 'include' | 'only'
     fileStatus?: 'all' | 'file' | 'link' | 'none'
+    untiered?: boolean
     actorCountFrom?: number
     actorCountTo?: number
     actorCountNull?: boolean
@@ -134,6 +135,11 @@ export function registerWorksHandlers(): void {
       conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'url') AND NOT EXISTS (SELECT 1 FROM work_files wf2 WHERE wf2.work_id = w.id AND wf2.type = 'local')")
     } else if (params?.fileStatus === 'none') {
       conditions.push('NOT EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id)')
+    }
+
+    // 미배치 티어 필터
+    if (params?.untiered) {
+      conditions.push("NOT EXISTS (SELECT 1 FROM tier_items ti JOIN tier_sets ts ON ts.id = ti.set_id AND ts.type = 'work' AND ts.is_master = 1 WHERE ti.item_id = w.id)")
     }
 
     if (params?.actorCountFrom !== undefined) {
