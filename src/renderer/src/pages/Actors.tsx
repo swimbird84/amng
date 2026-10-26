@@ -14,6 +14,7 @@ import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import { getDivision, DIV_LABEL, DIV_COLOR } from '../components/cup/cupConstants'
 import { getAge, getDebutAge } from '../utils/dateHelpers'
 import TierEditor from '../components/TierEditor'
+import WorkDetailModal from '../components/WorkDetailModal'
 
 interface ActorsProps {
   onNavigateToWork?: (id: number) => void
@@ -53,6 +54,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
   const [tierMap, setTierMap] = useState<Map<number, { tier_name: string; tier_color: string; tier_rank: number }>>(new Map())
   const [tierEditorActorId, setTierEditorActorId] = useState<number | null>(null)
   const [masterActorTierSetId, setMasterActorTierSetId] = useState<number | null>(null)
+  const [tierActorDetailId, setTierActorDetailId] = useState<number | null>(null)
+  const [tierWorkDetailId, setTierWorkDetailId] = useState<number | null>(null)
   const [tierOrder, setTierOrder] = useState<number[]>([])
   const [deleteMode, setDeleteMode] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
@@ -592,12 +595,32 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
               setName="마스터 배우 티어"
               setType="actor"
               onBack={() => { setTierEditorActorId(null); loadActors(); loadTierMap() }}
-              onNavigateToActor={onNavigateToActor}
-              onNavigateToWork={(id) => onNavigateToWork?.(id)}
+              onNavigateToActor={(id) => setTierActorDetailId(id)}
+              onNavigateToWork={(id) => setTierWorkDetailId(id)}
               focusItemId={tierEditorActorId}
             />
           </div>
         </div>
+      )}
+
+      {tierActorDetailId && (
+        <ActorDetailModal
+          actorId={tierActorDetailId}
+          onClose={() => setTierActorDetailId(null)}
+          onViewWork={(id) => { setTierActorDetailId(null); setTierWorkDetailId(id) }}
+          zIndex={80}
+          hideTierButton
+        />
+      )}
+
+      {tierWorkDetailId && (
+        <WorkDetailModal
+          workId={tierWorkDetailId}
+          onClose={() => setTierWorkDetailId(null)}
+          onViewActor={(id) => { setTierWorkDetailId(null); setTierActorDetailId(id) }}
+          zIndex={80}
+          hideTierButton
+        />
       )}
     </div>
   )

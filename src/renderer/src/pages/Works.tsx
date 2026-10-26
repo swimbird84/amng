@@ -10,6 +10,7 @@ import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import WorkCard from '../components/WorkCard'
 import UrlReplaceModal from '../components/UrlReplaceModal'
 import TierEditor from '../components/TierEditor'
+import ActorDetailModal from '../components/ActorDetailModal'
 
 const BATCH_SIZE = 100
 
@@ -50,6 +51,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const [showReplaceModal, setShowReplaceModal] = useState(false)
   const [tierEditorWorkId, setTierEditorWorkId] = useState<number | null>(null)
   const [masterWorkTierSetId, setMasterWorkTierSetId] = useState<number | null>(null)
+  const [tierActorDetailId, setTierActorDetailId] = useState<number | null>(null)
+  const [tierWorkDetailId, setTierWorkDetailId] = useState<number | null>(null)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [scanProgress, setScanProgress] = useState<{ phase: 'scanning' | 'registering' | 'done'; current: number; total: number; fileName: string; result?: { added: number; duplicates: number } } | null>(null)
@@ -612,12 +615,32 @@ export default function Works({ onNavigateToActor }: WorksProps) {
               setName="마스터 작품 티어"
               setType="work"
               onBack={() => { setTierEditorWorkId(null); refreshWorks(); loadMasterPoints() }}
-              onNavigateToActor={() => {}}
-              onNavigateToWork={(id) => { setTierEditorWorkId(null); handleSelect(id) }}
+              onNavigateToActor={(id) => setTierActorDetailId(id)}
+              onNavigateToWork={(id) => setTierWorkDetailId(id)}
               focusItemId={tierEditorWorkId}
             />
           </div>
         </div>
+      )}
+
+      {tierActorDetailId && (
+        <ActorDetailModal
+          actorId={tierActorDetailId}
+          onClose={() => setTierActorDetailId(null)}
+          onViewWork={(id) => { setTierActorDetailId(null); setTierWorkDetailId(id) }}
+          zIndex={80}
+          hideTierButton
+        />
+      )}
+
+      {tierWorkDetailId && (
+        <WorkDetailModal
+          workId={tierWorkDetailId}
+          onClose={() => setTierWorkDetailId(null)}
+          onViewActor={(id) => { setTierWorkDetailId(null); setTierActorDetailId(id) }}
+          zIndex={80}
+          hideTierButton
+        />
       )}
 
       {showForm && (

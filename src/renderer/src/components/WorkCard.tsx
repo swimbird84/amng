@@ -85,7 +85,7 @@ export default function WorkCard({
           <button
             onClick={(e) => { e.stopPropagation(); if (filePlayable && onPlay) onPlay(e) }}
             className={`absolute inset-0 m-auto w-10 h-10 rounded-full flex items-center justify-center transition-opacity ${
-              filePlayable ? 'bg-red-600 hover:bg-red-500 cursor-pointer opacity-70 hover:opacity-100' : 'bg-gray-600 cursor-default opacity-50'
+              filePlayable ? (fileType === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') + ' cursor-pointer opacity-70 hover:opacity-100' : 'bg-gray-600 cursor-default opacity-50'
             }`}
           >
             {fileType === 'url'

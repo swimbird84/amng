@@ -10,15 +10,17 @@ import { hashColor, studioColor } from '../utils/colorHelpers'
 import { emitDataChanged } from '../dataEvents'
 import MasterRecordModal from './cup/MasterRecordModal'
 import TierEditor from './TierEditor'
+import ActorDetailModal from './ActorDetailModal'
 
 interface Props {
   workId: number
   onClose: () => void
   onViewActor: (id: number) => void
   zIndex?: number
+  hideTierButton?: boolean
 }
 
-export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex = 60 }: Props) {
+export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex = 60, hideTierButton }: Props) {
   const [work, setWork] = useState<(Work & { actors?: Actor[]; tags?: Tag[] }) | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [showForm, setShowForm] = useState(false)
@@ -29,6 +31,8 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
   const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string; tier_rank: number } | null>(null)
   const [showTierEditor, setShowTierEditor] = useState(false)
   const [masterTierSetId, setMasterTierSetId] = useState<number | null>(null)
+  const [tierActorDetailId, setTierActorDetailId] = useState<number | null>(null)
+  const [tierWorkDetailId, setTierWorkDetailId] = useState<number | null>(null)
   const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
 
   const onCloseRef = useRef(onClose)
@@ -113,12 +117,12 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                   else await shellApi.openPath(firstAvailable.file_path)
                 }}
                 className={`absolute inset-0 m-auto w-14 h-14 rounded-full flex items-center justify-center ${
-                  firstAvailable ? 'bg-red-600 hover:bg-red-500 cursor-pointer' : 'bg-gray-600 cursor-not-allowed opacity-50'
+                  firstAvailable ? (firstAvailable.type === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') + ' cursor-pointer' : 'bg-gray-600 cursor-not-allowed opacity-50'
                 }`}
               >
-                <svg viewBox="0 0 24 24" className="w-7 h-7 ml-0.5" fill="white">
-                  <polygon points="8,5 20,12 8,19" />
-                </svg>
+                {firstAvailable?.type === 'url'
+                  ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                  : <svg viewBox="0 0 24 24" className="w-7 h-7 ml-0.5" fill="white"><polygon points="8,5 20,12 8,19" /></svg>}
               </button>
             </div>
             <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-5 space-y-3">
@@ -129,7 +133,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                   </button>
                 )}
-                <button onClick={() => masterTierSetId && setShowTierEditor(true)} className="text-xs px-1.5 py-0.5 rounded text-white cursor-pointer hover:opacity-80" style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '미 #-'}</button>
+                <button onClick={() => !hideTierButton && masterTierSetId && setShowTierEditor(true)} className={`text-xs px-1.5 py-0.5 rounded text-white ${hideTierButton ? 'cursor-default opacity-60' : 'cursor-pointer hover:opacity-80'}`} style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }} title={hideTierButton ? '티어 편집 중' : undefined}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '미 #-'}</button>
                 {!!work.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                 {!!work.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                 <button
@@ -206,12 +210,12 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                           else await shellApi.openPath(f.file_path)
                         }}
                         className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${
-                          fileStatuses[f.id] ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'
+                          fileStatuses[f.id] ? (f.type === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') : 'bg-gray-600 opacity-50 cursor-not-allowed'
                         }`}
                       >
-                        <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 ml-0.5" fill="white">
-                          <polygon points="8,5 20,12 8,19" />
-                        </svg>
+                        {f.type === 'url'
+                          ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                          : <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 ml-0.5" fill="white"><polygon points="8,5 20,12 8,19" /></svg>}
                       </button>
                       {f.type === 'url' ? (
                         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2">
@@ -361,12 +365,30 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
               setName="마스터 작품 티어"
               setType="work"
               onBack={() => { setShowTierEditor(false); loadWork() }}
-              onNavigateToActor={() => {}}
-              onNavigateToWork={() => {}}
+              onNavigateToActor={(id) => setTierActorDetailId(id)}
+              onNavigateToWork={(id) => setTierWorkDetailId(id)}
               focusItemId={work.id}
             />
           </div>
         </div>
+      )}
+      {tierActorDetailId && (
+        <ActorDetailModal
+          actorId={tierActorDetailId}
+          onClose={() => setTierActorDetailId(null)}
+          onViewWork={(id) => { setTierActorDetailId(null); setTierWorkDetailId(id) }}
+          zIndex={80}
+          hideTierButton
+        />
+      )}
+      {tierWorkDetailId && (
+        <WorkDetailModal
+          workId={tierWorkDetailId}
+          onClose={() => setTierWorkDetailId(null)}
+          onViewActor={(id) => { setTierWorkDetailId(null); setTierActorDetailId(id) }}
+          zIndex={80}
+          hideTierButton
+        />
       )}
     </>
   )

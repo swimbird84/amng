@@ -13,17 +13,19 @@ import { emitDataChanged } from '../dataEvents'
 import MasterRecordModal from './cup/MasterRecordModal'
 import ActorWorksModal from './ActorWorksModal'
 import TierEditor from './TierEditor'
+import WorkDetailModal from './WorkDetailModal'
 
 interface Props {
   actorId: number
   onClose: () => void
   onViewWork: (id: number) => void
   zIndex?: number
+  hideTierButton?: boolean
 }
 
 const defaultScores = { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 0, sexy: 0, charm: 0, technique: 0, proportions: 0 }
 
-export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex = 60 }: Props) {
+export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex = 60, hideTierButton }: Props) {
   const [actor, setActor] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
   const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
   const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
@@ -41,6 +43,8 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   const [masterTier, setMasterTier] = useState<{ tier_name: string; tier_color: string; tier_rank: number } | null>(null)
   const [showTierEditor, setShowTierEditor] = useState(false)
   const [masterTierSetId, setMasterTierSetId] = useState<number | null>(null)
+  const [tierWorkDetailId, setTierWorkDetailId] = useState<number | null>(null)
+  const [tierActorDetailId, setTierActorDetailId] = useState<number | null>(null)
 
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -167,7 +171,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               <div className="flex-1 pt-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-white font-bold text-lg">{actor.name}</h3>
-                  <button onClick={() => masterTierSetId && setShowTierEditor(true)} className="text-xs px-1.5 py-0.5 rounded text-white cursor-pointer hover:opacity-80" style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '미 #-'}</button>
+                  <button onClick={() => !hideTierButton && masterTierSetId && setShowTierEditor(true)} className={`text-xs px-1.5 py-0.5 rounded text-white ${hideTierButton ? 'cursor-default opacity-60' : 'cursor-pointer hover:opacity-80'}`} style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }} title={hideTierButton ? '티어 편집 중' : undefined}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '미 #-'}</button>
                   {!!actor.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                   {!!actor.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                   <button
@@ -426,7 +430,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                                 else shellApi.openPath(firstAvailable.file_path)
                               }}
                               disabled={!firstAvailable}
-                              className={`w-7 rounded flex items-center justify-center flex-shrink-0 ${firstAvailable ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
+                              className={`w-7 rounded flex items-center justify-center flex-shrink-0 ${firstAvailable ? (firstAvailable.type === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
                             >
                               {firstAvailable?.type === 'url'
                                 ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
@@ -527,12 +531,30 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               setName="마스터 배우 티어"
               setType="actor"
               onBack={() => { setShowTierEditor(false); loadActor() }}
-              onNavigateToActor={() => {}}
-              onNavigateToWork={() => {}}
+              onNavigateToActor={(id) => setTierActorDetailId(id)}
+              onNavigateToWork={(id) => setTierWorkDetailId(id)}
               focusItemId={actor.id}
             />
           </div>
         </div>
+      )}
+      {tierWorkDetailId && (
+        <WorkDetailModal
+          workId={tierWorkDetailId}
+          onClose={() => setTierWorkDetailId(null)}
+          onViewActor={(id) => { setTierWorkDetailId(null); setTierActorDetailId(id) }}
+          zIndex={80}
+          hideTierButton
+        />
+      )}
+      {tierActorDetailId && (
+        <ActorDetailModal
+          actorId={tierActorDetailId}
+          onClose={() => setTierActorDetailId(null)}
+          onViewWork={(id) => { setTierActorDetailId(null); setTierWorkDetailId(id) }}
+          zIndex={80}
+          hideTierButton
+        />
       )}
     </>
   )

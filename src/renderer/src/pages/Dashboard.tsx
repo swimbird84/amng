@@ -555,46 +555,6 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
           )}
         </div>
 
-        {/* 마스터 랭킹 */}
-        <div>
-          <SectionTitle>마스터 랭킹</SectionTitle>
-          <h3 className="text-gray-300 font-bold text-sm mb-3">작품 TOP 10 {currentSeasonName && <span className="text-gray-500 font-normal">({currentSeasonName})</span>}</h3>
-          {masterWorkRows.length > 0 ? (
-            <div className="grid grid-cols-10 gap-2 mb-4">
-              {masterWorkRows.map((r) => (
-                <WorkMiniCard
-                  key={r.id}
-                  work={{ id: r.id, product_number: r.name, cover_path: r.photo_path, rating: 0 } as Work}
-                  onClick={() => onNavigateToWork(r.id)}
-                  onMouseMove={(e) => setTooltip({ type: 'work', id: r.id, x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setTooltip(null)}
-                  dateLabel={`#${r.rank} · ${r.total_points}pt`}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-sm mb-4">아직 등록된 랭킹이 없습니다</p>
-          )}
-          <h3 className="text-gray-300 font-bold text-sm mb-3">배우 TOP 10 {currentSeasonName && <span className="text-gray-500 font-normal">({currentSeasonName})</span>}</h3>
-          {masterActorRows.length > 0 ? (
-            <div className="grid grid-cols-10 gap-2">
-              {masterActorRows.map((r) => (
-                <ActorRankCard
-                  key={r.id}
-                  actor={{ id: r.id, name: r.name, photo_path: r.photo_path } as Actor}
-                  rank={r.rank}
-                  subtitle={`${r.total_points}pt`}
-                  onClick={() => onNavigateToActor(r.id)}
-                  onMouseMove={(e) => setTooltip({ type: 'actor', id: r.id, x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setTooltip(null)}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-sm">아직 등록된 랭킹이 없습니다</p>
-          )}
-        </div>
-
         {/* 마스터 티어 */}
         <div>
           <SectionTitle>마스터 티어</SectionTitle>
@@ -632,6 +592,46 @@ export default function Dashboard({ onNavigateToWork, onNavigateToActor }: Props
             </div>
           ) : (
             <p className="text-gray-500 text-sm">최상위 티어가 비어있습니다</p>
+          )}
+        </div>
+
+        {/* 마스터 랭킹 */}
+        <div>
+          <SectionTitle>마스터 랭킹</SectionTitle>
+          <h3 className="text-gray-300 font-bold text-sm mb-3">작품 TOP 10 {currentSeasonName && <span className="text-gray-500 font-normal">({currentSeasonName})</span>}</h3>
+          {masterWorkRows.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2 mb-4">
+              {masterWorkRows.map((r) => (
+                <WorkMiniCard
+                  key={r.id}
+                  work={{ id: r.id, product_number: r.name, cover_path: r.photo_path, rating: 0 } as Work}
+                  onClick={() => onNavigateToWork(r.id)}
+                  onMouseMove={(e) => setTooltip({ type: 'work', id: r.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
+                  dateLabel={`#${r.rank} · ${r.total_points}pt`}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm mb-4">아직 등록된 랭킹이 없습니다</p>
+          )}
+          <h3 className="text-gray-300 font-bold text-sm mb-3">배우 TOP 10 {currentSeasonName && <span className="text-gray-500 font-normal">({currentSeasonName})</span>}</h3>
+          {masterActorRows.length > 0 ? (
+            <div className="grid grid-cols-10 gap-2">
+              {masterActorRows.map((r) => (
+                <ActorRankCard
+                  key={r.id}
+                  actor={{ id: r.id, name: r.name, photo_path: r.photo_path } as Actor}
+                  rank={r.rank}
+                  subtitle={`${r.total_points}pt`}
+                  onClick={() => onNavigateToActor(r.id)}
+                  onMouseMove={(e) => setTooltip({ type: 'actor', id: r.id, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">아직 등록된 랭킹이 없습니다</p>
           )}
         </div>
 
