@@ -55,8 +55,16 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
     if (!detail) return
     setActor(detail)
     const allFiles = (detail.works ?? []).flatMap((w) => w.files ?? [])
-    const results = await Promise.all(allFiles.map((f) => f.type === 'url' ? Promise.resolve(true) : shellApi.fileExists(f.file_path)))
-    setFileStatuses(Object.fromEntries(allFiles.map((f, i) => [f.id, results[i]])))
+    const statuses: Record<number, boolean> = {}
+    const localFiles = allFiles.filter(f => f.type !== 'url')
+    for (const f of allFiles) { if (f.type === 'url') statuses[f.id] = true }
+    const BATCH = 10
+    for (let b = 0; b < localFiles.length; b += BATCH) {
+      const batch = localFiles.slice(b, b + BATCH)
+      const results = await Promise.all(batch.map(f => shellApi.fileExists(f.file_path)))
+      batch.forEach((f, i) => { statuses[f.id] = results[i] })
+    }
+    setFileStatuses(statuses)
     // phys score
     try {
       const physData = await actorsApi.physicalData() as ActorPhysicalData[]
@@ -517,7 +525,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               setName="마스터 배우 티어"
               setType="actor"
               onBack={() => { setShowTierEditor(false); loadActor() }}
-              onNavigateToActor={onViewActor}
+              onNavigateToActor={() => {}}
               onNavigateToWork={() => {}}
               focusItemId={actor.id}
             />

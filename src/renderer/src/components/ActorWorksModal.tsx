@@ -139,8 +139,12 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
       for (const id of newIds) { if (!(id in newPF)) newP[id] = false }
       const localFiles = files.filter(f => f.type === 'local')
       if (localFiles.length > 0) {
-        const results = await Promise.all(localFiles.map(f => shellApi.fileExists(f.file_path)))
-        localFiles.forEach((f, i) => { newP[f.work_id] = results[i] })
+        const BATCH = 10
+        for (let b = 0; b < localFiles.length; b += BATCH) {
+          const batch = localFiles.slice(b, b + BATCH)
+          const results = await Promise.all(batch.map(f => shellApi.fileExists(f.file_path)))
+          batch.forEach((f, i) => { newP[f.work_id] = results[i] })
+        }
       }
       setPlayFiles(prev => ({ ...prev, ...newPF }))
       setPlayable(prev => ({ ...prev, ...newP }))
