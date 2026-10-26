@@ -11,6 +11,7 @@ interface WorkCardProps {
   deleteMode?: boolean
   deleteSelected?: boolean
   filePlayable?: boolean
+  fileType?: string
   masterPoints?: { rank: number; total_points: number; master_run_count: number }
   tierInfo?: { tier_name: string; tier_color: string; tier_rank: number }
   onClick?: () => void
@@ -26,7 +27,7 @@ interface WorkCardProps {
 
 export default function WorkCard({
   work: w, refreshKey, selected, deleteMode, deleteSelected,
-  filePlayable, masterPoints: mp, tierInfo,
+  filePlayable, fileType, masterPoints: mp, tierInfo,
   onClick, onMouseDown, onMouseEnter,
   onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onSearch, onTierClick,
 }: WorkCardProps) {
@@ -87,7 +88,9 @@ export default function WorkCard({
               filePlayable ? 'bg-red-600 hover:bg-red-500 cursor-pointer opacity-70 hover:opacity-100' : 'bg-gray-600 cursor-default opacity-50'
             }`}
           >
-            <span className="text-white text-lg ml-0.5">{'\u25B6'}</span>
+            {fileType === 'url'
+              ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              : <span className="text-white text-lg ml-0.5">{'\u25B6'}</span>}
           </button>
         )}
       </div>
@@ -96,7 +99,7 @@ export default function WorkCard({
           <div className="flex items-center gap-1 truncate flex-1">
             <p className="text-sm font-bold text-white truncate">{w.product_number || '-'}</p>
             {!!w.is_excluded && <span className="text-[10px] px-1 py-0.5 rounded bg-orange-900/60 text-orange-400 shrink-0">제외</span>}
-            <button onClick={e => { e.stopPropagation(); onTierClick?.(e) }} className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0 hover:opacity-80" style={{ backgroundColor: tierInfo?.tier_color ?? '#4b5563' }}>{tierInfo ? `${tierInfo.tier_name} #${tierInfo.tier_rank}` : '-'}</button>
+            <button onClick={e => { e.stopPropagation(); onTierClick?.(e) }} className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0 cursor-pointer hover:opacity-80" style={{ backgroundColor: tierInfo?.tier_color ?? '#4b5563' }}>{tierInfo ? `${tierInfo.tier_name} #${tierInfo.tier_rank}` : '미 #-'}</button>
           </div>
           <div className="flex-shrink-0">
             <Rating value={w.rating} readonly small />

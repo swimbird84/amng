@@ -435,7 +435,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                   <div className="flex items-center justify-between gap-1">
                     <div className="flex items-center gap-1 truncate flex-1">
                       <p className="text-sm font-bold text-white truncate">{a.name}</p>
-                      {(() => { const t = tierMap.get(a.id); return <button onClick={e => { e.stopPropagation(); setTierEditorActorId(a.id) }} className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0 hover:opacity-80" style={{ backgroundColor: t?.tier_color ?? '#4b5563' }}>{t ? `${t.tier_name} #${t.tier_rank}` : '-'}</button> })()}
+                      {(() => { const t = tierMap.get(a.id); return <button onClick={e => { e.stopPropagation(); setTierEditorActorId(a.id) }} className="text-[10px] font-bold px-1 py-0.5 rounded text-white shrink-0 cursor-pointer hover:opacity-80" style={{ backgroundColor: t?.tier_color ?? '#4b5563' }}>{t ? `${t.tier_name} #${t.tier_rank}` : '미 #-'}</button> })()}
                     </div>
                     <p className="text-sm font-bold text-yellow-400 flex-shrink-0">{(a.avg_score ?? 0).toFixed(2)}점</p>
                   </div>

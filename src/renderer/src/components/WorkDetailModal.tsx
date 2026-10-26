@@ -129,7 +129,7 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                   </button>
                 )}
-                <button onClick={() => masterTierSetId && setShowTierEditor(true)} className="text-xs px-1.5 py-0.5 rounded text-white cursor-pointer hover:opacity-80" style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '-'}</button>
+                <button onClick={() => masterTierSetId && setShowTierEditor(true)} className="text-xs px-1.5 py-0.5 rounded text-white cursor-pointer hover:opacity-80" style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '미 #-'}</button>
                 {!!work.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                 {!!work.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                 <button

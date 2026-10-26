@@ -523,6 +523,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 deleteMode={deleteMode}
                 deleteSelected={selectedDeleteIds.has(w.id)}
                 filePlayable={playable[w.id]}
+                fileType={playFiles[w.id]?.type}
                 masterPoints={masterPointsMap.get(w.id)}
                 tierInfo={tierMap.get(w.id)}
                 onMouseDown={(e) => {

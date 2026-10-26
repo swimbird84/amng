@@ -85,7 +85,7 @@ function WorkContent({ work, masterTier }: { work: Work; masterTier?: { tier_nam
         <div className="flex items-center justify-between">
           <p className="font-bold text-gray-300">
             {work.product_number}
-            {masterTier && <span className="ml-1 font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}
+            {masterTier ? <span className="ml-1 font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span> : <span className="ml-1 font-bold text-[11px] text-gray-500">미 #-</span>}
             {!!work.is_favorite && <span className="ml-1 text-pink-500 font-normal">♥</span>}
             {!!work.delete_pending && <span className="ml-1 text-red-500 font-normal text-[11px]">삭제예정</span>}
             {!!work.is_excluded && <span className="ml-1 text-orange-400 font-normal text-[11px]">제외됨</span>}
@@ -121,7 +121,7 @@ function ActorContent({ actor, physScore, masterTier }: { actor: Actor; physScor
     <div className="space-y-1 leading-relaxed">
       <p className="font-bold text-white text-[13px]">
         {actor.name}{' '}
-        {masterTier && <span className="font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span>}{' '}
+        {masterTier ? <span className="font-bold text-[11px]" style={{ color: masterTier.tier_color }}>{masterTier.tier_name} #{masterTier.tier_rank}</span> : <span className="font-bold text-[11px] text-gray-500">미 #-</span>}{' '}
         {!!actor.is_excluded && <span className="text-red-500 font-normal text-[11px]">제외됨</span>}{' '}
         {!!actor.is_favorite && <span className="text-pink-500 font-normal">♥</span>}{' '}
         {!!actor.delete_pending && <span className="text-red-500 font-normal text-[11px]">삭제예정</span>}{' '}

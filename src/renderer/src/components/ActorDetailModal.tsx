@@ -167,7 +167,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               <div className="flex-1 pt-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-white font-bold text-lg">{actor.name}</h3>
-                  <button onClick={() => masterTierSetId && setShowTierEditor(true)} className="text-xs px-1.5 py-0.5 rounded text-white cursor-pointer hover:opacity-80" style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '-'}</button>
+                  <button onClick={() => masterTierSetId && setShowTierEditor(true)} className="text-xs px-1.5 py-0.5 rounded text-white cursor-pointer hover:opacity-80" style={{ backgroundColor: masterTier?.tier_color ?? '#4b5563' }}>{masterTier ? `${masterTier.tier_name} #${masterTier.tier_rank}` : '미 #-'}</button>
                   {!!actor.is_excluded && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/60 text-orange-400">제외됨</span>}
                   {!!actor.delete_pending && <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/60 text-red-400">삭제예정</span>}
                   <button
@@ -428,7 +428,9 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                               disabled={!firstAvailable}
                               className={`w-7 rounded flex items-center justify-center flex-shrink-0 ${firstAvailable ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
                             >
-                              <span className="text-white text-xs">▶</span>
+                              {firstAvailable?.type === 'url'
+                                ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                                : <span className="text-white text-xs">▶</span>}
                             </button>
                           )
                         })()}

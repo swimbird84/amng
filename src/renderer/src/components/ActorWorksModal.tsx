@@ -233,6 +233,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
                 refreshKey={refreshKey}
                 selected={selected?.id === w.id}
                 filePlayable={playable[w.id]}
+                fileType={playFiles[w.id]?.type}
                 masterPoints={masterPointsMap.get(w.id)}
                 onClick={() => handleSelect(w.id)}
                 onTooltipMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
