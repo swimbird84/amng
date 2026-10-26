@@ -103,6 +103,15 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     loadUnplaced(0)
   }, [loadLevels, loadItems, loadUnplaced])
 
+  // Auto-scroll to focused item
+  useEffect(() => {
+    if (!focusItemId) return
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-item-id="${focusItemId}"]`) as HTMLElement | null
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }, [focusItemId, items, unplaced])
+
   const getItemsForLevel = (levelId: number) => items.filter(i => i.level_id === levelId).sort((a, b) => a.sort_order - b.sort_order)
 
   // Tier level actions
@@ -397,6 +406,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
             {unplaced.map(item => (
               <div
                 key={item.id}
+                data-item-id={item.id}
                 className={`${setType === 'actor' ? 'aspect-square' : 'aspect-[800/540]'} rounded overflow-hidden cursor-pointer border border-gray-700 hover:border-gray-500 transition ${draggingId === item.id ? 'opacity-30' : ''} ${focusItemId === item.id ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-gray-900' : ''} relative`}
                 draggable
                 onDragStart={e => handleDragStart(e, item.id)}
