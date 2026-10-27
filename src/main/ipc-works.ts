@@ -489,6 +489,48 @@ export function registerWorksHandlers(): void {
     return { ok: true, newCoverPath }
   })
 
+  // 폴더삭제: 폴더만 휴지통, 아카이빙 없음, DB 유지
+  ipcMain.handle('works:trashFolder', async (_e, workId: number) => {
+    const localFiles = db().prepare("SELECT file_path FROM work_files WHERE work_id = ? AND type = 'local'").all(workId) as { file_path: string }[]
+    if (localFiles.length === 0) return { ok: false, error: '로컬 파일이 없습니다' }
+
+    const folders = [...new Set(localFiles.map(f => path.dirname(f.file_path)))]
+    for (const folder of folders) {
+      if (!fs.existsSync(folder)) continue
+      try { await shell.trashItem(folder) } catch { /* skip */ }
+    }
+
+    db().prepare("DELETE FROM work_files WHERE work_id = ? AND type = 'local'").run(workId)
+    return { ok: true }
+  })
+
+  // 완전삭제: DB 삭제 + 폴더 휴지통
+  ipcMain.handle('works:fullDelete', async (_e, workId: number) => {
+    const blocked = db().prepare(`
+      SELECT 1 FROM cup_entries e
+      JOIN cup_runs r ON r.id = e.run_id
+      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.type = 'work'
+      WHERE r.status = 'in_progress' AND e.item_id = ?
+      LIMIT 1
+    `).get(workId)
+    if (blocked) return { ok: false, blocked: true }
+
+    const localFiles = db().prepare("SELECT file_path FROM work_files WHERE work_id = ? AND type = 'local'").all(workId) as { file_path: string }[]
+    const folders = [...new Set(localFiles.map(f => path.dirname(f.file_path)))]
+    for (const folder of folders) {
+      if (!fs.existsSync(folder)) continue
+      try { await shell.trashItem(folder) } catch { /* skip */ }
+    }
+
+    deleteImagesByPattern('works', workId)
+    db().prepare('DELETE FROM works WHERE id = ?').run(workId)
+    db().prepare(`DELETE FROM master_ranking_history WHERE type = 'work' AND item_id = ?`).run(workId)
+    db().prepare(`DELETE FROM cup_entries WHERE item_id = ? AND run_id IN (SELECT r.id FROM cup_runs r JOIN cup_tournaments t ON t.id = r.tournament_id WHERE t.type = 'work')`).run(workId)
+    db().prepare(`DELETE FROM cup_stats WHERE type = 'work' AND item_id = ?`).run(workId)
+    db().prepare(`DELETE FROM cup_rank_snapshots WHERE item_id = ? AND tournament_id IN (SELECT id FROM cup_tournaments WHERE type = 'work')`).run(workId)
+    return { ok: true }
+  })
+
   ipcMain.handle('work-files:replaceUrl', (_e, oldStr: string, newStr: string) => {
     const count = (db().prepare("SELECT COUNT(*) AS cnt FROM work_files WHERE type = 'url' AND file_path LIKE ?").get(`%${oldStr}%`) as { cnt: number }).cnt
     return { count }

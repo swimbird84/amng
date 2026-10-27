@@ -191,6 +191,7 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [existsMap, setExistsMap] = useState<Record<string, boolean> | null>(null)
+  const [deleteModal, setDeleteModal] = useState(false)
   const checkedRef = useRef(false)
 
   const hasChildren = node.children.length > 0 || node.files.length > 0
@@ -250,23 +251,22 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
     setFileRenaming(null)
   }
 
-  const handleDeleteFolder = async () => {
-    const workCount = node.fileCount
-    const childCount = countAllFolders(node.children)
-    let msg = `"${node.name}" 폴더를 삭제하시겠습니까?\n`
-    if (childCount > 0) {
-      msg += `하위 ${childCount}개 폴더와 관련 작품이 모두 삭제됩니다.`
-    } else {
-      msg += `${workCount}개 파일과 관련 작품이 삭제됩니다.`
+  const handleFolderAction = async (mode: 'dbOnly' | 'folderOnly' | 'archive' | 'full') => {
+    const labels: Record<string, string> = { dbOnly: 'DB삭제', folderOnly: '폴더삭제', archive: '아카이빙', full: '완전삭제' }
+    const descs: Record<string, string> = {
+      dbOnly: 'DB에서 작품 정보를 삭제합니다. 폴더는 유지됩니다.',
+      folderOnly: '폴더를 휴지통으로 이동합니다. DB 작품 정보는 유지됩니다.',
+      archive: '커버를 아카이빙하고 폴더를 휴지통으로 이동합니다. DB 작품 정보는 유지됩니다.',
+      full: 'DB 작품 정보를 삭제하고 폴더를 휴지통으로 이동합니다.',
     }
-    if (!confirm(msg)) return
-
-    const res = await folderApi.deleteFolder(node.path) as { ok: boolean; error?: string; blocked?: boolean; deletedWorks?: number }
+    if (!confirm(`"${node.name}" — ${descs[mode]}\n계속하시겠습니까?`)) return
+    const res = await folderApi.deleteFolder(node.path, mode)
     if (res.ok) {
-      alert(`${res.deletedWorks ?? 0}개 작품이 삭제되었습니다`)
+      alert(`${labels[mode]} 완료` + (res.deletedWorks ? ` (${res.deletedWorks}개 작품 삭제)` : ''))
+      setDeleteModal(false)
       onRefresh()
     } else {
-      alert(res.error || '삭제 실패')
+      alert(res.error || '실패')
     }
   }
 
@@ -318,7 +318,7 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
                 className="text-xs text-gray-400 hover:text-white px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600"
               >수정</button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteFolder() }}
+                onClick={(e) => { e.stopPropagation(); setDeleteModal(true) }}
                 className="text-xs text-gray-400 hover:text-red-400 px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600"
               >삭제</button>
             </>
@@ -328,6 +328,22 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
         </div>
       </div>
       {tooltip && <CardTooltip tooltip={tooltip} />}
+
+      {/* Delete modal */}
+      {deleteModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setDeleteModal(false)}>
+          <div className="bg-gray-800 rounded-lg p-6 flex flex-col gap-3 min-w-[280px]" onClick={e => e.stopPropagation()}>
+            <p className="text-white text-sm font-bold">"{node.name}" ({node.fileCount}개 파일)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => handleFolderAction('dbOnly')} className="bg-red-800 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">DB삭제</button>
+              <button onClick={() => handleFolderAction('folderOnly')} className="bg-orange-800 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">폴더삭제</button>
+              <button onClick={() => handleFolderAction('archive')} className="bg-orange-700 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm">아카이빙</button>
+              <button onClick={() => handleFolderAction('full')} className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded text-sm">완전삭제</button>
+            </div>
+            <button onClick={() => setDeleteModal(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>
+          </div>
+        </div>
+      )}
 
       {/* Inline drop UI */}
       {dropTarget && dropTarget.folderPath === node.path && dragFilesProp && dragFilesProp.length > 0 && (

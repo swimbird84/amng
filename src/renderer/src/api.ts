@@ -8,6 +8,8 @@ export const worksApi = {
   update: (id: number, data: object) => api.invoke('works:update', id, data),
   delete: (id: number) => api.invoke('works:delete', id),
   archiveFolder: (id: number) => api.invoke('works:archiveFolder', id) as Promise<{ ok: boolean; error?: string; newCoverPath?: string }>,
+  trashFolder: (id: number) => api.invoke('works:trashFolder', id) as Promise<{ ok: boolean; error?: string }>,
+  fullDelete: (id: number) => api.invoke('works:fullDelete', id) as Promise<{ ok: boolean; blocked?: boolean }>,
 }
 
 // 배우
@@ -123,7 +125,7 @@ export const folderApi = {
   checkExists: (paths: string[]) => api.invoke('folder:checkExists', paths) as Promise<Record<string, boolean>>,
   renameFolder: (oldPath: string, newPath: string) => api.invoke('folder:rename', oldPath, newPath),
   renameFile: (oldPath: string, newPath: string) => api.invoke('file:rename', oldPath, newPath),
-  deleteFolder: (folderPath: string) => api.invoke('folder:delete', folderPath),
+  deleteFolder: (folderPath: string, mode: 'dbOnly' | 'folderOnly' | 'archive' | 'full' = 'full') => api.invoke('folder:delete', folderPath, mode) as Promise<{ ok: boolean; error?: string; blocked?: boolean; deletedWorks?: number }>,
 }
 
 export const tempApi = {

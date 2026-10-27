@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react'
 import { searchUrlApi, imageApi, shellApi } from '../api'
 
 interface Props {
@@ -10,7 +10,9 @@ interface Props {
 export default function QuickSearchButton({ productNumber, className = 'text-gray-400 hover:text-white', iconSize = 12 }: Props) {
   const [searchUrls, setSearchUrls] = useState<{ id: number; url: string; favicon_path: string | null }[]>([])
   const [faviconCache, setFaviconCache] = useState<Map<number, string>>(new Map())
-  const [popup, setPopup] = useState<{ x: number; y: number } | null>(null)
+  const [popup, setPopup] = useState<{ x: number; y: number; btnH: number } | null>(null)
+  const [adjustedStyle, setAdjustedStyle] = useState<React.CSSProperties>({})
+  const popupRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     const list = await searchUrlApi.list()
@@ -25,6 +27,34 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
 
   useEffect(() => { load() }, [load])
 
+  useLayoutEffect(() => {
+    if (!popup || !popupRef.current) return
+    const el = popupRef.current
+    const rect = el.getBoundingClientRect()
+    const pad = 4
+    let x = popup.x
+    let y = popup.y - 4 // default: above button
+    let translateX = '-50%'
+    let translateY = '-100%'
+
+    // 상단에 공간 부족 → 아래로
+    if (y - rect.height < pad) {
+      // button 아래에 위치시키기 위해 y를 버튼 하단으로 조정
+      y = popup.y + popup.btnH + 4
+      translateY = '0%'
+    }
+    // 좌측 초과
+    if (x - rect.width / 2 < pad) {
+      x = pad + rect.width / 2
+    }
+    // 우측 초과
+    if (x + rect.width / 2 > window.innerWidth - pad) {
+      x = window.innerWidth - pad - rect.width / 2
+    }
+
+    setAdjustedStyle({ left: x, top: y, transform: `translate(${translateX}, ${translateY})` })
+  }, [popup])
+
   if (searchUrls.length === 0 || !productNumber) return null
 
   const handleClick = (e: React.MouseEvent) => {
@@ -33,7 +63,7 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
       shellApi.openExternal(searchUrls[0].url + productNumber)
     } else {
       const rect = e.currentTarget.getBoundingClientRect()
-      setPopup({ x: rect.left + rect.width / 2, y: rect.top })
+      setPopup({ x: rect.left + rect.width / 2, y: rect.top, btnH: rect.height })
     }
   }
 
@@ -43,10 +73,11 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
         <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       </button>
       {popup && (
-        <div className="fixed inset-0 z-50" onClick={() => setPopup(null)}>
+        <div className="fixed inset-0 z-50" onClick={() => { setPopup(null); setAdjustedStyle({}) }}>
           <div
+            ref={popupRef}
             className="absolute flex gap-1 bg-gray-800 border border-gray-600 rounded-lg p-1.5 shadow-xl"
-            style={{ left: popup.x, top: popup.y, transform: 'translate(-50%, -100%) translateY(-4px)' }}
+            style={adjustedStyle.left ? adjustedStyle : { left: popup.x, top: popup.y, transform: 'translate(-50%, -100%) translateY(-4px)', visibility: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             {searchUrls.map(su => (

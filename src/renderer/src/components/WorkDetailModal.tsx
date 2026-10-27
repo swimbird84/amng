@@ -63,13 +63,34 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
     }
   }
 
-  const handleDelete = async () => {
-    if (work && confirm('정말 삭제하시겠습니까?')) {
-      const res = await worksApi.delete(work.id) as { blocked: boolean }
-      if (res?.blocked) { alert('진행 중인 월드컵에 참가 중인 작품은 삭제할 수 없습니다.'); return }
-      emitDataChanged('work')
-      onClose()
-    }
+  const handleDbDelete = async () => {
+    if (!work || !confirm('DB에서 작품 정보를 삭제합니다. 폴더는 유지됩니다.\n계속하시겠습니까?')) return
+    const res = await worksApi.delete(work.id) as { blocked: boolean }
+    if (res?.blocked) { alert('진행 중인 월드컵에 참가 중인 작품은 삭제할 수 없습니다.'); return }
+    emitDataChanged('work')
+    onClose()
+  }
+
+  const handleTrashFolder = async () => {
+    if (!work || !confirm('폴더를 휴지통으로 이동합니다. 아카이빙 없이 폴더만 삭제됩니다.\nDB 작품 정보는 유지됩니다.\n계속하시겠습니까?')) return
+    const res = await worksApi.trashFolder(work.id)
+    if (res.ok) { alert('폴더 삭제 완료'); loadWork() }
+    else alert(res.error || '삭제 실패')
+  }
+
+  const handleArchive = async () => {
+    if (!work || !confirm('커버 이미지를 아카이빙하고 폴더를 휴지통으로 이동합니다.\nDB 작품 정보는 유지됩니다.\n계속하시겠습니까?')) return
+    const res = await worksApi.archiveFolder(work.id)
+    if (res.ok) { alert('아카이빙 완료'); loadWork() }
+    else alert(res.error || '아카이빙 실패')
+  }
+
+  const handleFullDelete = async () => {
+    if (!work || !confirm('DB 작품 정보를 삭제하고 폴더를 휴지통으로 이동합니다.\n계속하시겠습니까?')) return
+    const res = await worksApi.fullDelete(work.id)
+    if (!res.ok) { if (res.blocked) alert('진행 중인 월드컵에 참가 중인 작품은 삭제할 수 없습니다.'); return }
+    emitDataChanged('work')
+    onClose()
   }
 
   const handleToggleFavorite = async () => {
@@ -251,25 +272,15 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-1">
-                <button onClick={handleEdit} className="bg-gray-600 hover:bg-gray-500 text-white text-sm px-3 py-1.5 rounded flex-1">
-                  수정
-                </button>
-                <button onClick={handleDelete} className="bg-red-700 hover:bg-red-600 text-white text-sm px-3 py-1.5 rounded flex-1">
-                  삭제
-                </button>
-              </div>
-              <button
-                onClick={async () => {
-                  if (!confirm('폴더를 삭제하고 커버 이미지를 아카이빙하시겠습니까?')) return
-                  const res = await worksApi.archiveFolder(work.id)
-                  if (res.ok) { alert('폴더 삭제 및 커버 아카이빙 완료'); loadWork() }
-                  else alert(res.error || '아카이빙 실패')
-                }}
-                className="w-full bg-orange-700 hover:bg-orange-600 text-white text-sm px-3 py-1.5 rounded"
-              >
-                폴더 삭제
+              <button onClick={handleEdit} className="w-full bg-gray-600 hover:bg-gray-500 text-white text-sm px-3 py-2 rounded">
+                수정
               </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={handleDbDelete} className="bg-red-800 hover:bg-red-700 text-white text-sm px-3 py-1.5 rounded">DB삭제</button>
+                <button onClick={handleTrashFolder} className="bg-orange-800 hover:bg-orange-700 text-white text-sm px-3 py-1.5 rounded">폴더삭제</button>
+                <button onClick={handleArchive} className="bg-orange-700 hover:bg-orange-600 text-white text-sm px-3 py-1.5 rounded">아카이빙</button>
+                <button onClick={handleFullDelete} className="bg-red-700 hover:bg-red-600 text-white text-sm px-3 py-1.5 rounded">완전삭제</button>
+              </div>
             </div>
           </div>
 

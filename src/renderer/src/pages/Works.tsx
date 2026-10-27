@@ -373,15 +373,41 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   }
 
   const handleBulkTrashFolders = async () => {
-    const ids = [...selectedDeleteIds]
-    let archived = 0
-    for (const id of ids) {
-      const res = await worksApi.archiveFolder(id)
-      if (res.ok) archived++
+    if (!confirm(`${selectedDeleteIds.size}개 작품의 폴더를 휴지통으로 이동합니다.\n아카이빙 없이 폴더만 삭제됩니다.\n계속하시겠습니까?`)) return
+    let count = 0
+    for (const id of selectedDeleteIds) {
+      const res = await worksApi.trashFolder(id)
+      if (res.ok) count++
     }
-    if (archived > 0) alert(`${archived}개 작품 폴더 삭제 및 커버 아카이빙 완료`)
+    if (count > 0) alert(`${count}개 폴더 삭제 완료`)
     setDeleteConfirm(false)
     refreshWorks()
+  }
+
+  const handleBulkArchive = async () => {
+    if (!confirm(`${selectedDeleteIds.size}개 작품의 커버를 아카이빙하고 폴더를 휴지통으로 이동합니다.\n계속하시겠습니까?`)) return
+    let count = 0
+    for (const id of selectedDeleteIds) {
+      const res = await worksApi.archiveFolder(id)
+      if (res.ok) count++
+    }
+    if (count > 0) alert(`${count}개 아카이빙 완료`)
+    setDeleteConfirm(false)
+    refreshWorks()
+  }
+
+  const handleBulkFullDelete = async () => {
+    if (!confirm(`${selectedDeleteIds.size}개 작품의 DB 정보를 삭제하고 폴더를 휴지통으로 이동합니다.\n계속하시겠습니까?`)) return
+    let blockedCount = 0
+    for (const id of selectedDeleteIds) {
+      const res = await worksApi.fullDelete(id)
+      if (!res.ok && res.blocked) blockedCount++
+    }
+    if (blockedCount > 0) alert(`진행 중인 월드컵에 참가 중인 작품 ${blockedCount}개는 삭제할 수 없습니다.`)
+    setSelected(null)
+    exitDeleteMode()
+    refreshWorks()
+    loadMasterPoints()
   }
 
   const handlePlay = (workId: number) => {
@@ -578,13 +604,15 @@ export default function Works({ onNavigateToActor }: WorksProps) {
 
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 flex flex-col gap-4 min-w-[280px]" onClick={(e) => e.stopPropagation()}>
-            <p className="text-white">선택된 {selectedDeleteIds.size}개 작품을 삭제하시겠습니까?</p>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setDeleteConfirm(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>
-              <button onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded text-sm">삭제</button>
-              <button onClick={handleBulkTrashFolders} className="bg-orange-700 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm">폴더 삭제</button>
+          <div className="bg-gray-800 rounded-lg p-6 flex flex-col gap-3 min-w-[280px]" onClick={(e) => e.stopPropagation()}>
+            <p className="text-white text-sm font-bold">선택된 {selectedDeleteIds.size}개 작품</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={handleBulkDelete} className="bg-red-800 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">DB삭제</button>
+              <button onClick={handleBulkTrashFolders} className="bg-orange-800 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">폴더삭제</button>
+              <button onClick={handleBulkArchive} className="bg-orange-700 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm">아카이빙</button>
+              <button onClick={handleBulkFullDelete} className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded text-sm">완전삭제</button>
             </div>
+            <button onClick={() => setDeleteConfirm(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>
           </div>
         </div>
       )}

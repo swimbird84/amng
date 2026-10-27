@@ -228,7 +228,8 @@ export function registerFilesHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('folder:delete', async (_e, folderPath: string) => {
+  // mode: 'dbOnly' | 'folderOnly' | 'archive' | 'full'
+  ipcMain.handle('folder:delete', async (_e, folderPath: string, mode: string = 'full') => {
     const normalizedFolder = folderPath.replace(/\\/g, '/')
     const fileRows = db().prepare(`
       SELECT DISTINCT wf.work_id FROM work_files wf
@@ -238,45 +239,83 @@ export function registerFilesHandlers(): void {
 
     if (workIds.length === 0) return { ok: false, error: '해당 폴더에 등록된 작품이 없습니다' }
 
-    const ph = workIds.map(() => '?').join(',')
-    const blocked = db().prepare(`
-      SELECT 1 FROM cup_entries e
-      JOIN cup_runs r ON r.id = e.run_id
-      JOIN cup_tournaments t ON t.id = r.tournament_id AND t.type = 'work'
-      WHERE r.status = 'in_progress' AND e.item_id IN (${ph})
-      LIMIT 1
-    `).get(...workIds)
-    if (blocked) return { ok: false, error: '진행 중인 대회에 참가한 작품이 포함되어 있습니다', blocked: true }
+    const deleteDb = mode === 'dbOnly' || mode === 'full'
+    const deleteFolder = mode === 'folderOnly' || mode === 'archive' || mode === 'full'
+    const archiveCover = mode === 'archive'
 
-    try {
-      if (fs.existsSync(folderPath)) {
-        await shell.trashItem(folderPath)
+    // 대회 참가 체크 (DB 삭제 시에만)
+    if (deleteDb) {
+      const ph = workIds.map(() => '?').join(',')
+      const blocked = db().prepare(`
+        SELECT 1 FROM cup_entries e
+        JOIN cup_runs r ON r.id = e.run_id
+        JOIN cup_tournaments t ON t.id = r.tournament_id AND t.type = 'work'
+        WHERE r.status = 'in_progress' AND e.item_id IN (${ph})
+        LIMIT 1
+      `).get(...workIds)
+      if (blocked) return { ok: false, error: '진행 중인 대회에 참가한 작품이 포함되어 있습니다', blocked: true }
+    }
+
+    // 아카이빙: 커버 이미지를 cover images 폴더로 복사
+    if (archiveCover && fs.existsSync(folderPath)) {
+      const parentDir = path.dirname(folderPath)
+      const folderName = path.basename(folderPath)
+      const coverImagesDir = path.join(parentDir, 'cover images')
+      const entries = fs.readdirSync(folderPath)
+      const imageExts = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'])
+      const coverFile = entries.find(e => imageExts.has(path.extname(e).toLowerCase()))
+      if (coverFile) {
+        fs.mkdirSync(coverImagesDir, { recursive: true })
+        const destPath = path.join(coverImagesDir, folderName + path.extname(coverFile))
+        try {
+          fs.copyFileSync(path.join(folderPath, coverFile), destPath)
+          // 각 작품의 cover_path 업데이트
+          for (const workId of workIds) {
+            db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(destPath, workId)
+          }
+        } catch { /* skip */ }
       }
-    } catch (err: unknown) {
-      return { ok: false, error: (err as Error).message }
     }
 
-    for (const workId of workIds) {
-      deleteImagesByPattern('works', workId)
-      db().prepare('DELETE FROM works WHERE id = ?').run(workId)
-      db().prepare(`DELETE FROM master_ranking_history WHERE type = 'work' AND item_id = ?`).run(workId)
-      db().prepare(`DELETE FROM cup_entries WHERE item_id = ? AND run_id IN (SELECT r.id FROM cup_runs r JOIN cup_tournaments t ON t.id = r.tournament_id WHERE t.type = 'work')`).run(workId)
-      db().prepare(`DELETE FROM cup_stats WHERE type = 'work' AND item_id = ?`).run(workId)
-      db().prepare(`DELETE FROM cup_rank_snapshots WHERE item_id = ? AND tournament_id IN (SELECT id FROM cup_tournaments WHERE type = 'work')`).run(workId)
-    }
-
-    const folderName = path.basename(folderPath)
-    const actorMatch = folderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
-    if (actorMatch) {
-      const actorName = actorMatch[1].trim()
-      const actorBirthday = actorMatch[2]
-      const actor = db().prepare('SELECT id FROM actors WHERE name = ? AND birthday = ? AND is_deleted = 0').get(actorName, actorBirthday) as { id: number } | undefined
-      if (actor) {
-        db().prepare('UPDATE actors SET is_deleted = 1 WHERE id = ?').run(actor.id)
+    // 폴더 휴지통 이동
+    if (deleteFolder) {
+      try {
+        if (fs.existsSync(folderPath)) {
+          await shell.trashItem(folderPath)
+        }
+      } catch (err: unknown) {
+        return { ok: false, error: (err as Error).message }
+      }
+      // 로컬 work_files 레코드 삭제
+      for (const workId of workIds) {
+        db().prepare("DELETE FROM work_files WHERE work_id = ? AND type = 'local'").run(workId)
       }
     }
 
-    return { ok: true, deletedWorks: workIds.length }
+    // DB 작품 삭제
+    if (deleteDb) {
+      for (const workId of workIds) {
+        deleteImagesByPattern('works', workId)
+        db().prepare('DELETE FROM works WHERE id = ?').run(workId)
+        db().prepare(`DELETE FROM master_ranking_history WHERE type = 'work' AND item_id = ?`).run(workId)
+        db().prepare(`DELETE FROM cup_entries WHERE item_id = ? AND run_id IN (SELECT r.id FROM cup_runs r JOIN cup_tournaments t ON t.id = r.tournament_id WHERE t.type = 'work')`).run(workId)
+        db().prepare(`DELETE FROM cup_stats WHERE type = 'work' AND item_id = ?`).run(workId)
+        db().prepare(`DELETE FROM cup_rank_snapshots WHERE item_id = ? AND tournament_id IN (SELECT id FROM cup_tournaments WHERE type = 'work')`).run(workId)
+      }
+
+      const folderName = path.basename(folderPath)
+      const actorMatch = folderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
+      if (actorMatch) {
+        const actorName = actorMatch[1].trim()
+        const actorBirthday = actorMatch[2]
+        const actor = db().prepare('SELECT id FROM actors WHERE name = ? AND birthday = ? AND is_deleted = 0').get(actorName, actorBirthday) as { id: number } | undefined
+        if (actor) {
+          db().prepare('UPDATE actors SET is_deleted = 1 WHERE id = ?').run(actor.id)
+        }
+      }
+    }
+
+    return { ok: true, deletedWorks: deleteDb ? workIds.length : 0 }
   })
 
   // ========== 임시 폴더 핸들러 ==========
