@@ -29,7 +29,7 @@ export function registerWorksHandlers(): void {
     releaseDateNull?: boolean
     deletePending?: boolean
     excludeFilter?: 'hide' | 'include' | 'only'
-    fileStatus?: 'all' | 'file' | 'link' | 'none'
+    fileStatus?: 'all' | 'file' | 'link' | 'both' | 'none'
     untiered?: boolean
     actorCountFrom?: number
     actorCountTo?: number
@@ -133,6 +133,8 @@ export function registerWorksHandlers(): void {
       conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'local')")
     } else if (params?.fileStatus === 'link') {
       conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'url') AND NOT EXISTS (SELECT 1 FROM work_files wf2 WHERE wf2.work_id = w.id AND wf2.type = 'local')")
+    } else if (params?.fileStatus === 'both') {
+      conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'local') AND EXISTS (SELECT 1 FROM work_files wf2 WHERE wf2.work_id = w.id AND wf2.type = 'url')")
     } else if (params?.fileStatus === 'none') {
       conditions.push('NOT EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id)')
     }

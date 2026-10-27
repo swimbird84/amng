@@ -336,8 +336,8 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
             <p className="text-white text-sm font-bold">"{node.name}" ({node.fileCount}개 파일)</p>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => handleFolderAction('dbOnly')} className="bg-red-800 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">DB삭제</button>
-              <button onClick={() => handleFolderAction('folderOnly')} className="bg-orange-800 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">폴더삭제</button>
               <button onClick={() => handleFolderAction('archive')} className="bg-orange-700 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm">아카이빙</button>
+              <button onClick={() => handleFolderAction('folderOnly')} className="bg-orange-800 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">폴더삭제</button>
               <button onClick={() => handleFolderAction('full')} className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded text-sm">완전삭제</button>
             </div>
             <button onClick={() => setDeleteModal(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>

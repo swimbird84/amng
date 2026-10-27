@@ -319,7 +319,7 @@ export default function SearchBar(props: Props) {
     if (wp.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...wp, favoriteOnly: false } as never) })
     if (wp.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...wp, deletePending: false } as never) })
     if (wp.excludeFilter !== 'hide') conditions.push({ label: wp.excludeFilter === 'only' ? '제외한정' : '제외포함', onClear: () => onChange({ ...wp, excludeFilter: 'hide' } as never) })
-    if (wp.fileStatus !== 'all') conditions.push({ label: wp.fileStatus === 'file' ? '파일' : wp.fileStatus === 'link' ? '링크' : '없음', onClear: () => onChange({ ...wp, fileStatus: 'all' } as never) })
+    if (wp.fileStatus !== 'all') conditions.push({ label: wp.fileStatus === 'file' ? '파일' : wp.fileStatus === 'link' ? '링크' : wp.fileStatus === 'both' ? '둘다' : '없음', onClear: () => onChange({ ...wp, fileStatus: 'all' } as never) })
     if (wp.untiered) conditions.push({ label: '미배치티어', onClear: () => onChange({ ...wp, untiered: false } as never) })
   }
 
@@ -375,68 +375,21 @@ export default function SearchBar(props: Props) {
         className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
       />
 
-      {/* actor dropdown (works only) */}
-      {type === 'works' && wParams && !hideActorDropdown && (
-        <div className="relative">
+      {/* file status toggle (works only) */}
+      {type === 'works' && wParams && (() => {
+        const fileStates = ['all', 'file', 'link', 'both', 'none'] as const
+        const idx = fileStates.indexOf(wParams.fileStatus)
+        const next = fileStates[(idx + 1) % fileStates.length]
+        const colorMap = { all: 'bg-blue-600', file: 'bg-red-600', link: 'bg-purple-600', both: 'bg-green-600', none: 'bg-gray-600' } as const
+        const labelMap = { all: '전체', file: '▶ 파일', link: '🔗 링크', both: '✦ 둘다', none: '✕ 없음' } as const
+        return (
           <button
-            ref={actorButtonRef}
             type="button"
-            onClick={() => {
-              if (!actorDropOpen && actorButtonRef.current) {
-                const r = actorButtonRef.current.getBoundingClientRect()
-                setActorDropPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 180) })
-              }
-              setActorDropOpen(v => !v)
-            }}
-            className={`bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-[120px] text-left flex items-center justify-between gap-1 shrink-0 ${actorId !== '' ? 'ring-1 ring-blue-500' : ''}`}
-          >
-            <span className="truncate">{actorLabel}</span>
-            <span className="text-gray-400 text-xs shrink-0">▼</span>
-          </button>
-          {actorDropOpen && (
-            <div ref={actorDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: actorDropPos.top, left: actorDropPos.left, width: actorDropPos.width, maxHeight: '600px' }}>
-              <div className="p-1.5 border-b border-gray-700">
-                <input
-                  type="text"
-                  value={actorFilter}
-                  onChange={e => setActorFilter(e.target.value)}
-                  placeholder="배우 검색"
-                  autoFocus
-                  className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full"
-                  onKeyDown={e => {
-                    const total = 2 + filteredActors.length
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault()
-                      setActorHoverIdx(prev => prev >= total - 1 ? 0 : prev + 1)
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault()
-                      setActorHoverIdx(prev => prev <= 0 ? total - 1 : prev - 1)
-                    } else if (e.key === 'Enter' && actorHoverIdx >= 0) {
-                      e.preventDefault()
-                      if (actorHoverIdx === 0) { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }
-                      else if (actorHoverIdx === 1) { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }
-                      else { const a = filteredActors[actorHoverIdx - 2]; if (a) { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() } }
-                    }
-                  }}
-                />
-              </div>
-              <div className="border-b border-gray-700">
-                <button type="button" onClick={() => { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }} {...(actorHoverIdx === 0 ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorHoverIdx === 0 ? 'bg-gray-700' : ''} ${actorId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>배우 전체</button>
-                <button type="button" onClick={() => { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }} {...(actorHoverIdx === 1 ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorHoverIdx === 1 ? 'bg-gray-700' : ''} ${actorId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>배우 없음</button>
-              </div>
-              <div className="overflow-y-auto">
-                {filteredActors.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
-                {filteredActors.map((a, i) => {
-                  const isHover = actorHoverIdx === i + 2
-                  return (
-                    <button key={a.id} type="button" onClick={() => { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() }} {...(actorId === a.id ? { 'data-actor-selected': '' } : {})} {...(isHover ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${isHover ? 'bg-gray-700' : ''} ${actorId === a.id ? 'text-white font-bold' : 'text-gray-300'}`}>{a.name}</button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+            onClick={() => onChange({ ...wParams, fileStatus: next } as never)}
+            className={`${colorMap[wParams.fileStatus]} text-white text-sm px-2.5 py-1.5 rounded shrink-0 hover:brightness-110 transition-colors`}
+          >{labelMap[wParams.fileStatus]}</button>
+        )
+      })()}
 
 
       {/* tag button */}
@@ -553,6 +506,69 @@ export default function SearchBar(props: Props) {
             {/* ── works ─────────────────────────────────────────── */}
             {type === 'works' && wParams && (
               <>
+                {/* actor dropdown */}
+                {!hideActorDropdown && <div className="flex gap-2 flex-wrap items-center">
+                  <span className="text-xs text-gray-400 w-12 shrink-0">배우</span>
+                  <div className="relative">
+                    <button
+                      ref={actorButtonRef}
+                      type="button"
+                      onClick={() => {
+                        if (!actorDropOpen && actorButtonRef.current) {
+                          const r = actorButtonRef.current.getBoundingClientRect()
+                          setActorDropPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 180) })
+                        }
+                        setActorDropOpen(v => !v)
+                      }}
+                      className={`bg-gray-700 text-white text-xs px-2 py-1.5 rounded w-[250px] text-left flex items-center justify-between gap-1 ${actorId !== '' ? 'ring-1 ring-blue-500' : ''}`}
+                    >
+                      <span className="truncate">{actorLabel}</span>
+                      <span className="text-gray-400 text-xs shrink-0">▼</span>
+                    </button>
+                    {actorDropOpen && (
+                      <div ref={actorDropRef} className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl flex flex-col" style={{ top: actorDropPos.top, left: actorDropPos.left, width: actorDropPos.width, maxHeight: '600px' }}>
+                        <div className="p-1.5 border-b border-gray-700">
+                          <input
+                            type="text"
+                            value={actorFilter}
+                            onChange={e => setActorFilter(e.target.value)}
+                            placeholder="배우 검색"
+                            autoFocus
+                            className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-full"
+                            onKeyDown={e => {
+                              const total = 2 + filteredActors.length
+                              if (e.key === 'ArrowDown') {
+                                e.preventDefault()
+                                setActorHoverIdx(prev => prev >= total - 1 ? 0 : prev + 1)
+                              } else if (e.key === 'ArrowUp') {
+                                e.preventDefault()
+                                setActorHoverIdx(prev => prev <= 0 ? total - 1 : prev - 1)
+                              } else if (e.key === 'Enter' && actorHoverIdx >= 0) {
+                                e.preventDefault()
+                                if (actorHoverIdx === 0) { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }
+                                else if (actorHoverIdx === 1) { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }
+                                else { const a = filteredActors[actorHoverIdx - 2]; if (a) { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() } }
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="border-b border-gray-700">
+                          <button type="button" onClick={() => { onChange({ ...wParams, actorId: '' } as never); closeActorDrop() }} {...(actorHoverIdx === 0 ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorHoverIdx === 0 ? 'bg-gray-700' : ''} ${actorId === '' ? 'text-white font-bold' : 'text-gray-300'}`}>배우 전체</button>
+                          <button type="button" onClick={() => { onChange({ ...wParams, actorId: -1 } as never); closeActorDrop() }} {...(actorHoverIdx === 1 ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 ${actorHoverIdx === 1 ? 'bg-gray-700' : ''} ${actorId === -1 ? 'text-white font-bold' : 'text-gray-300'}`}>배우 없음</button>
+                        </div>
+                        <div className="overflow-y-auto">
+                          {filteredActors.length === 0 && <p className="text-xs text-gray-500 text-center py-2">결과 없음</p>}
+                          {filteredActors.map((a, i) => {
+                            const isHover = actorHoverIdx === i + 2
+                            return (
+                              <button key={a.id} type="button" onClick={() => { onChange({ ...wParams, actorId: a.id } as never); closeActorDrop() }} {...(actorId === a.id ? { 'data-actor-selected': '' } : {})} {...(isHover ? { 'data-actor-hover': '' } : {})} className={`w-full text-left px-2 py-1.5 text-sm hover:bg-gray-700 truncate ${isHover ? 'bg-gray-700' : ''} ${actorId === a.id ? 'text-white font-bold' : 'text-gray-300'}`}>{a.name}</button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>}
                 <div className="flex gap-2 flex-wrap items-center">
                   <span className="text-xs text-gray-400 w-12 shrink-0">레이블</span>
                   {/* studio dropdown */}
@@ -702,17 +718,6 @@ export default function SearchBar(props: Props) {
                     onClick={() => onChange({ ...wParams, untiered: !wParams.untiered } as never)}
                     className={`text-xs px-2 py-1 rounded ${wParams.untiered ? 'bg-purple-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                   >미배치티어</button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-14 shrink-0">파일상태</span>
-                  {(['all', 'file', 'link', 'none'] as const).map(s => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => onChange({ ...wParams, fileStatus: s } as never)}
-                      className={`text-xs px-2 py-1 rounded ${wParams.fileStatus === s ? 'bg-blue-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >{s === 'all' ? '전체' : s === 'file' ? '파일' : s === 'link' ? '링크' : '없음'}</button>
-                  ))}
                 </div>
               </>
             )}

@@ -935,7 +935,7 @@ export function registerCupHandlers(): void {
         (SELECT id FROM cup_runs WHERE tournament_id = t.id AND status = 'completed' AND (season_id IS NULL OR t.is_master = 0) ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cup_runs WHERE tournament_id = t.id AND status = 'completed' ORDER BY id DESC LIMIT 1)
       )
-      LEFT JOIN actors a ON a.id = lc.winner_id AND t.type = 'actor' AND a.is_deleted = 0 AND is_excluded = 0
+      LEFT JOIN actors a ON a.id = lc.winner_id AND t.type = 'actor' AND a.is_deleted = 0 AND a.is_excluded = 0
       LEFT JOIN works w ON w.id = lc.winner_id AND t.type = 'work'
       ${where}
       ORDER BY ${isLastPlayed ? `${orderCol} ${dir}, lr.completed_at ${dir}, lr.started_at ${dir}` : `${orderCol} ${dir}`}
@@ -1734,7 +1734,7 @@ export function registerCupHandlers(): void {
           (SELECT COUNT(DISTINCT e2.run_id) FROM cup_entries e2 JOIN cup_runs r2 ON r2.id = e2.run_id AND r2.status = 'completed' ${srf} JOIN cup_tournaments t2 ON t2.id = r2.tournament_id AND t2.is_master = 1 AND t2.type = '${type}' WHERE e2.item_id = r.winner_id) AS entry_count
         FROM cup_runs r
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-        JOIN actors a ON a.id = r.winner_id AND a.is_deleted = 0 AND is_excluded = 0
+        JOIN actors a ON a.id = r.winner_id AND a.is_deleted = 0 AND a.is_excluded = 0
         WHERE r.status = 'completed' AND r.winner_id IS NOT NULL ${srf}
         GROUP BY r.winner_id ORDER BY win_count DESC LIMIT 10`
       : `SELECT r.winner_id AS id, COALESCE(w.product_number, w.title) AS name, w.cover_path AS img, COUNT(*) AS win_count,
@@ -1753,7 +1753,7 @@ export function registerCupHandlers(): void {
           r.winner_id, a.name AS winner_name, a.photo_path AS winner_img
         FROM cup_runs r
         JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = ?
-        LEFT JOIN actors a ON a.id = r.winner_id AND a.is_deleted = 0 AND is_excluded = 0
+        LEFT JOIN actors a ON a.id = r.winner_id AND a.is_deleted = 0 AND a.is_excluded = 0
         WHERE r.status = 'completed' ${srf}
         ORDER BY r.completed_at DESC`
       : `SELECT r.id AS run_id, t.name AS tournament_name, t.format, r.completed_at,
@@ -2651,13 +2651,13 @@ export function registerCupHandlers(): void {
     if (type === 'actor') {
       const rows = db().prepare(`${baseCte}
         SELECT c.*, a.name, a.photo_path
-        FROM combined c LEFT JOIN actors a ON a.id = c.item_id AND a.is_deleted = 0 AND is_excluded = 0
+        FROM combined c LEFT JOIN actors a ON a.id = c.item_id AND a.is_deleted = 0 AND a.is_excluded = 0
         WHERE 1=1 ${searchWhere}
         ORDER BY c.${sortCol} ${dir}, c.item_id ASC
         LIMIT ? OFFSET ?
       `).all(tournamentId, tournamentId, tournamentId, tournamentId, ...searchBindings, limit, offset)
       const total = (db().prepare(`${baseCte}
-        SELECT COUNT(*) AS cnt FROM combined c LEFT JOIN actors a ON a.id = c.item_id AND a.is_deleted = 0 AND is_excluded = 0 WHERE 1=1 ${searchWhere}
+        SELECT COUNT(*) AS cnt FROM combined c LEFT JOIN actors a ON a.id = c.item_id AND a.is_deleted = 0 AND a.is_excluded = 0 WHERE 1=1 ${searchWhere}
       `).get(tournamentId, tournamentId, tournamentId, tournamentId, ...searchBindings) as { cnt: number }).cnt
       return { rows, total }
     } else {
@@ -2833,7 +2833,7 @@ export function registerCupHandlers(): void {
     const eligibleSet = new Set(eligibleIds)
 
     // participated/runDist: 대상 아이템 범위 내에서만 집계
-    const existsJoin = tInfo.type === 'actor' ? 'JOIN actors a ON a.id = e.item_id AND a.is_deleted = 0 AND is_excluded = 0' : 'JOIN works w ON w.id = e.item_id'
+    const existsJoin = tInfo.type === 'actor' ? 'JOIN actors a ON a.id = e.item_id AND a.is_deleted = 0 AND a.is_excluded = 0' : 'JOIN works w ON w.id = e.item_id'
     let participated: number
     let runDist: { run_count: number; count: number }[]
 
@@ -2955,7 +2955,7 @@ export function registerCupHandlers(): void {
     const waRows = db().prepare(`
       SELECT wa.work_id, wa.actor_id, a.name, a.photo_path
       FROM work_actors wa
-      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0 AND is_excluded = 0
+      JOIN actors a ON a.id = wa.actor_id AND a.is_deleted = 0 AND a.is_excluded = 0
       WHERE wa.work_id IN (${workIds.map(() => '?').join(',')})
     `).all(...workIds) as { work_id: number; actor_id: number; name: string; photo_path: string | null }[]
 

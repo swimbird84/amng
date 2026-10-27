@@ -277,8 +277,8 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={handleDbDelete} className="bg-red-800 hover:bg-red-700 text-white text-sm px-3 py-1.5 rounded">DB삭제</button>
-                <button onClick={handleTrashFolder} className="bg-orange-800 hover:bg-orange-700 text-white text-sm px-3 py-1.5 rounded">폴더삭제</button>
                 <button onClick={handleArchive} className="bg-orange-700 hover:bg-orange-600 text-white text-sm px-3 py-1.5 rounded">아카이빙</button>
+                <button onClick={handleTrashFolder} className="bg-orange-800 hover:bg-orange-700 text-white text-sm px-3 py-1.5 rounded">폴더삭제</button>
                 <button onClick={handleFullDelete} className="bg-red-700 hover:bg-red-600 text-white text-sm px-3 py-1.5 rounded">완전삭제</button>
               </div>
             </div>

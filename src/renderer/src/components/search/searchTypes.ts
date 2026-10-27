@@ -21,7 +21,7 @@ export interface WorkSearchParams {
   favoriteOnly: boolean
   deletePending: boolean
   excludeFilter: 'hide' | 'include' | 'only'
-  fileStatus: 'all' | 'file' | 'link' | 'none'
+  fileStatus: 'all' | 'file' | 'link' | 'both' | 'none'
   untiered: boolean
 }
 

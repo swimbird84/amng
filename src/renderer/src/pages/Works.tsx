@@ -608,8 +608,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
             <p className="text-white text-sm font-bold">선택된 {selectedDeleteIds.size}개 작품</p>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={handleBulkDelete} className="bg-red-800 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">DB삭제</button>
-              <button onClick={handleBulkTrashFolders} className="bg-orange-800 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">폴더삭제</button>
               <button onClick={handleBulkArchive} className="bg-orange-700 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm">아카이빙</button>
+              <button onClick={handleBulkTrashFolders} className="bg-orange-800 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">폴더삭제</button>
               <button onClick={handleBulkFullDelete} className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded text-sm">완전삭제</button>
             </div>
             <button onClick={() => setDeleteConfirm(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>
