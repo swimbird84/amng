@@ -520,6 +520,16 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                 이미지 선택
               </button>
             </div>
+            {coverPath && (
+              <button
+                type="button"
+                title={coverPath}
+                onClick={() => shellApi.showItemInFolder(coverPath)}
+                className="text-xs text-gray-500 hover:text-gray-300 hover:underline truncate text-left mt-1 max-w-full"
+              >
+                {coverPath.replace(/\\/g, '/').split('/').slice(3).join('/')}
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -550,6 +560,21 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                   className="text-white font-black text-base leading-none hover:text-gray-300"
                 >
                   +
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!productNumber.trim()) return
+                    const codeMatch = productNumber.match(/^(.+)-\d/)
+                    const suffixMatch = productNumber.match(/^\d[\d-]*-([A-Za-z]+)$/)
+                    const code = suffixMatch ? suffixMatch[1] : codeMatch ? codeMatch[1] : null
+                    if (!code) return
+                    const sid = await studioCodesApi.lookup(code)
+                    if (sid !== null) setStudioId(sid)
+                  }}
+                  className="px-1.5 py-0.5 rounded text-xs bg-gray-700 text-gray-300 hover:bg-gray-600"
+                >
+                  자동
                 </button>
                 {(['name', 'id'] as const).map((s) => {
                   const isActive = studioSortBy === s

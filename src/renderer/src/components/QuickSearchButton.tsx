@@ -33,7 +33,7 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
       shellApi.openExternal(searchUrls[0].url + productNumber)
     } else {
       const rect = e.currentTarget.getBoundingClientRect()
-      setPopup({ x: rect.left, y: rect.top })
+      setPopup({ x: rect.left + rect.width / 2, y: rect.top })
     }
   }
 
@@ -46,7 +46,7 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
         <div className="fixed inset-0 z-50" onClick={() => setPopup(null)}>
           <div
             className="absolute flex gap-1 bg-gray-800 border border-gray-600 rounded-lg p-1.5 shadow-xl"
-            style={{ left: popup.x, top: popup.y, transform: 'translateY(-100%) translateY(-4px)' }}
+            style={{ left: popup.x, top: popup.y, transform: 'translate(-50%, -100%) translateY(-4px)' }}
             onClick={e => e.stopPropagation()}
           >
             {searchUrls.map(su => (
