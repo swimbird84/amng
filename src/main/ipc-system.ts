@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, shell } from 'electron'
+import { ipcMain, dialog, app, shell, net } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { getDatabase } from './db'
@@ -169,7 +169,7 @@ export function registerSystemHandlers(): void {
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [
-        { name: 'Image Files', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }
+        { name: 'Image Files', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'ico'] }
       ]
     })
     return result.filePaths[0] || null
@@ -332,14 +332,24 @@ export function registerSystemHandlers(): void {
     return db().prepare('SELECT * FROM search_urls ORDER BY created_at DESC').all()
   })
 
-  ipcMain.handle('search-url:add', (_e, url: string) => {
+  ipcMain.handle('search-url:add', async (_e, url: string) => {
     try {
-      db().prepare('INSERT OR IGNORE INTO search_urls (url) VALUES (?)').run(url.trim())
+      const result = db().prepare('INSERT OR IGNORE INTO search_urls (url) VALUES (?)').run(url.trim())
+      if (result.changes > 0) {
+        const row = db().prepare('SELECT id FROM search_urls WHERE url = ?').get(url.trim()) as { id: number }
+        await fetchAndSaveFavicon(row.id, url.trim())
+      }
       return { ok: true }
     } catch { return { ok: false } }
   })
 
   ipcMain.handle('search-url:delete', (_e, id: number) => {
+    // 파비콘 파일 삭제
+    const faviconDir = path.join(app.getPath('userData'), 'images', 'favicons')
+    const row = db().prepare('SELECT favicon_path FROM search_urls WHERE id = ?').get(id) as { favicon_path: string | null } | undefined
+    if (row?.favicon_path && fs.existsSync(row.favicon_path)) {
+      fs.rmSync(row.favicon_path, { force: true })
+    }
     db().prepare('DELETE FROM search_urls WHERE id = ?').run(id)
     return { ok: true }
   })
@@ -355,4 +365,41 @@ export function registerSystemHandlers(): void {
     const row = db().prepare('SELECT id, url FROM search_urls WHERE id = ?').get(Number(setting.value)) as { id: number; url: string } | undefined
     return row?.url ?? null
   })
+
+  // 파비콘 수동 업로드
+  ipcMain.handle('search-url:setFavicon', (_e, id: number, sourcePath: string) => {
+    const faviconDir = path.join(app.getPath('userData'), 'images', 'favicons')
+    fs.mkdirSync(faviconDir, { recursive: true })
+    const ext = path.extname(sourcePath)
+    const destPath = path.join(faviconDir, `${id}${ext}`)
+    fs.copyFileSync(sourcePath, destPath)
+    db().prepare('UPDATE search_urls SET favicon_path = ? WHERE id = ?').run(destPath, id)
+    return destPath
+  })
+
+  // 파비콘 없는 URL 일괄 다운로드 시도
+  ipcMain.handle('search-url:fetchMissingFavicons', async () => {
+    const rows = db().prepare('SELECT id, url FROM search_urls WHERE favicon_path IS NULL').all() as { id: number; url: string }[]
+    for (const row of rows) {
+      await fetchAndSaveFavicon(row.id, row.url)
+    }
+  })
+}
+
+async function fetchAndSaveFavicon(id: number, url: string): Promise<void> {
+  try {
+    const domain = new URL(url).hostname
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+    const resp = await net.fetch(faviconUrl)
+    if (!resp.ok) return
+    const buffer = Buffer.from(await resp.arrayBuffer())
+    // 1x1 기본 아이콘(작은 파일) 무시
+    if (buffer.length < 200) return
+    const faviconDir = path.join(app.getPath('userData'), 'images', 'favicons')
+    fs.mkdirSync(faviconDir, { recursive: true })
+    const destPath = path.join(faviconDir, `${id}.png`)
+    fs.writeFileSync(destPath, buffer)
+    const db = getDatabase()
+    db.prepare('UPDATE search_urls SET favicon_path = ? WHERE id = ?').run(destPath, id)
+  } catch { /* 실패 시 무시 */ }
 }

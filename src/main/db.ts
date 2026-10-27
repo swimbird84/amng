@@ -591,6 +591,12 @@ export function initDatabase(): void {
     )
   `)
 
+  // search_urls 마이그레이션: favicon_path
+  const searchUrlCols = (db.prepare("PRAGMA table_info(search_urls)").all() as { name: string }[]).map(c => c.name)
+  if (!searchUrlCols.includes('favicon_path')) {
+    db.prepare('ALTER TABLE search_urls ADD COLUMN favicon_path TEXT').run()
+  }
+
   // 앱 설정 테이블
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_settings (

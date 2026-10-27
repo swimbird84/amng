@@ -69,6 +69,9 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileName: string } | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [searchUrl, setSearchUrl] = useState('')
+  const [searchUrls, setSearchUrls] = useState<{ id: number; url: string; favicon_path: string | null }[]>([])
+  const [faviconCache, setFaviconCache] = useState<Map<number, string>>(new Map())
+  const [quickSearch, setQuickSearch] = useState<{ baseName: string; x: number; y: number } | null>(null)
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [removeStr, setRemoveStr] = useState(() => localStorage.getItem('files:removeString') || '')
   const [viewMode, setViewMode] = useState<'icon' | 'list'>(() => (localStorage.getItem('files:viewMode') as 'icon' | 'list') || 'icon')
@@ -127,9 +130,20 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
 
   useEffect(() => { if (folderPath) loadFiles() }, [folderPath, loadFiles])
 
-  useEffect(() => {
-    searchUrlApi.getActive().then(url => { if (url) setSearchUrl(url) })
+  const loadSearchUrls = useCallback(async () => {
+    const list = await searchUrlApi.list()
+    setSearchUrls(list.map(r => ({ id: r.id, url: r.url, favicon_path: r.favicon_path })))
+    for (const r of list) {
+      if (r.favicon_path) {
+        const b64 = await imageApi.read(r.favicon_path) as string | null
+        if (b64) setFaviconCache(prev => new Map(prev).set(r.id, b64))
+      }
+    }
+    const activeUrl = await searchUrlApi.getActive()
+    if (activeUrl) setSearchUrl(activeUrl)
   }, [])
+
+  useEffect(() => { loadSearchUrls() }, [])
 
   useEffect(() => {
     if (refreshRef) refreshRef.current = loadFiles
@@ -438,8 +452,8 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                         onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
                         className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-                      {searchUrl && <button
-                        onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + getProductNumber(file.baseName, files.map(f => f.baseName))) }}
+                      {searchUrls.length > 0 && <button
+                        onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); if (searchUrls.length === 1) { shellApi.openExternal(searchUrls[0].url + getProductNumber(file.baseName, files.map(f => f.baseName))) } else { setQuickSearch({ baseName: file.baseName, x: rect.left, y: rect.top }) } }}
                         className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
                       {!file.thumbPath ? <button
@@ -487,7 +501,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                       <span className="text-xs text-gray-500 w-16 text-right shrink-0">{formatFileSize(file.fileSize)}</span>
                       <span className="w-24 flex items-center justify-center gap-1.5 shrink-0">
                         <button onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-                        {searchUrl && <button onClick={e => { e.stopPropagation(); shellApi.openExternal(searchUrl + getProductNumber(file.baseName, files.map(f => f.baseName))) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
+                        {searchUrls.length > 0 && <button onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); if (searchUrls.length === 1) { shellApi.openExternal(searchUrls[0].url + getProductNumber(file.baseName, files.map(f => f.baseName))) } else { setQuickSearch({ baseName: file.baseName, x: rect.left, y: rect.top }) } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>}
                         <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                         <button onClick={async e => { e.stopPropagation(); if (!file.thumbPath) return; showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { if (res.debug) console.log('[autoPlace]', file.baseName, res.debug); showToast('배치 대상이 없습니다') } }} className={file.thumbPath ? 'text-white hover:text-blue-400' : 'text-gray-600 cursor-default'}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
                         <button onClick={e => { e.stopPropagation(); if (!file.thumbPath) return; setPreviewImage({ path: file.thumbPath, fileName: file.fileName }) }} className={file.thumbPath ? 'text-white hover:text-blue-400' : 'text-gray-600 cursor-default'}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -559,7 +573,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
       {/* URL modal */}
       {showUrlModal && (
         <SearchUrlModal
-          onClose={() => setShowUrlModal(false)}
+          onClose={() => { setShowUrlModal(false); loadSearchUrls() }}
           onSelect={url => setSearchUrl(url)}
         />
       )}
@@ -584,6 +598,30 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                 className="bg-black/60 hover:bg-black/80 text-white p-1.5 rounded"
               ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Search Popup */}
+      {quickSearch && (
+        <div className="fixed inset-0 z-50" onClick={() => setQuickSearch(null)}>
+          <div
+            className="absolute flex gap-1 bg-gray-800 border border-gray-600 rounded-lg p-1.5 shadow-xl"
+            style={{ left: quickSearch.x, top: quickSearch.y, transform: 'translateY(-100%) translateY(-4px)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {searchUrls.map(su => (
+              <button
+                key={su.id}
+                onClick={() => { shellApi.openExternal(su.url + getProductNumber(quickSearch.baseName, files.map(f => f.baseName))); setQuickSearch(null) }}
+                className="w-8 h-8 rounded-md hover:bg-gray-600 flex items-center justify-center transition"
+                title={su.url}
+              >
+                {faviconCache.has(su.id)
+                  ? <img src={faviconCache.get(su.id)} className="w-5 h-5 rounded" />
+                  : <span className="text-xs text-gray-400">{new URL(su.url).hostname.split('.').slice(-2, -1)[0]?.charAt(0).toUpperCase() || '?'}</span>}
+              </button>
+            ))}
           </div>
         </div>
       )}

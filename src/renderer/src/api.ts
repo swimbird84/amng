@@ -156,11 +156,13 @@ export const shellApi = {
 }
 
 export const searchUrlApi = {
-  list: () => api.invoke('search-url:list') as Promise<{ id: number; url: string; created_at: string }[]>,
+  list: () => api.invoke('search-url:list') as Promise<{ id: number; url: string; favicon_path: string | null; created_at: string }[]>,
   add: (url: string) => api.invoke('search-url:add', url) as Promise<{ ok: boolean }>,
   delete: (id: number) => api.invoke('search-url:delete', id) as Promise<{ ok: boolean }>,
   setActive: (id: number) => api.invoke('search-url:setActive', id) as Promise<{ ok: boolean }>,
   getActive: () => api.invoke('search-url:getActive') as Promise<string | null>,
+  setFavicon: (id: number, sourcePath: string) => api.invoke('search-url:setFavicon', id, sourcePath) as Promise<string>,
+  fetchMissingFavicons: () => api.invoke('search-url:fetchMissingFavicons') as Promise<void>,
 }
 
 // 대시보드

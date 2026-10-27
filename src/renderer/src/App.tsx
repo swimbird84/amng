@@ -88,14 +88,14 @@ function App() {
             배우
           </button>
           <button
-            onClick={() => setTabAndSave('labels')}
+            onClick={() => setTabAndSave('files')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
-              tab === 'labels'
+              tab === 'files'
                 ? 'border-blue-500 text-white'
                 : 'border-transparent text-gray-400 hover:text-gray-200'
             }`}
           >
-            레이블
+            파일
           </button>
           <button
             onClick={() => setTabAndSave('tags')}
@@ -108,14 +108,14 @@ function App() {
             태그
           </button>
           <button
-            onClick={() => setTabAndSave('files')}
+            onClick={() => setTabAndSave('labels')}
             className={`px-4 py-3 text-sm border-b-2 transition ${
-              tab === 'files'
+              tab === 'labels'
                 ? 'border-blue-500 text-white'
                 : 'border-transparent text-gray-400 hover:text-gray-200'
             }`}
           >
-            파일
+            레이블
           </button>
           <button
             onClick={() => setTabAndSave('tier')}
