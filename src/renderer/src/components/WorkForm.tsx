@@ -276,10 +276,6 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         rep_tag_ids: repTagIds,
       }) as any
       if (res?.blocked) { alert('진행 중인 대회에 참가한 작품은 제외할 수 없습니다'); return }
-      if (coverPath && coverPath !== work.cover_path) {
-        const newPath = await imageApi.copy(coverPath, 'works', work.id) as string
-        await worksApi.update(work.id, { cover_path: newPath })
-      }
     } else {
       const id = await worksApi.create({
         file_entries: entries,
@@ -296,10 +292,6 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         tag_ids: selectedTagIds,
         rep_tag_ids: repTagIds,
       }) as number
-      if (coverPath) {
-        const newPath = await imageApi.copy(coverPath, 'works', id) as string
-        await worksApi.update(id, { cover_path: newPath })
-      }
     }
 
     onSave()

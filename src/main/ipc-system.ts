@@ -3,6 +3,74 @@ import fs from 'fs'
 import path from 'path'
 import { getDatabase } from './db'
 
+// ========== 커버 경로 마이그레이션 (roaming → 원본, 1회성) ==========
+
+export function migrateCoverPaths(): void {
+  const worksImgDir = path.join(app.getPath('userData'), 'images', 'works')
+  if (!fs.existsSync(worksImgDir)) return
+
+  const db = getDatabase()
+  const roamingPrefix = worksImgDir.replace(/\\/g, '/')
+  const rows = db.prepare(
+    `SELECT w.id, w.product_number, w.cover_path
+     FROM works w
+     WHERE w.cover_path IS NOT NULL
+       AND REPLACE(w.cover_path, '\\', '/') LIKE ?`
+  ).all(roamingPrefix + '%') as { id: number; product_number: string | null; cover_path: string }[]
+
+  if (rows.length === 0) return
+
+  const imageExts = ['.jpg', '.jpeg', '.png', '.webp']
+  let migrated = 0
+  const updateStmt = db.prepare('UPDATE works SET cover_path = ? WHERE id = ?')
+
+  for (const row of rows) {
+    if (!row.product_number) continue
+
+    const files = db.prepare(
+      "SELECT file_path FROM work_files WHERE work_id = ? AND type = 'local' LIMIT 1"
+    ).all(row.id) as { file_path: string }[]
+
+    const fileDir = files.length > 0 ? path.dirname(files[0].file_path.replace(/\\/g, '/')) : null
+    let found: string | null = null
+
+    // 패턴 1: 작품 폴더 내 품번.{ext}
+    if (fileDir) {
+      for (const ext of imageExts) {
+        const candidate = path.join(fileDir, `${row.product_number}${ext}`)
+        if (fs.existsSync(candidate)) { found = candidate; break }
+      }
+    }
+
+    // 패턴 2: 배우 폴더/cover images/날짜 품번.{ext}
+    if (!found && fileDir) {
+      const actorDir = path.dirname(fileDir)
+      const coverImagesDir = path.join(actorDir, 'cover images')
+      if (fs.existsSync(coverImagesDir)) {
+        for (const file of fs.readdirSync(coverImagesDir)) {
+          const nameNoExt = path.parse(file).name
+          if (nameNoExt.endsWith(row.product_number) && imageExts.includes(path.extname(file).toLowerCase())) {
+            found = path.join(coverImagesDir, file); break
+          }
+        }
+      }
+    }
+
+    if (found) {
+      updateStmt.run(found, row.id)
+      migrated++
+    }
+  }
+
+  // roaming works 이미지 폴더 정리
+  for (const file of fs.readdirSync(worksImgDir)) {
+    fs.rmSync(path.join(worksImgDir, file), { force: true })
+  }
+  try { fs.rmdirSync(worksImgDir) } catch { /* 비어있지 않으면 무시 */ }
+
+  console.log(`[migrate-covers] ${migrated}/${rows.length} migrated`)
+}
+
 // ========== 이미지 삭제 헬퍼 (외부에서도 사용) ==========
 
 /** 특정 ID 패턴의 이미지 파일을 삭제한다 */

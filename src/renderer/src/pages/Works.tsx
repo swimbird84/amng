@@ -284,8 +284,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
         const actorId = actorMatch ? await actorsApi.findOrCreate(actorMatch[1], actorMatch[2]) : null
         const workId = await worksApi.create({ file_path: videoPath, product_number: productNumber, studio_id: studioId, release_date: releaseDate, actor_ids: actorId ? [actorId] : undefined, rep_actor_ids: actorId ? [actorId] : undefined }) as number
         if (imagePath) {
-          const newCoverPath = await imageApi.copy(imagePath, 'works', workId) as string
-          await worksApi.update(workId, { cover_path: newCoverPath })
+          await worksApi.update(workId, { cover_path: imagePath })
         }
         added++
       } catch {

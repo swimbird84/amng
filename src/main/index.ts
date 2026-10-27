@@ -3,6 +3,7 @@ import path from 'path'
 import fs from 'fs'
 import { initDatabase } from './db'
 import { registerIpcHandlers } from './ipc'
+import { migrateCoverPaths } from './ipc-system'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -60,6 +61,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
   initDatabase()
   registerIpcHandlers()
+  migrateCoverPaths()
   createWindow()
 
   app.on('activate', () => {
