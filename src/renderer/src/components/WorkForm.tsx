@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work, Tag, Actor, Studio, Maker } from '../types'
-import { worksApi, workTagsApi, workTagCategoriesApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi, workTagLinksApi, searchUrlApi } from '../api'
+import { worksApi, workTagsApi, workTagCategoriesApi, actorsApi, studiosApi, makersApi, studioCodesApi, dialogApi, imageApi, shellApi, workTagLinksApi } from '../api'
 import Rating from './Rating'
 import TagSelector from './TagSelector'
 import ImagePreview from './ImagePreview'
 import DateInput from './DateInput'
 import CardTooltip, { type TooltipState } from './CardTooltip'
-import SearchUrlModal from './SearchUrlModal'
+import QuickSearchButton from './QuickSearchButton'
 
 interface Props {
   work?: Work & { actors?: Actor[]; tags?: Tag[] }
@@ -26,8 +26,6 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   )
   const [coverPath, setCoverPath] = useState(work?.cover_path || '')
   const [productNumber, setProductNumber] = useState(work?.product_number || '')
-  const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
-  const [showUrlModal, setShowUrlModal] = useState(false)
   const [releaseDate, setReleaseDate] = useState(work?.release_date || '')
   const [rating, setRating] = useState(work?.rating || 0)
   const [isFavorite, setIsFavorite] = useState(work?.is_favorite ? 1 : 0)
@@ -78,7 +76,6 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
 
   useEffect(() => { setStudioHoverIdx(-1) }, [studioSearch])
 
-  useEffect(() => { searchUrlApi.getActive().then(url => setActiveSearchUrl(url)) }, [])
 
   useEffect(() => {
     if (studioHoverIdx < 0) return
@@ -824,14 +821,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <label className="text-sm text-gray-400">타이틀</label>
-              {activeSearchUrl && productNumber && (
-                <button onClick={() => shellApi.openExternal(activeSearchUrl + productNumber)} className="text-gray-400 hover:text-white">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                </button>
-              )}
-              <button onClick={() => setShowUrlModal(true)} className="text-gray-400 hover:text-white">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-              </button>
+              {productNumber && <QuickSearchButton productNumber={productNumber} />}
               <button onClick={() => { const ids = allTags.filter(t => comment.includes(t.name)).map(t => t.id); if (ids.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...ids])]) }} className="text-gray-400 hover:text-white" title="태그 자동 매칭">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
               </button>
@@ -866,7 +856,6 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
         </div>
       </div>
       {actorTooltip && <CardTooltip tooltip={actorTooltip} />}
-      {showUrlModal && <SearchUrlModal onClose={() => setShowUrlModal(false)} onSelect={url => setActiveSearchUrl(url)} />}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type { Work, Tag, Actor, Studio } from '../types'
-import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, masterRankingApi, searchUrlApi, tierApi } from '../api'
+import { worksApi, workFilesApi, workTagsApi, actorsApi, studiosApi, studioCodesApi, dialogApi, scanApi, shellApi, imageApi, masterRankingApi, tierApi } from '../api'
 import SearchUrlModal from '../components/SearchUrlModal'
 import SearchBar, { type WorkSearchParams, DEFAULT_WORK_SEARCH } from '../components/SearchBar'
 import WorkForm from '../components/WorkForm'
@@ -46,7 +46,6 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const [masterPointsMap, setMasterPointsMap] = useState<Map<number, { rank: number; total_points: number; master_run_count: number }>>(new Map())
   const [tierMap, setTierMap] = useState<Map<number, { tier_name: string; tier_color: string; tier_rank: number }>>(new Map())
   const [deleteMode, setDeleteMode] = useState(false)
-  const [activeSearchUrl, setActiveSearchUrl] = useState<string | null>(null)
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [showReplaceModal, setShowReplaceModal] = useState(false)
   const [tierEditorWorkId, setTierEditorWorkId] = useState<number | null>(null)
@@ -140,7 +139,6 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     setActorList(await actorsApi.list({ sortBy: 'name', sortDir: 'asc' }) as Actor[])
   }
 
-  useEffect(() => { searchUrlApi.getActive().then(url => setActiveSearchUrl(url)) }, [])
   useEffect(() => { tierApi.listSets({ type: 'work', isMaster: true }).then((sets: any) => { if (sets.length > 0) setMasterWorkTierSetId(sets[0].id) }) }, [])
 
   useEffect(() => {
@@ -503,7 +501,6 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                     <button onClick={() => setShowUrlModal(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
                     </button>
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-gray-300 text-xs rounded whitespace-nowrap opacity-0 group-hover/url:opacity-100 pointer-events-none transition-opacity">{activeSearchUrl || '검색 URL 미설정'}</div>
                   </div>
                   <button onClick={() => setShowReplaceModal(true)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm flex items-center justify-center" title="URL 일괄 교체">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
@@ -553,7 +550,6 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 onTooltipLeave={() => setTooltip(null)}
                 onToggleFavorite={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
                 onPlay={() => handlePlay(w.id)}
-                onSearch={activeSearchUrl && w.product_number ? (e) => { e.stopPropagation(); shellApi.openExternal(activeSearchUrl + w.product_number) } : undefined}
                 onTierClick={() => { setTierEditorWorkId(w.id) }}
               />
             ))}
@@ -598,7 +594,6 @@ export default function Works({ onNavigateToActor }: WorksProps) {
       {showUrlModal && (
         <SearchUrlModal
           onClose={() => setShowUrlModal(false)}
-          onSelect={url => setActiveSearchUrl(url)}
         />
       )}
 

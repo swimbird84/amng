@@ -1,6 +1,7 @@
 import type { Work } from '../types'
 import ImagePreview from './ImagePreview'
 import Rating from './Rating'
+import QuickSearchButton from './QuickSearchButton'
 import { studioColor } from '../utils/colorHelpers'
 import { getDivision, DIV_LABEL, DIV_COLOR } from './cup/cupConstants'
 
@@ -21,7 +22,6 @@ interface WorkCardProps {
   onTooltipLeave?: () => void
   onToggleFavorite?: (e: React.MouseEvent) => void
   onPlay?: (e: React.MouseEvent) => void
-  onSearch?: (e: React.MouseEvent) => void
   onTierClick?: (e: React.MouseEvent) => void
 }
 
@@ -29,7 +29,7 @@ export default function WorkCard({
   work: w, refreshKey, selected, deleteMode, deleteSelected,
   filePlayable, fileType, masterPoints: mp, tierInfo,
   onClick, onMouseDown, onMouseEnter,
-  onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onSearch, onTierClick,
+  onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onTierClick,
 }: WorkCardProps) {
   return (
     <div
@@ -52,10 +52,10 @@ export default function WorkCard({
         onMouseLeave={onTooltipLeave}
       >
         <ImagePreview path={w.cover_path} alt={w.title || ''} className="w-full h-40" version={refreshKey} />
-        {onSearch && (
-          <button onClick={onSearch} className="absolute bottom-1 left-1 bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition z-10">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          </button>
+        {w.product_number && (
+          <div className="absolute bottom-1 left-1 opacity-0 group-hover:opacity-100 transition z-10">
+            <QuickSearchButton productNumber={w.product_number} className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded" />
+          </div>
         )}
         {deleteMode && deleteSelected && (
           <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center pointer-events-none">
