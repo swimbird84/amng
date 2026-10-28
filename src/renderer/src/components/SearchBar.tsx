@@ -535,8 +535,8 @@ export default function SearchBar(props: Props) {
             {/* ── tier / ranking (공통) ──────────────────────── */}
             {tierLevels.length > 0 && (
               <>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">티어</span>
+                <div className="flex items-start gap-1.5 flex-wrap">
+                  <span className="text-xs text-gray-400 w-12 shrink-0 pt-1">티어</span>
                   <button
                     type="button"
                     onClick={() => onChange({ ...params, tierLevelId: '', untiered: false } as never)}
@@ -558,8 +558,8 @@ export default function SearchBar(props: Props) {
                   >미배치 <span className="opacity-70">{tierUnplacedCount}</span></button>
                 </div>
                 {divisionCounts.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs text-gray-400 w-12 shrink-0">랭킹</span>
+                  <div className="flex items-start gap-1.5 flex-wrap">
+                    <span className="text-xs text-gray-400 w-12 shrink-0 pt-1">랭킹</span>
                     <button
                       type="button"
                       onClick={() => onChange({ ...params, division: '' } as never)}
@@ -773,7 +773,7 @@ export default function SearchBar(props: Props) {
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
+                  <span className="text-xs text-gray-400 w-12 shrink-0">기타</span>
                   <button
                     type="button"
                     onClick={() => onChange({ ...wParams, deletePending: !wParams.deletePending } as never)}
@@ -920,7 +920,7 @@ export default function SearchBar(props: Props) {
                     >코멘트없음</button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
+                    <span className="text-xs text-gray-400 w-12 shrink-0">기타</span>
                     <button
                       type="button"
                       onClick={() => onChange({ ...aParams, realNameNull: !aParams.realNameNull } as never)}
