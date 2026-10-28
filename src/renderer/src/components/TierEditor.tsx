@@ -274,6 +274,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
         {levels.map(level => {
           const levelItems = getItemsForLevel(level.id)
           const isExpanded = expandedLevels.has(level.id)
+          const ITEM_HEIGHT = 80
           const COLLAPSED_MAX = setType === 'actor' ? 39 : 30
           const overflows = levelItems.length > COLLAPSED_MAX
           return (
