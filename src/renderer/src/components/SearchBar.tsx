@@ -535,44 +535,48 @@ export default function SearchBar(props: Props) {
             {/* ── tier / ranking (공통) ──────────────────────── */}
             {tierLevels.length > 0 && (
               <>
-                <div className="flex items-start gap-1.5 flex-wrap">
-                  <span className="text-xs text-gray-400 w-12 shrink-0 pt-1">티어</span>
-                  <button
-                    type="button"
-                    onClick={() => onChange({ ...params, tierLevelId: '', untiered: false } as never)}
-                    className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === '' && !(type === 'works' ? wParams?.untiered : aParams?.untiered) ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >전체</button>
-                  {tierLevels.map(lv => (
+                <div className="flex items-start gap-1.5">
+                  <span className="text-xs text-gray-400 w-14 shrink-0 pt-1">티어</span>
+                  <div className="flex flex-wrap gap-1.5 flex-1">
                     <button
-                      key={lv.id}
                       type="button"
-                      onClick={() => onChange({ ...params, tierLevelId: (type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === lv.id ? '' : lv.id, untiered: false } as never)}
-                      className={`text-xs px-2 py-1 rounded border ${(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === lv.id ? 'bg-blue-600 text-white border-blue-500' : 'hover:opacity-80'}`}
-                      style={(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) !== lv.id ? { backgroundColor: `${lv.color}30`, color: lv.color, borderColor: `${lv.color}60` } : undefined}
-                    >{lv.name} <span className="opacity-70">{lv.count}</span></button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => onChange({ ...params, untiered: !(type === 'works' ? wParams?.untiered : aParams?.untiered), tierLevelId: '' } as never)}
-                    className={`text-xs px-2 py-1 rounded border ${(type === 'works' ? wParams?.untiered : aParams?.untiered) ? 'bg-blue-600 text-white border-blue-500' : 'bg-gray-800/60 text-gray-500 border-gray-700 hover:opacity-80'}`}
-                  >미배치 <span className="opacity-70">{tierUnplacedCount}</span></button>
+                      onClick={() => onChange({ ...params, tierLevelId: '', untiered: false } as never)}
+                      className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === '' && !(type === 'works' ? wParams?.untiered : aParams?.untiered) ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >전체</button>
+                    {tierLevels.map(lv => (
+                      <button
+                        key={lv.id}
+                        type="button"
+                        onClick={() => onChange({ ...params, tierLevelId: (type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === lv.id ? '' : lv.id, untiered: false } as never)}
+                        className={`text-xs px-2 py-1 rounded border ${(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === lv.id ? 'bg-blue-600 text-white border-blue-500' : 'hover:opacity-80'}`}
+                        style={(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) !== lv.id ? { backgroundColor: `${lv.color}30`, color: lv.color, borderColor: `${lv.color}60` } : undefined}
+                      >{lv.name} <span className="opacity-70">{lv.count}</span></button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...params, untiered: !(type === 'works' ? wParams?.untiered : aParams?.untiered), tierLevelId: '' } as never)}
+                      className={`text-xs px-2 py-1 rounded border ${(type === 'works' ? wParams?.untiered : aParams?.untiered) ? 'bg-blue-600 text-white border-blue-500' : 'bg-gray-800/60 text-gray-500 border-gray-700 hover:opacity-80'}`}
+                    >미배치 <span className="opacity-70">{tierUnplacedCount}</span></button>
+                  </div>
                 </div>
                 {divisionCounts.length > 0 && (
-                  <div className="flex items-start gap-1.5 flex-wrap">
-                    <span className="text-xs text-gray-400 w-12 shrink-0 pt-1">랭킹</span>
-                    <button
-                      type="button"
-                      onClick={() => onChange({ ...params, division: '' } as never)}
-                      className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.division : aParams?.division) === '' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >전체</button>
-                    {divisionCounts.map(({ division, count }) => (
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-xs text-gray-400 w-14 shrink-0 pt-1">랭킹</span>
+                    <div className="flex flex-wrap gap-1.5 flex-1">
                       <button
-                        key={division}
                         type="button"
-                        onClick={() => onChange({ ...params, division: (type === 'works' ? wParams?.division : aParams?.division) === division ? '' : division } as never)}
-                        className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.division : aParams?.division) === division ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                      >{division === 0 ? '미참가' : `${division}부`} <span className="opacity-70">{count}</span></button>
-                    ))}
+                        onClick={() => onChange({ ...params, division: '' } as never)}
+                        className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.division : aParams?.division) === '' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                      >전체</button>
+                      {divisionCounts.map(({ division, count }) => (
+                        <button
+                          key={division}
+                          type="button"
+                          onClick={() => onChange({ ...params, division: (type === 'works' ? wParams?.division : aParams?.division) === division ? '' : division } as never)}
+                          className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.division : aParams?.division) === division ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                        >{division === 0 ? '미참가' : `${division}부`} <span className="opacity-70">{count}</span></button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </>
@@ -582,7 +586,7 @@ export default function SearchBar(props: Props) {
               <>
                 {/* actor dropdown */}
                 {!hideActorDropdown && <div className="flex gap-2 flex-wrap items-center">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">배우</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">배우</span>
                   <div className="relative">
                     <button
                       ref={actorButtonRef}
@@ -644,7 +648,7 @@ export default function SearchBar(props: Props) {
                   </div>
                 </div>}
                 <div className="flex gap-2 flex-wrap items-center">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">레이블</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">레이블</span>
                   {/* studio dropdown */}
                   <div className="relative">
                     <button
@@ -699,7 +703,7 @@ export default function SearchBar(props: Props) {
 
                 {/* 발매일 */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">발매일</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">발매일</span>
                   <DatePickerInput value={wParams.releaseDateFrom} onChange={v => {
                     if (wParams.releaseDateTo && v && v > wParams.releaseDateTo) { alert('시작 날짜는 끝 날짜보다 이후일 수 없습니다'); onChange({ ...wParams, releaseDateFrom: wParams.releaseDateTo, releaseDateNull: false } as never); return }
                     onChange({ ...wParams, releaseDateFrom: v, releaseDateNull: false } as never)
@@ -717,7 +721,7 @@ export default function SearchBar(props: Props) {
 
                 {/* 별점 */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">별점</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">별점</span>
                   <StarSelect value={wParams.ratingFrom} onChange={v => onChange({ ...wParams, ratingFrom: v } as never)} />
                   <span className="text-gray-400 text-xs">~</span>
                   <StarSelect value={wParams.ratingTo} onChange={v => onChange({ ...wParams, ratingTo: v } as never)} />
@@ -726,7 +730,7 @@ export default function SearchBar(props: Props) {
 
                 {/* 배우수 */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">배우수</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">배우수</span>
                   <NumInput value={wParams.actorCountFrom} onChange={v => onChange({ ...wParams, actorCountFrom: v, actorCountNull: false } as never)} />
                   <span className="text-gray-400 text-xs">~</span>
                   <NumInput value={wParams.actorCountTo} onChange={v => onChange({ ...wParams, actorCountTo: v, actorCountNull: false } as never)} />
@@ -735,7 +739,7 @@ export default function SearchBar(props: Props) {
 
                 {/* 타이틀 */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">타이틀</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">타이틀</span>
                   <input
                     type="text"
                     value={wParams.titleSearch}
@@ -755,7 +759,7 @@ export default function SearchBar(props: Props) {
 
                 {/* 코멘트 */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">코멘트</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">코멘트</span>
                   <input
                     type="text"
                     value={wParams.commentSearch}
@@ -773,7 +777,7 @@ export default function SearchBar(props: Props) {
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-12 shrink-0">기타</span>
+                  <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
                   <button
                     type="button"
                     onClick={() => onChange({ ...wParams, deletePending: !wParams.deletePending } as never)}
@@ -920,7 +924,7 @@ export default function SearchBar(props: Props) {
                     >코멘트없음</button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-12 shrink-0">기타</span>
+                    <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
                     <button
                       type="button"
                       onClick={() => onChange({ ...aParams, realNameNull: !aParams.realNameNull } as never)}

@@ -318,12 +318,16 @@ export function registerSystemHandlers(): void {
 
   // ========== 이미지 읽기 (file:// 프로토콜 대신) ==========
 
-  ipcMain.handle('image:read', (_e, filePath: string) => {
-    if (!filePath || !fs.existsSync(filePath)) return null
-    const data = fs.readFileSync(filePath)
-    const ext = path.extname(filePath).slice(1).toLowerCase()
-    const mime = ext === 'jpg' ? 'jpeg' : ext
-    return `data:image/${mime};base64,${data.toString('base64')}`
+  ipcMain.handle('image:read', async (_e, filePath: string) => {
+    if (!filePath) return null
+    try {
+      const data = await fs.promises.readFile(filePath)
+      const ext = path.extname(filePath).slice(1).toLowerCase()
+      const mime = ext === 'jpg' ? 'jpeg' : ext
+      return `data:image/${mime};base64,${data.toString('base64')}`
+    } catch {
+      return null
+    }
   })
 
   // ========== 검색 URL ==========

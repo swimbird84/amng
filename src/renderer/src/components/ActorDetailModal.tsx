@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useEscHandler } from '../escManager'
 import type { Actor, Tag, Work } from '../types'
-import { actorsApi, actorTagsApi, shellApi, tierApi } from '../api'
+import { actorsApi, actorTagsApi, tierApi } from '../api'
 import ActorForm from './ActorForm'
 import ImagePreview from './ImagePreview'
-import Rating from './Rating'
 import RadarChart from './RadarChart'
 import CardTooltip, { type TooltipState } from './CardTooltip'
 import { calcPhysicalScore, computeStats, loadSettings, type ActorPhysicalData } from './PhysicalCorrectionModal'
@@ -27,10 +26,6 @@ const defaultScores = { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 
 
 export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex = 60, hideTierButton }: Props) {
   const [actor, setActor] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
-  const [fileStatuses, setFileStatuses] = useState<Record<number, boolean>>({})
-  const [workSort, setWorkSort] = useState<'release_date' | 'rating'>('release_date')
-  const [workSortDir, setWorkSortDir] = useState<'desc' | 'asc'>('desc')
-  const [hoverCover, setHoverCover] = useState<string | null>(null)
   const [hoverActorPhoto, setHoverActorPhoto] = useState<string | null>(null)
   const [physScore, setPhysScore] = useState<number | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
@@ -58,17 +53,6 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
     const detail = await actorsApi.get(actorId) as Actor & { works?: Work[]; tags?: Tag[] }
     if (!detail) return
     setActor(detail)
-    const allFiles = (detail.works ?? []).flatMap((w) => w.files ?? [])
-    const statuses: Record<number, boolean> = {}
-    const localFiles = allFiles.filter(f => f.type !== 'url')
-    for (const f of allFiles) { if (f.type === 'url') statuses[f.id] = true }
-    const BATCH = 10
-    for (let b = 0; b < localFiles.length; b += BATCH) {
-      const batch = localFiles.slice(b, b + BATCH)
-      const results = await Promise.all(batch.map(f => shellApi.fileExists(f.file_path)))
-      batch.forEach((f, i) => { statuses[f.id] = results[i] })
-    }
-    setFileStatuses(statuses)
     // phys score
     try {
       const physData = await actorsApi.physicalData() as ActorPhysicalData[]
@@ -82,22 +66,6 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   }
 
   useEffect(() => { loadActor() }, [actorId])
-
-  const sortedWorks = useMemo(() => {
-    const list = [...(actor?.works ?? [])].filter(w => !w.is_excluded)
-    list.sort((a, b) => {
-      let v = 0
-      if (workSort === 'rating') {
-        v = a.rating - b.rating
-      } else {
-        const da = a.release_date ?? ''
-        const db = b.release_date ?? ''
-        v = da < db ? -1 : da > db ? 1 : 0
-      }
-      return workSortDir === 'desc' ? -v : v
-    })
-    return list
-  }, [actor?.works, workSort, workSortDir])
 
   const handleEdit = () => {
     if (actor) {
@@ -138,14 +106,6 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
   return (
     <>
       {/* hover 미리보기 */}
-      {hoverCover && (
-        <div
-          className="fixed z-50 pointer-events-none"
-          style={{ right: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh', zIndex: (zIndex ?? 60) + 10 }}
-        >
-          <ImagePreview path={hoverCover} alt="표지 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
-        </div>
-      )}
       {hoverActorPhoto && (
         <div
           className="fixed z-50 pointer-events-none"
@@ -214,237 +174,140 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               </div>
             </div>
 
-            <div className="flex gap-0">
-              {/* 좌: 신체 + 레이더 차트 */}
-              <div className="flex-1 min-w-0">
-                {(actor.height || actor.bust || actor.waist || actor.hip || actor.cup) && (
-                  <div className="mb-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-300">
-                        {(() => {
-                          const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
-                          return <>
-                            {actor.height && <span>신장 {actor.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
-                            {(actor.bust || actor.waist || actor.hip) && <span>
-                              B{actor.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
-                              {' - '}W{actor.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
-                              {' - '}H{actor.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
-                              {'  '}
-                            </span>}
-                            {actor.cup && <span>{actor.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
-                          </>
-                        })()}
-                      </p>
-                      {(physScore != null || actor.ratio_score != null) && (
-                        <p className="text-sm text-blue-400 shrink-0 ml-2">{(physScore ?? actor.ratio_score!).toFixed(2)}점</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-                <div className="flex justify-center">
-                  <RadarChart scores={actor.scores ?? defaultScores} size={240} />
+            {/* 신체 정보 */}
+            {(actor.height || actor.bust || actor.waist || actor.hip || actor.cup) && (
+              <div className="mb-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-300">
+                    {(() => {
+                      const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
+                      return <>
+                        {actor.height && <span>신장 {actor.height}cm{ar.has('height') && <span className="text-xs text-gray-500">(ar)</span>}{'  '}</span>}
+                        {(actor.bust || actor.waist || actor.hip) && <span>
+                          B{actor.bust ?? '?'}{ar.has('bust') && <span className="text-xs text-gray-500">(ar)</span>}
+                          {' - '}W{actor.waist ?? '?'}{ar.has('waist') && <span className="text-xs text-gray-500">(ar)</span>}
+                          {' - '}H{actor.hip ?? '?'}{ar.has('hip') && <span className="text-xs text-gray-500">(ar)</span>}
+                          {'  '}
+                        </span>}
+                        {actor.cup && <span>{actor.cup}컵{ar.has('cup') && <span className="text-xs text-gray-500">(ar)</span>}</span>}
+                      </>
+                    })()}
+                  </p>
+                  {(physScore != null || actor.ratio_score != null) && (
+                    <p className="text-sm text-blue-400 shrink-0 ml-2">{(physScore ?? actor.ratio_score!).toFixed(2)}점</p>
+                  )}
                 </div>
               </div>
-              {/* 우: 추가 사진 썸네일 */}
-              {(actor as any).photos?.length > 0 && (
-                <div className="flex flex-col gap-1.5 pl-3 ml-3 border-l border-gray-700">
-                  {((actor as any).photos as { id: number; photo_path: string }[]).map((photo) => (
-                    <div
-                      key={photo.id}
-                      onMouseEnter={() => setHoverActorPhoto(photo.photo_path)}
-                      onMouseLeave={() => setHoverActorPhoto(null)}
-                    >
-                      <ImagePreview path={photo.photo_path} alt="추가 사진" className="w-20 h-20 rounded cursor-pointer object-cover" />
-                    </div>
-                  ))}
-                </div>
-              )}
+            )}
+
+            {/* 레이더 차트 */}
+            <div className="flex justify-center">
+              <RadarChart scores={actor.scores ?? defaultScores} size={264} />
             </div>
 
-            {actor.comment && (
-              <div>
-                <p className="text-xs text-gray-500 mb-1">코멘트</p>
-                <p className="text-sm text-gray-300 whitespace-pre-wrap">{actor.comment}</p>
-              </div>
-            )}
-
-            {actor.aliases && (
-              <div>
-                <p className="text-xs text-gray-500 mb-1">다른이름</p>
-                <div className="flex flex-wrap gap-1">
-                  {actor.aliases.split(',').map((a) => a.trim()).filter(Boolean).map((alias) => (
-                    <span key={alias} className="text-xs px-2 py-0.5 rounded bg-fuchsia-700 text-fuchsia-200">{alias}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {actor.real_name && (
-              <div>
-                <p className="text-xs text-gray-500 mb-1">본명</p>
-                <div className="flex flex-wrap gap-1">
-                  {actor.real_name.split(',').map((a) => a.trim()).filter(Boolean).map((rn) => (
-                    <span key={rn} className="text-xs px-2 py-0.5 rounded bg-blue-800 text-blue-200">{rn}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {actor.tags && actor.tags.length > 0 && (() => {
-              type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof actor.tags }
-              const catMap = new Map<number | null, Group>()
-              const groups: Group[] = []
-              const sorted = [...actor.tags!].sort((a, b) => {
-                const ao = a.category_sort_order ?? 999999
-                const bo = b.category_sort_order ?? 999999
-                if (ao !== bo) return ao - bo
-                const ar = actor.rep_tags?.some((r) => r.id === a.id) ? 0 : 1
-                const br = actor.rep_tags?.some((r) => r.id === b.id) ? 0 : 1
-                if (ar !== br) return ar - br
-                return a.name.localeCompare(b.name)
-              })
-              for (const tag of sorted) {
-                const key = tag.category_id ?? null
-                if (!catMap.has(key)) {
-                  const g: Group = { catId: key, catName: tag.category_name ?? null, sortOrder: tag.category_sort_order ?? 999999, tags: [] }
-                  catMap.set(key, g)
-                  groups.push(g)
-                }
-                catMap.get(key)!.tags.push(tag)
-              }
-              return (
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">태그</p>
-                  <div className="grid grid-cols-[auto_1fr] gap-y-1 gap-x-2 items-start">
-                    {groups.map((g) => (
-                      <React.Fragment key={g.catId ?? 'none'}>
-                        <span className="text-xs text-gray-600 leading-5 text-right">{g.catName ?? '미분류'}</span>
-                        <div className="flex flex-wrap gap-1">
-                          {g.tags.map((t) => {
-                            const isRep = actor.rep_tags?.some((r) => r.id === t.id)
-                            return (
-                              <span
-                                key={t.id}
-                                onClick={() => handleToggleRepTag(t.id)}
-                                title={isRep ? '대표 태그 해제' : '대표 태그로 설정'}
-                                className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
-                                  isRep ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-blue-600 text-white hover:bg-blue-500'
-                                }`}
-                              >
-                                {t.name}
-                              </span>
-                            )
-                          })}
-                        </div>
-                      </React.Fragment>
-                    ))}
+            {/* 추가 사진 */}
+            {(actor as any).photos?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 justify-center mt-2">
+                {((actor as any).photos as { id: number; photo_path: string }[]).map((photo) => (
+                  <div
+                    key={photo.id}
+                    onMouseEnter={() => setHoverActorPhoto(photo.photo_path)}
+                    onMouseLeave={() => setHoverActorPhoto(null)}
+                  >
+                    <ImagePreview path={photo.photo_path} alt="추가 사진" className="w-20 h-20 rounded cursor-pointer object-cover" />
                   </div>
-                </div>
-              )
-            })()}
+                ))}
+              </div>
+            )}
 
           </div>
 
-          {/* 우측 - 출연작 */}
+          {/* 우측 - 본명/다른이름/코멘트/태그 */}
           <div className="w-[500px] border-l border-gray-700 flex flex-col">
             <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3">
-              {actor.works && actor.works.length > 0 ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-xs text-gray-500">출연작 ({sortedWorks.length})</p>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const data = await actorsApi.workTags(actor.id)
-                          setTagCloud(data)
-                        }}
-                        className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600"
-                      >
-                        태그
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => {
-                          if (workSort === 'release_date') setWorkSortDir((d) => d === 'desc' ? 'asc' : 'desc')
-                          else setWorkSort('release_date')
-                        }}
-                        className={`text-xs px-1.5 py-0.5 rounded ${workSort === 'release_date' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                      >
-                        발매일{workSort === 'release_date' ? (workSortDir === 'desc' ? '↓' : '↑') : ''}
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (workSort === 'rating') setWorkSortDir((d) => d === 'desc' ? 'asc' : 'desc')
-                          else setWorkSort('rating')
-                        }}
-                        className={`text-xs px-1.5 py-0.5 rounded ${workSort === 'rating' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                      >
-                        평점{workSort === 'rating' ? (workSortDir === 'desc' ? '↓' : '↑') : ''}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    {sortedWorks.map((w) => (
-                      <div key={w.id} className="flex items-stretch gap-1.5">
-                        <div
-                          onClick={() => onViewWork(w.id)}
-                          className="flex-1 flex gap-2 items-center bg-gray-700 rounded p-2 cursor-pointer hover:bg-gray-600"
-                        >
-                          <div
-                            onMouseMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
-                            onMouseLeave={() => setTooltip(null)}
-                          >
-                            <ImagePreview
-                              path={w.cover_path}
-                              alt={w.product_number || '-'}
-                              className="w-16 h-12 rounded flex-shrink-0 object-cover"
-                              version={refreshKey}
-                              onMouseEnter={() => setHoverCover(w.cover_path ?? null)}
-                              onMouseLeave={() => setHoverCover(null)}
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                            <div className="flex items-start justify-between gap-1">
-                              <div className="flex flex-wrap gap-0.5 min-w-0">
-                                {w.rep_tags?.map((t) => (
-                                  <span key={t.id} className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded">{t.name}</span>
-                                ))}
-                              </div>
-                              <p className="text-sm font-bold text-white flex-shrink-0">{w.product_number || '-'}</p>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="scale-75 origin-left"><Rating value={w.rating} readonly /></div>
-                              <p className="text-xs text-gray-400">{w.release_date || '-'}</p>
-                            </div>
-                          </div>
-                        </div>
-                        {w.files && w.files.length > 0 && (() => {
-                          const firstAvailable = w.files!.find((f) => fileStatuses[f.id])
-                          return (
-                            <button
-                              onClick={() => {
-                                if (!firstAvailable) return
-                                if (firstAvailable.type === 'url') shellApi.openExternal(firstAvailable.file_path)
-                                else shellApi.openPath(firstAvailable.file_path)
-                              }}
-                              disabled={!firstAvailable}
-                              className={`w-7 rounded flex items-center justify-center flex-shrink-0 ${firstAvailable ? (firstAvailable.type === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') : 'bg-gray-600 opacity-50 cursor-not-allowed'}`}
-                            >
-                              {firstAvailable?.type === 'url'
-                                ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-                                : <span className="text-white text-xs">▶</span>}
-                            </button>
-                          )
-                        })()}
-                      </div>
+
+              {actor.real_name && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">본명</p>
+                  <div className="flex flex-wrap gap-1">
+                    {actor.real_name.split(',').map((a) => a.trim()).filter(Boolean).map((rn) => (
+                      <span key={rn} className="text-xs px-2 py-0.5 rounded bg-blue-800 text-blue-200">{rn}</span>
                     ))}
                   </div>
-                </>
-              ) : (
-                <p className="text-gray-600 text-sm text-center mt-4">출연작 없음</p>
+                </div>
               )}
+
+              {actor.aliases && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">다른이름</p>
+                  <div className="flex flex-wrap gap-1">
+                    {actor.aliases.split(',').map((a) => a.trim()).filter(Boolean).map((alias) => (
+                      <span key={alias} className="text-xs px-2 py-0.5 rounded bg-fuchsia-700 text-fuchsia-200">{alias}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {actor.comment && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">코멘트</p>
+                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{actor.comment}</p>
+                </div>
+              )}
+
+              {actor.tags && actor.tags.length > 0 && (() => {
+                type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof actor.tags }
+                const catMap = new Map<number | null, Group>()
+                const groups: Group[] = []
+                const sorted = [...actor.tags!].sort((a, b) => {
+                  const ao = a.category_sort_order ?? 999999
+                  const bo = b.category_sort_order ?? 999999
+                  if (ao !== bo) return ao - bo
+                  const ar = actor.rep_tags?.some((r) => r.id === a.id) ? 0 : 1
+                  const br = actor.rep_tags?.some((r) => r.id === b.id) ? 0 : 1
+                  if (ar !== br) return ar - br
+                  return a.name.localeCompare(b.name)
+                })
+                for (const tag of sorted) {
+                  const key = tag.category_id ?? null
+                  if (!catMap.has(key)) {
+                    const g: Group = { catId: key, catName: tag.category_name ?? null, sortOrder: tag.category_sort_order ?? 999999, tags: [] }
+                    catMap.set(key, g)
+                    groups.push(g)
+                  }
+                  catMap.get(key)!.tags.push(tag)
+                }
+                return (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">태그</p>
+                    <div className="grid grid-cols-[auto_1fr] gap-y-1 gap-x-2 items-start">
+                      {groups.map((g) => (
+                        <React.Fragment key={g.catId ?? 'none'}>
+                          <span className="text-xs text-gray-600 leading-5 text-right">{g.catName ?? '미분류'}</span>
+                          <div className="flex flex-wrap gap-1">
+                            {g.tags.map((t) => {
+                              const isRep = actor.rep_tags?.some((r) => r.id === t.id)
+                              return (
+                                <span
+                                  key={t.id}
+                                  onClick={() => handleToggleRepTag(t.id)}
+                                  title={isRep ? '대표 태그 해제' : '대표 태그로 설정'}
+                                  className={`text-xs px-2 py-0.5 rounded cursor-pointer ${
+                                    isRep ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-blue-600 text-white hover:bg-blue-500'
+                                  }`}
+                                >
+                                  {t.name}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
             </div>
           </div>
         </div>

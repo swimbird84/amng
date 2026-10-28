@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from './db'
 import { deleteImagesByPattern, deleteImageFile } from './ipc-system'
+import { getDivBoundaries, getRecentRunLimit, buildPointsCte } from './ipc-cup'
 
 export function registerActorsHandlers(): void {
   const db = () => getDatabase()
@@ -189,7 +190,6 @@ export function registerActorsHandlers(): void {
       bindings.push(params.tierLevelId)
     }
     if (params?.division !== undefined) {
-      const { getDivBoundaries, getRecentRunLimit, buildPointsCte } = require('./ipc-cup')
       const divBoundaries = getDivBoundaries('actor')
       const rl = getRecentRunLimit(db(), 'actor')
       const ptsCte = buildPointsCte('actor', rl, 'dpts', true, null)

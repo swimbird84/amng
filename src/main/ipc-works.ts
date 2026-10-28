@@ -3,6 +3,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { getDatabase } from './db'
 import { deleteImagesByPattern } from './ipc-system'
+import { getDivBoundaries, getRecentRunLimit, buildPointsCte } from './ipc-cup'
 
 export function registerWorksHandlers(): void {
   const db = () => getDatabase()
@@ -152,7 +153,6 @@ export function registerWorksHandlers(): void {
     }
     // 디비전 필터
     if (params?.division !== undefined) {
-      const { getDivBoundaries, getRecentRunLimit, buildPointsCte } = require('./ipc-cup')
       const divBoundaries = getDivBoundaries('work')
       const rl = getRecentRunLimit(db(), 'work')
       const ptsCte = buildPointsCte('work', rl, 'dpts', true, null)
