@@ -579,12 +579,15 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center gap-2 mb-3 shrink-0">
           <button
-            onClick={() => { if (expanded) handleCollapseAll(); else handleExpandAll(); setExpanded(!expanded) }}
+            onClick={() => { handleCollapseAll(); setExpanded(false) }}
             className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
-          >{expanded
-            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
-          }</button>
+            title="전체 접기"
+          ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg></button>
+          <button
+            onClick={() => { handleExpandAll(); setExpanded(true) }}
+            className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
+            title="전체 펼치기"
+          ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button>
           <button
             onClick={loadTree}
             className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"

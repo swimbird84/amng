@@ -259,6 +259,14 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
         <span className={`text-xs px-1.5 py-0.5 rounded ${setType === 'actor' ? 'bg-purple-600 text-white' : 'bg-green-600 text-white'}`}>
           {setType === 'actor' ? '배우' : '작품'}
         </span>
+        <div className="ml-auto flex gap-1">
+          <button onClick={() => setExpandedLevels(new Set())} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded" title="전체 접기">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>
+          </button>
+          <button onClick={() => setExpandedLevels(new Set(levels.map(l => l.id)))} className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded" title="전체 펴기">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+          </button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4" onDragOver={handleAutoScroll}>
@@ -291,13 +299,12 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
 
                 {/* Items area */}
                 <div
-                  className={`flex-1 flex flex-wrap gap-1 p-1 border border-gray-700 min-h-[64px] items-stretch content-start overflow-hidden ${dropIndicator?.levelId === level.id && levelItems.length === 0 ? 'bg-gray-700' : 'bg-gray-800'}`}
-                  style={!isExpanded ? { maxHeight: maxCollapsedHeight } : undefined}
+                  className={`flex-1 flex flex-wrap gap-1 p-1 border border-gray-700 min-h-[64px] items-stretch content-start ${dropIndicator?.levelId === level.id && levelItems.length === 0 ? 'bg-gray-700' : 'bg-gray-800'}`}
                   onDragOver={e => handleDragOverLevel(e, level.id)}
                   onDragLeave={handleDragLeaveLevel}
                   onDrop={e => handleDropOnLevel(e, level.id)}
                 >
-                  {levelItems.map((item, idx) => (
+                  {(isExpanded ? levelItems : levelItems.slice(0, estItemsPerRow * MAX_ROWS)).map((item, idx) => (
                       <div key={item.item_id} style={{ height: ITEM_HEIGHT }}>
                         <div
                           data-tier-item
