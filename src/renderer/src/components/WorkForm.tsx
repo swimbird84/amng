@@ -119,7 +119,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
   }, [studioDropOpen])
 
   useEffect(() => {
-    workTagsApi.list().then((t) => setAllTags(t as Tag[]))
+    workTagsApi.list({ withAliases: true }).then((t) => setAllTags(t as Tag[]))
     workTagLinksApi.list().then(l => setTagLinks(l))
     Promise.all([actorsApi.list(), actorsApi.list({ showExcluded: true })]).then(([normal, excluded]) => {
       setAllActors([...(normal as Actor[]), ...(excluded as Actor[])])
@@ -825,7 +825,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <label className="text-sm text-gray-400">코멘트</label>
-              <button onClick={() => { const ids = allTags.filter(t => workComment.includes(t.name)).map(t => t.id); if (ids.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...ids])]) }} className="text-gray-400 hover:text-white" title="태그 자동 매칭">
+              <button onClick={() => { const ids = allTags.filter(t => workComment.includes(t.name) || t.aliases?.some(a => workComment.includes(a))).map(t => t.id); if (ids.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...ids])]) }} className="text-gray-400 hover:text-white" title="태그 자동 매칭">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
               </button>
             </div>
@@ -835,7 +835,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
               onPaste={(e) => {
                 const text = e.clipboardData.getData('text')
                 if (!text) return
-                const matchedIds = allTags.filter(t => text.includes(t.name)).map(t => t.id)
+                const matchedIds = allTags.filter(t => text.includes(t.name) || t.aliases?.some(a => text.includes(a))).map(t => t.id)
                 if (matchedIds.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...matchedIds])])
               }}
               rows={3}
@@ -852,7 +852,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
             <div className="flex items-center gap-2 mb-1">
               <label className="text-sm text-gray-400">타이틀</label>
               {productNumber && <QuickSearchButton productNumber={productNumber} />}
-              <button onClick={() => { const ids = allTags.filter(t => comment.includes(t.name)).map(t => t.id); if (ids.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...ids])]) }} className="text-gray-400 hover:text-white" title="태그 자동 매칭">
+              <button onClick={() => { const ids = allTags.filter(t => comment.includes(t.name) || t.aliases?.some(a => comment.includes(a))).map(t => t.id); if (ids.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...ids])]) }} className="text-gray-400 hover:text-white" title="태그 자동 매칭">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
               </button>
             </div>
@@ -862,7 +862,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
               onPaste={(e) => {
                 const text = e.clipboardData.getData('text')
                 if (!text) return
-                const matchedIds = allTags.filter(t => text.includes(t.name)).map(t => t.id)
+                const matchedIds = allTags.filter(t => text.includes(t.name) || t.aliases?.some(a => text.includes(a))).map(t => t.id)
                 if (matchedIds.length > 0) setSelectedTagIds(prev => [...new Set([...prev, ...matchedIds])])
               }}
               rows={4}

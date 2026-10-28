@@ -274,13 +274,8 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
         {levels.map(level => {
           const levelItems = getItemsForLevel(level.id)
           const isExpanded = expandedLevels.has(level.id)
-          const MAX_ROWS = 3
-          const ITEM_HEIGHT = 80
-          const maxCollapsedHeight = MAX_ROWS * (ITEM_HEIGHT + 4) + 8
-          // Estimate items per row: actor ~80px wide (1:1), work ~119px wide (800/540)
-          const estItemWidth = setType === 'actor' ? 84 : 123
-          const estItemsPerRow = Math.max(1, Math.floor(800 / estItemWidth))
-          const overflows = levelItems.length > estItemsPerRow * MAX_ROWS
+          const COLLAPSED_MAX = setType === 'actor' ? 39 : 30
+          const overflows = levelItems.length > COLLAPSED_MAX
           return (
             <div key={level.id} className="mb-1">
               <div className="flex" style={{ minHeight: 80 }}>
@@ -304,7 +299,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                   onDragLeave={handleDragLeaveLevel}
                   onDrop={e => handleDropOnLevel(e, level.id)}
                 >
-                  {(isExpanded ? levelItems : levelItems.slice(0, estItemsPerRow * MAX_ROWS)).map((item, idx) => (
+                  {(isExpanded ? levelItems : levelItems.slice(0, COLLAPSED_MAX)).map((item, idx) => (
                       <div key={item.item_id} style={{ height: ITEM_HEIGHT }}>
                         <div
                           data-tier-item

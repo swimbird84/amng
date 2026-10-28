@@ -53,14 +53,14 @@ export const actorTagCategoriesApi = {
 
 // 태그
 export const workTagsApi = {
-  list: (withCount?: boolean) => api.invoke('work-tags:list', withCount),
+  list: (params?: boolean | { withCount?: boolean; withAliases?: boolean }) => api.invoke('work-tags:list', params),
   create: (name: string) => api.invoke('work-tags:create', name),
   update: (id: number, name: string) => api.invoke('work-tags:update', id, name),
   delete: (id: number) => api.invoke('work-tags:delete', id),
 }
 
 export const actorTagsApi = {
-  list: (withCount?: boolean) => api.invoke('actor-tags:list', withCount),
+  list: (params?: boolean | { withCount?: boolean; withAliases?: boolean }) => api.invoke('actor-tags:list', params),
   create: (name: string) => api.invoke('actor-tags:create', name),
   update: (id: number, name: string) => api.invoke('actor-tags:update', id, name),
   delete: (id: number) => api.invoke('actor-tags:delete', id),
@@ -75,6 +75,21 @@ export const workTagLinksApi = {
 export const actorTagLinksApi = {
   list: () => api.invoke('actor-tag-links:list') as Promise<{ parent_tag_id: number; child_tag_id: number }[]>,
   set: (parentId: number, childIds: number[]) => api.invoke('actor-tag-links:set', parentId, childIds),
+}
+
+// 태그 별칭
+export const workTagAliasesApi = {
+  list: (tagId: number) => api.invoke('work-tag-aliases:list', tagId) as Promise<{ id: number; tag_id: number; alias: string }[]>,
+  create: (tagId: number, alias: string) => api.invoke('work-tag-aliases:create', tagId, alias),
+  delete: (id: number) => api.invoke('work-tag-aliases:delete', id),
+  hasAny: () => api.invoke('work-tag-aliases:hasAny') as Promise<Set<number>>,
+}
+
+export const actorTagAliasesApi = {
+  list: (tagId: number) => api.invoke('actor-tag-aliases:list', tagId) as Promise<{ id: number; tag_id: number; alias: string }[]>,
+  create: (tagId: number, alias: string) => api.invoke('actor-tag-aliases:create', tagId, alias),
+  delete: (id: number) => api.invoke('actor-tag-aliases:delete', id),
+  hasAny: () => api.invoke('actor-tag-aliases:hasAny') as Promise<Set<number>>,
 }
 
 // 제작사

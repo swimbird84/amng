@@ -88,9 +88,12 @@ export function registerTagsHandlers(): void {
 
   // ========== 태그 ==========
 
-  ipcMain.handle('work-tags:list', (_e, withCount?: boolean) => {
+  ipcMain.handle('work-tags:list', (_e, params?: boolean | { withCount?: boolean; withAliases?: boolean }) => {
+    const withCount = typeof params === 'boolean' ? params : params?.withCount
+    const withAliases = typeof params === 'object' ? params?.withAliases : false
+    let rows: any[]
     if (withCount) {
-      return db().prepare(`
+      rows = db().prepare(`
         SELECT t.*,
           COUNT(wt.work_id) AS total_count,
           SUM(CASE WHEN wt.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count,
@@ -100,13 +103,24 @@ export function registerTagsHandlers(): void {
         LEFT JOIN work_tag_categories c ON c.id = t.category_id
         GROUP BY t.id ORDER BY t.name
       `).all()
+    } else {
+      rows = db().prepare(`
+        SELECT t.*, c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
+        FROM work_tags_master t
+        LEFT JOIN work_tag_categories c ON c.id = t.category_id
+        ORDER BY t.name
+      `).all()
     }
-    return db().prepare(`
-      SELECT t.*, c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
-      FROM work_tags_master t
-      LEFT JOIN work_tag_categories c ON c.id = t.category_id
-      ORDER BY t.name
-    `).all()
+    if (withAliases) {
+      const aliases = db().prepare('SELECT tag_id, alias FROM work_tag_aliases').all() as { tag_id: number; alias: string }[]
+      const aliasMap = new Map<number, string[]>()
+      for (const a of aliases) {
+        if (!aliasMap.has(a.tag_id)) aliasMap.set(a.tag_id, [])
+        aliasMap.get(a.tag_id)!.push(a.alias)
+      }
+      for (const row of rows) (row as any).aliases = aliasMap.get((row as any).id) ?? []
+    }
+    return rows
   })
 
   ipcMain.handle('work-tags:create', (_e, name: string) => {
@@ -126,9 +140,12 @@ export function registerTagsHandlers(): void {
     return true
   })
 
-  ipcMain.handle('actor-tags:list', (_e, withCount?: boolean) => {
+  ipcMain.handle('actor-tags:list', (_e, params?: boolean | { withCount?: boolean; withAliases?: boolean }) => {
+    const withCount = typeof params === 'boolean' ? params : params?.withCount
+    const withAliases = typeof params === 'object' ? params?.withAliases : false
+    let rows: any[]
     if (withCount) {
-      return db().prepare(`
+      rows = db().prepare(`
         SELECT t.*,
           COUNT(at2.actor_id) AS total_count,
           SUM(CASE WHEN at2.is_rep = 1 THEN 1 ELSE 0 END) AS rep_count,
@@ -138,13 +155,24 @@ export function registerTagsHandlers(): void {
         LEFT JOIN actor_tag_categories c ON c.id = t.category_id
         GROUP BY t.id ORDER BY t.name
       `).all()
+    } else {
+      rows = db().prepare(`
+        SELECT t.*, c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
+        FROM actor_tags_master t
+        LEFT JOIN actor_tag_categories c ON c.id = t.category_id
+        ORDER BY t.name
+      `).all()
     }
-    return db().prepare(`
-      SELECT t.*, c.name AS category_name, COALESCE(c.sort_order, 999999) AS category_sort_order
-      FROM actor_tags_master t
-      LEFT JOIN actor_tag_categories c ON c.id = t.category_id
-      ORDER BY t.name
-    `).all()
+    if (withAliases) {
+      const aliases = db().prepare('SELECT tag_id, alias FROM actor_tag_aliases').all() as { tag_id: number; alias: string }[]
+      const aliasMap = new Map<number, string[]>()
+      for (const a of aliases) {
+        if (!aliasMap.has(a.tag_id)) aliasMap.set(a.tag_id, [])
+        aliasMap.get(a.tag_id)!.push(a.alias)
+      }
+      for (const row of rows) (row as any).aliases = aliasMap.get((row as any).id) ?? []
+    }
+    return rows
   })
 
   ipcMain.handle('actor-tags:create', (_e, name: string) => {
@@ -198,5 +226,45 @@ export function registerTagsHandlers(): void {
       }
     })()
     return true
+  })
+
+  // ========== 태그 별칭 ==========
+
+  ipcMain.handle('work-tag-aliases:list', (_e, tagId: number) => {
+    return db().prepare('SELECT * FROM work_tag_aliases WHERE tag_id = ? ORDER BY id').all(tagId)
+  })
+
+  ipcMain.handle('work-tag-aliases:create', (_e, tagId: number, alias: string) => {
+    const result = db().prepare('INSERT INTO work_tag_aliases (tag_id, alias) VALUES (?, ?)').run(tagId, alias.trim())
+    return result.lastInsertRowid
+  })
+
+  ipcMain.handle('work-tag-aliases:delete', (_e, id: number) => {
+    db().prepare('DELETE FROM work_tag_aliases WHERE id = ?').run(id)
+    return true
+  })
+
+  ipcMain.handle('work-tag-aliases:hasAny', () => {
+    const rows = db().prepare('SELECT DISTINCT tag_id FROM work_tag_aliases').all() as { tag_id: number }[]
+    return new Set(rows.map(r => r.tag_id))
+  })
+
+  ipcMain.handle('actor-tag-aliases:list', (_e, tagId: number) => {
+    return db().prepare('SELECT * FROM actor_tag_aliases WHERE tag_id = ? ORDER BY id').all(tagId)
+  })
+
+  ipcMain.handle('actor-tag-aliases:create', (_e, tagId: number, alias: string) => {
+    const result = db().prepare('INSERT INTO actor_tag_aliases (tag_id, alias) VALUES (?, ?)').run(tagId, alias.trim())
+    return result.lastInsertRowid
+  })
+
+  ipcMain.handle('actor-tag-aliases:delete', (_e, id: number) => {
+    db().prepare('DELETE FROM actor_tag_aliases WHERE id = ?').run(id)
+    return true
+  })
+
+  ipcMain.handle('actor-tag-aliases:hasAny', () => {
+    const rows = db().prepare('SELECT DISTINCT tag_id FROM actor_tag_aliases').all() as { tag_id: number }[]
+    return new Set(rows.map(r => r.tag_id))
   })
 }

@@ -588,6 +588,22 @@ export function initDatabase(): void {
     db.prepare('ALTER TABLE tier_levels ADD COLUMN is_cup_excluded INTEGER NOT NULL DEFAULT 0').run()
   }
 
+  // 태그 별칭 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS work_tag_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tag_id INTEGER REFERENCES work_tags_master(id) ON DELETE CASCADE,
+      alias TEXT NOT NULL
+    )
+  `)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS actor_tag_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tag_id INTEGER REFERENCES actor_tags_master(id) ON DELETE CASCADE,
+      alias TEXT NOT NULL
+    )
+  `)
+
   // 검색 URL 테이블
   db.exec(`
     CREATE TABLE IF NOT EXISTS search_urls (

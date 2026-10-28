@@ -9,6 +9,7 @@ import WorkDetailModal from '../components/WorkDetailModal'
 import ActorDetailModal from '../components/ActorDetailModal'
 import TagCategoryManager from '../components/TagManager'
 import TagLinkModal from '../components/TagLinkModal'
+import TagAliasModal from '../components/TagAliasModal'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import { useDataChanged } from '../dataEvents'
 
@@ -100,6 +101,7 @@ function TagPanel({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [showTagLinkModal, setShowTagLinkModal] = useState(false)
+  const [showTagAliasModal, setShowTagAliasModal] = useState(false)
   const [addingCategoryKey, setAddingCategoryKey] = useState<string | null>(null)
   const [inlineName, setInlineName] = useState('')
 
@@ -204,6 +206,12 @@ function TagPanel({
             className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
           >
             태그 연결
+          </button>
+          <button
+            onClick={() => setShowTagAliasModal(true)}
+            className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
+          >
+            태그 별칭
           </button>
           <button
             onClick={() => setShowCategoryManager(true)}
@@ -371,6 +379,12 @@ function TagPanel({
         <TagLinkModal
           type={type === 'works' ? 'work' : 'actor'}
           onClose={() => setShowTagLinkModal(false)}
+        />
+      )}
+      {showTagAliasModal && (
+        <TagAliasModal
+          type={type === 'works' ? 'work' : 'actor'}
+          onClose={() => setShowTagAliasModal(false)}
         />
       )}
     </div>

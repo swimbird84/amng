@@ -95,6 +95,7 @@ export interface Tag {
   category_id?: number | null
   category_name?: string | null
   category_sort_order?: number | null
+  aliases?: string[]
 }
 
 export interface TagCategory {

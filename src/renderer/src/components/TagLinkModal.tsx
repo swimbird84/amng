@@ -220,20 +220,20 @@ export default function TagLinkModal({ type, onClose }: Props) {
                       </button>
                     </div>
                   )}
-                  <div className="space-y-0.5">
+                  <div className="flex flex-wrap gap-1">
                     {g.tags.map(tag => (
                       <button
                         key={tag.id}
                         onClick={() => setSelectedParentId(tag.id)}
-                        className={`w-full text-left px-2 py-1 rounded text-xs flex items-center justify-between gap-1 ${
+                        className={`px-2 py-0.5 rounded text-xs ${
                           selectedParentId === tag.id
                             ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-700'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                         }`}
                       >
-                        <span className="truncate">{tag.name}</span>
+                        {tag.name}
                         {hasChildren(tag.id) && (
-                          <span className="text-yellow-400 shrink-0 text-[10px]">●</span>
+                          <span className="text-yellow-400 ml-0.5 text-[10px]">●</span>
                         )}
                       </button>
                     ))}
