@@ -691,6 +691,12 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
     const itemCol = t.type === 'actor' ? 'a.id' : 'w.id'
     const fromClause = t.type === 'actor' ? 'actors a' : 'works w'
     const rl = getRecentRunLimit(database, t.type as 'actor' | 'work')
+    // 마스터 티어 기반 참가 조건: 티어 등록 + 등급 대회제외 아닌 것만
+    const tierJoin = `
+      JOIN tier_items ti_elig ON ti_elig.item_id = ${itemCol}
+      JOIN tier_levels tl_elig ON tl_elig.id = ti_elig.level_id AND tl_elig.is_cup_excluded = 0
+      JOIN tier_sets ts_elig ON ts_elig.id = ti_elig.set_id AND ts_elig.type = '${t.type}' AND ts_elig.is_master = 1
+    `
     const ranked = database.prepare(`
       WITH pts AS (
         SELECT item_id, total_points FROM ${buildPointsCte(t.type as 'actor' | 'work', rl, 'rpt', true)}
@@ -705,6 +711,7 @@ function getEligibleItemIds(database: DB, tournamentId: number): number[] {
       SELECT RANK() OVER (ORDER BY COALESCE(pts.total_points, 0) DESC) AS rank, ${itemCol} AS id,
         COALESCE(mrc.master_run_count, 0) AS master_run_count
       FROM ${fromClause}
+      ${tierJoin}
       LEFT JOIN pts ON pts.item_id = ${itemCol}
       LEFT JOIN mrc ON mrc.item_id = ${itemCol}
       ${t.type === 'actor' ? 'WHERE a.is_deleted = 0 AND a.is_excluded = 0' : 'WHERE COALESCE(w.is_excluded, 0) = 0'}
@@ -1239,6 +1246,9 @@ export function registerCupHandlers(): void {
             COALESCE((sc.face + sc.bust + sc.hip + sc.physical + sc.skin + sc.acting + sc.sexy + sc.charm + sc.technique + sc.proportions) / 13.0, 0) AS avg_score,
             RANK() OVER (ORDER BY COALESCE((sc.face + sc.bust + sc.hip + sc.physical + sc.skin + sc.acting + sc.sexy + sc.charm + sc.technique + sc.proportions) / 13.0, 0) DESC) AS score_rank
           FROM actors a
+          JOIN tier_items ti_r ON ti_r.item_id = a.id
+          JOIN tier_levels tl_r ON tl_r.id = ti_r.level_id AND tl_r.is_cup_excluded = 0
+          JOIN tier_sets ts_r ON ts_r.id = ti_r.set_id AND ts_r.type = 'actor' AND ts_r.is_master = 1
           LEFT JOIN ${ptsCte} ON pts.item_id = a.id
           LEFT JOIN (
             SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count
@@ -1248,7 +1258,7 @@ export function registerCupHandlers(): void {
             GROUP BY e.item_id
           ) mrc ON mrc.item_id = a.id
           LEFT JOIN actor_scores sc ON sc.actor_id = a.id
-          WHERE a.is_deleted = 0 AND is_excluded = 0
+          WHERE a.is_deleted = 0 AND a.is_excluded = 0
         )
         SELECT ranked.rank, ranked.id, ranked.name, ranked.photo_path, ranked.total_points, ranked.master_run_count,
           ranked.avg_score, ranked.score_rank,
@@ -1306,6 +1316,9 @@ export function registerCupHandlers(): void {
             COALESCE(pts.total_points, 0) AS total_points,
             COALESCE(mrc.master_run_count, 0) AS master_run_count
           FROM works w
+          JOIN tier_items ti_r ON ti_r.item_id = w.id
+          JOIN tier_levels tl_r ON tl_r.id = ti_r.level_id AND tl_r.is_cup_excluded = 0
+          JOIN tier_sets ts_r ON ts_r.id = ti_r.set_id AND ts_r.type = 'work' AND ts_r.is_master = 1
           LEFT JOIN ${ptsCte} ON pts.item_id = w.id
           LEFT JOIN (
             SELECT e.item_id, COUNT(DISTINCT r.id) AS master_run_count

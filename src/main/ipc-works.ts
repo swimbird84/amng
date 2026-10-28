@@ -31,6 +31,8 @@ export function registerWorksHandlers(): void {
     excludeFilter?: 'hide' | 'include' | 'only'
     fileStatus?: 'all' | 'file' | 'link' | 'both' | 'none'
     untiered?: boolean
+    tierLevelId?: number
+    division?: number
     actorCountFrom?: number
     actorCountTo?: number
     actorCountNull?: boolean
@@ -142,6 +144,50 @@ export function registerWorksHandlers(): void {
     // 미배치 티어 필터
     if (params?.untiered) {
       conditions.push("NOT EXISTS (SELECT 1 FROM tier_items ti JOIN tier_sets ts ON ts.id = ti.set_id AND ts.type = 'work' AND ts.is_master = 1 WHERE ti.item_id = w.id)")
+    }
+    // 티어 등급 필터
+    if (params?.tierLevelId !== undefined) {
+      conditions.push("EXISTS (SELECT 1 FROM tier_items ti JOIN tier_sets ts ON ts.id = ti.set_id AND ts.type = 'work' AND ts.is_master = 1 WHERE ti.item_id = w.id AND ti.level_id = ?)")
+      bindings.push(params.tierLevelId)
+    }
+    // 디비전 필터
+    if (params?.division !== undefined) {
+      const { getDivBoundaries, getRecentRunLimit, buildPointsCte } = require('./ipc-cup')
+      const divBoundaries = getDivBoundaries('work')
+      const rl = getRecentRunLimit(db(), 'work')
+      const ptsCte = buildPointsCte('work', rl, 'dpts', true, null)
+      const divRanked = db().prepare(`
+        SELECT w2.id,
+          RANK() OVER (ORDER BY COALESCE(dpts.total_points, 0) DESC) AS rank,
+          COALESCE(mrc.cnt, 0) AS master_run_count
+        FROM works w2
+        LEFT JOIN ${ptsCte} ON dpts.item_id = w2.id
+        LEFT JOIN (
+          SELECT e.item_id, COUNT(DISTINCT r.id) AS cnt
+          FROM cup_entries e
+          JOIN cup_runs r ON r.id = e.run_id AND r.status = 'completed' AND r.season_id IS NULL
+          JOIN cup_tournaments t ON t.id = r.tournament_id AND t.is_master = 1 AND t.type = 'work'
+          GROUP BY e.item_id
+        ) mrc ON mrc.item_id = w2.id
+        WHERE COALESCE(w2.is_excluded, 0) = 0
+      `).all() as { id: number; rank: number; master_run_count: number }[]
+      const divIds: number[] = []
+      for (const row of divRanked) {
+        let div = 0
+        if (row.master_run_count > 0) {
+          for (let d = 0; d < divBoundaries.length; d++) {
+            if (row.rank <= divBoundaries[d]) { div = d + 1; break }
+          }
+          if (div === 0) div = divBoundaries.length + 1
+        }
+        if (div === params.division) divIds.push(row.id)
+      }
+      if (divIds.length === 0) {
+        conditions.push('0 = 1')
+      } else {
+        conditions.push(`w.id IN (${divIds.map(() => '?').join(',')})`)
+        bindings.push(...divIds)
+      }
     }
 
     if (params?.actorCountFrom !== undefined) {

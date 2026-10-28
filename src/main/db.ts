@@ -582,6 +582,12 @@ export function initDatabase(): void {
     defaultTiers.forEach((t, i) => insertLevel.run(r.lastInsertRowid, t.name, t.color, i))
   }
 
+  // tier_levels 마이그레이션: is_cup_excluded
+  const tierLevelCols = (db.prepare("PRAGMA table_info(tier_levels)").all() as { name: string }[]).map(c => c.name)
+  if (!tierLevelCols.includes('is_cup_excluded')) {
+    db.prepare('ALTER TABLE tier_levels ADD COLUMN is_cup_excluded INTEGER NOT NULL DEFAULT 0').run()
+  }
+
   // 검색 URL 테이블
   db.exec(`
     CREATE TABLE IF NOT EXISTS search_urls (

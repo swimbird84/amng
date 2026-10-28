@@ -110,12 +110,13 @@ export function registerTierHandlers(): void {
     return result.lastInsertRowid
   })
 
-  ipcMain.handle('tier:updateLevel', (_e, levelId: number, data: { name?: string; color?: string; sort_order?: number }) => {
+  ipcMain.handle('tier:updateLevel', (_e, levelId: number, data: { name?: string; color?: string; sort_order?: number; is_cup_excluded?: number }) => {
     const fields: string[] = []
     const values: unknown[] = []
     if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name) }
     if (data.color !== undefined) { fields.push('color = ?'); values.push(data.color) }
     if (data.sort_order !== undefined) { fields.push('sort_order = ?'); values.push(data.sort_order) }
+    if (data.is_cup_excluded !== undefined) { fields.push('is_cup_excluded = ?'); values.push(data.is_cup_excluded) }
     if (fields.length > 0) {
       values.push(levelId)
       db().prepare(`UPDATE tier_levels SET ${fields.join(', ')} WHERE id = ?`).run(...values)

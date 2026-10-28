@@ -9,6 +9,7 @@ interface TierLevel {
   name: string
   color: string
   sort_order: number
+  is_cup_excluded: number
 }
 
 interface TierItem {
@@ -50,6 +51,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
   const [expandedLevels, setExpandedLevels] = useState<Set<number>>(new Set())
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
+  const [editCupExcluded, setEditCupExcluded] = useState(false)
   const [showAddLevel, setShowAddLevel] = useState(false)
   const [newLevelName, setNewLevelName] = useState('')
   const [newLevelColor, setNewLevelColor] = useState(DEFAULT_COLORS[0])
@@ -126,7 +128,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
 
   const handleUpdateLevel = async () => {
     if (!editLevel || !editName.trim()) return
-    await tierApi.updateLevel(editLevel.id, { name: editName.trim(), color: editColor })
+    await tierApi.updateLevel(editLevel.id, { name: editName.trim(), color: editColor, is_cup_excluded: editCupExcluded ? 1 : 0 })
     setEditLevel(null)
     loadLevels()
   }
@@ -278,9 +280,12 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                 <div
                   className="w-16 shrink-0 flex flex-col items-center justify-center cursor-pointer font-bold text-sm text-white rounded-l"
                   style={{ backgroundColor: level.color }}
-                  onClick={() => { setEditLevel(level); setEditName(level.name); setEditColor(level.color) }}
+                  onClick={() => { setEditLevel(level); setEditName(level.name); setEditColor(level.color); setEditCupExcluded(!!level.is_cup_excluded) }}
                 >
-                  <span>{level.name}</span>
+                  <span className="flex items-center gap-0.5">
+                    {!!level.is_cup_excluded && <svg className="w-3 h-3 opacity-80" viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="10" r="9" fill="none" stroke="currentColor" strokeWidth="2"/><line x1="4" y1="4" x2="16" y2="16" stroke="currentColor" strokeWidth="2"/></svg>}
+                    {level.name}
+                  </span>
                   {levelItems.length > 0 && <span className="text-[10px] font-normal opacity-70">({levelItems.length})</span>}
                 </div>
 
@@ -449,6 +454,15 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                 className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent"
               />
             </div>
+            <label className="flex items-center gap-2 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={editCupExcluded}
+                onChange={e => setEditCupExcluded(e.target.checked)}
+                className="w-4 h-4 rounded"
+              />
+              <span className="text-sm text-gray-300">대회 제외</span>
+            </label>
             <div className="flex justify-between">
               <button onClick={handleDeleteLevel} className="text-sm text-red-400 hover:text-red-300 px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600">삭제</button>
               <div className="flex gap-2">

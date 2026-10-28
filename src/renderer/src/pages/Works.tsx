@@ -95,6 +95,8 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     if (search.excludeFilter !== 'hide') params.excludeFilter = search.excludeFilter
     if (search.fileStatus !== 'all') params.fileStatus = search.fileStatus
     if (search.untiered) params.untiered = true
+    if (search.tierLevelId !== '') params.tierLevelId = Number(search.tierLevelId)
+    if (search.division !== '') params.division = Number(search.division)
     params.limit = limit
     params.offset = offset
     const result = await worksApi.list(params) as { items: Work[]; total: number }
@@ -636,7 +638,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
               setId={masterWorkTierSetId}
               setName="마스터 작품 티어"
               setType="work"
-              onBack={() => { setTierEditorWorkId(null); refreshWorks(); loadMasterPoints() }}
+              onBack={() => { setTierEditorWorkId(null); refreshWorks(); loadMasterPoints(); loadTierMap() }}
               onNavigateToActor={(id) => setTierActorDetailId(id)}
               onNavigateToWork={(id) => setTierWorkDetailId(id)}
               focusItemId={tierEditorWorkId}

@@ -156,6 +156,8 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     if (search.deletePending) params.deletePending = true
     if (search.excludeFilter !== 'hide') params.excludeFilter = search.excludeFilter
     if (search.untiered) params.untiered = true
+    if (search.tierLevelId !== '') params.tierLevelId = Number(search.tierLevelId)
+    if (search.division !== '') params.division = Number(search.division)
     const list = await actorsApi.list(params) as Actor[]
     setActors(list)
   }, [search, sortBy, sortDir])

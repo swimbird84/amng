@@ -23,6 +23,8 @@ export interface WorkSearchParams {
   excludeFilter: 'hide' | 'include' | 'only'
   fileStatus: 'all' | 'file' | 'link' | 'both' | 'none'
   untiered: boolean
+  tierLevelId: number | ''
+  division: number | ''
 }
 
 export interface ActorSearchParams {
@@ -68,6 +70,8 @@ export interface ActorSearchParams {
   deletePending: boolean
   excludeFilter: 'hide' | 'include' | 'only'
   untiered: boolean
+  tierLevelId: number | ''
+  division: number | ''
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
@@ -80,6 +84,8 @@ export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
   excludeFilter: 'hide',
   fileStatus: 'all',
   untiered: false,
+  tierLevelId: '',
+  division: '',
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
@@ -102,4 +108,6 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   deletePending: false,
   excludeFilter: 'hide',
   untiered: false,
+  tierLevelId: '',
+  division: '',
 }

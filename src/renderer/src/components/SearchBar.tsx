@@ -7,6 +7,7 @@ export { DEFAULT_WORK_SEARCH, DEFAULT_ACTOR_SEARCH }
 export type { WorkSearchParams, ActorSearchParams, TagMode }
 
 import { DatePickerInput, StarSelect, StarDisplay, NumInput, CupInput, subtractDate } from './search/SearchInputs'
+import { tierApi, cupApi } from '../api'
 
 // ── props ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,19 @@ export default function SearchBar(props: Props) {
   const hideActorDropdown = type === 'works' ? (props as WorkSearchProps).hideActorDropdown : false
   const wParams = type === 'works' ? params as WorkSearchParams : null
   const aParams = type === 'actors' ? params as ActorSearchParams : null
+
+  // ── tier levels & division counts ───────────────────────────────
+  const [tierLevels, setTierLevels] = useState<{ id: number; name: string; color: string; count: number }[]>([])
+  const [tierUnplacedCount, setTierUnplacedCount] = useState(0)
+  const [divisionCounts, setDivisionCounts] = useState<{ division: number; count: number }[]>([])
+  useEffect(() => {
+    const tierType = type === 'works' ? 'work' : 'actor'
+    tierApi.masterLevelCounts(tierType).then((data: any) => {
+      setTierLevels(data.levels ?? [])
+      setTierUnplacedCount(data.unplacedCount ?? 0)
+    }).catch(() => {})
+    cupApi.divisionCounts(tierType).then((data: any) => setDivisionCounts(data ?? [])).catch(() => setDivisionCounts([]))
+  }, [type])
 
   // ── advanced panel ───────────────────────────────────────────────
   const [advancedOpen, setAdvancedOpen] = useState(() =>
@@ -321,6 +335,13 @@ export default function SearchBar(props: Props) {
     if (wp.excludeFilter !== 'hide') conditions.push({ label: wp.excludeFilter === 'only' ? '제외한정' : '제외포함', onClear: () => onChange({ ...wp, excludeFilter: 'hide' } as never) })
     if (wp.fileStatus !== 'all') conditions.push({ label: wp.fileStatus === 'file' ? '파일' : wp.fileStatus === 'link' ? '링크' : wp.fileStatus === 'both' ? '둘다' : '없음', onClear: () => onChange({ ...wp, fileStatus: 'all' } as never) })
     if (wp.untiered) conditions.push({ label: '미배치티어', onClear: () => onChange({ ...wp, untiered: false } as never) })
+    if (wp.tierLevelId !== '') {
+      const lv = tierLevels.find(l => l.id === wp.tierLevelId)
+      conditions.push({ label: `티어: ${lv?.name ?? wp.tierLevelId}`, onClear: () => onChange({ ...wp, tierLevelId: '' } as never) })
+    }
+    if (wp.division !== '') {
+      conditions.push({ label: `랭킹: ${wp.division}부`, onClear: () => onChange({ ...wp, division: '' } as never) })
+    }
   }
 
   if (type === 'actors' && aParams) {
@@ -361,6 +382,13 @@ export default function SearchBar(props: Props) {
     if (ap.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...ap, deletePending: false } as never) })
     if (ap.excludeFilter !== 'hide') conditions.push({ label: ap.excludeFilter === 'only' ? '제외한정' : '제외포함', onClear: () => onChange({ ...ap, excludeFilter: 'hide' } as never) })
     if (ap.untiered) conditions.push({ label: '미배치티어', onClear: () => onChange({ ...ap, untiered: false } as never) })
+    if (ap.tierLevelId !== '') {
+      const lv = tierLevels.find(l => l.id === ap.tierLevelId)
+      conditions.push({ label: `티어: ${lv?.name ?? ap.tierLevelId}`, onClear: () => onChange({ ...ap, tierLevelId: '' } as never) })
+    }
+    if (ap.division !== '') {
+      conditions.push({ label: `랭킹: ${ap.division}부`, onClear: () => onChange({ ...ap, division: '' } as never) })
+    }
   }
 
   // ── render ────────────────────────────────────────────────────────
@@ -381,13 +409,13 @@ export default function SearchBar(props: Props) {
         const idx = fileStates.indexOf(wParams.fileStatus)
         const next = fileStates[(idx + 1) % fileStates.length]
         const colorMap = { all: 'bg-blue-600', file: 'bg-red-600', link: 'bg-purple-600', both: 'bg-green-600', none: 'bg-gray-600' } as const
-        const labelMap = { all: '전체', file: '▶ 파일', link: '🔗 링크', both: '✦ 둘다', none: '✕ 없음' } as const
+        const labelMap = { all: '전체', file: '파일', link: '링크', both: '둘다', none: '없음' } as const
         return (
           <button
             type="button"
             onClick={() => onChange({ ...wParams, fileStatus: next } as never)}
-            className={`${colorMap[wParams.fileStatus]} text-white text-sm px-2.5 py-1.5 rounded shrink-0 hover:brightness-110 transition-colors`}
-          >{labelMap[wParams.fileStatus]}</button>
+            className={`${colorMap[wParams.fileStatus]} text-white text-sm px-2.5 py-1.5 rounded shrink-0 hover:brightness-110 transition-colors flex items-center gap-1`}
+          ><svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>{labelMap[wParams.fileStatus]}</button>
         )
       })()}
 
@@ -504,6 +532,52 @@ export default function SearchBar(props: Props) {
           <div className="absolute inset-0 rounded-lg -z-10" style={{ backgroundColor: 'rgba(26, 35, 50, 0.9)', backdropFilter: 'blur(8px)' }} />
           <div className="p-3 space-y-3">
             {/* ── works ─────────────────────────────────────────── */}
+            {/* ── tier / ranking (공통) ──────────────────────── */}
+            {tierLevels.length > 0 && (
+              <>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs text-gray-400 w-12 shrink-0">티어</span>
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...params, tierLevelId: '', untiered: false } as never)}
+                    className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === '' && !(type === 'works' ? wParams?.untiered : aParams?.untiered) ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >전체</button>
+                  {tierLevels.map(lv => (
+                    <button
+                      key={lv.id}
+                      type="button"
+                      onClick={() => onChange({ ...params, tierLevelId: (type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === lv.id ? '' : lv.id, untiered: false } as never)}
+                      className={`text-xs px-2 py-1 rounded border ${(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) === lv.id ? 'bg-blue-600 text-white border-blue-500' : 'hover:opacity-80'}`}
+                      style={(type === 'works' ? wParams?.tierLevelId : aParams?.tierLevelId) !== lv.id ? { backgroundColor: `${lv.color}30`, color: lv.color, borderColor: `${lv.color}60` } : undefined}
+                    >{lv.name} <span className="opacity-70">{lv.count}</span></button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...params, untiered: !(type === 'works' ? wParams?.untiered : aParams?.untiered), tierLevelId: '' } as never)}
+                    className={`text-xs px-2 py-1 rounded border ${(type === 'works' ? wParams?.untiered : aParams?.untiered) ? 'bg-blue-600 text-white border-blue-500' : 'bg-gray-800/60 text-gray-500 border-gray-700 hover:opacity-80'}`}
+                  >미배치 <span className="opacity-70">{tierUnplacedCount}</span></button>
+                </div>
+                {divisionCounts.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs text-gray-400 w-12 shrink-0">랭킹</span>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...params, division: '' } as never)}
+                      className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.division : aParams?.division) === '' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >전체</button>
+                    {divisionCounts.map(({ division, count }) => (
+                      <button
+                        key={division}
+                        type="button"
+                        onClick={() => onChange({ ...params, division: (type === 'works' ? wParams?.division : aParams?.division) === division ? '' : division } as never)}
+                        className={`text-xs px-2 py-1 rounded ${(type === 'works' ? wParams?.division : aParams?.division) === division ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                      >{division === 0 ? '미참가' : `${division}부`} <span className="opacity-70">{count}</span></button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
             {type === 'works' && wParams && (
               <>
                 {/* actor dropdown */}
@@ -713,11 +787,6 @@ export default function SearchBar(props: Props) {
                     }}
                     className={`text-xs px-2 py-1 rounded ${wParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : wParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
                   >{wParams.excludeFilter === 'hide' ? '제외숨김' : wParams.excludeFilter === 'include' ? '제외포함' : '제외한정'}</button>
-                  <button
-                    type="button"
-                    onClick={() => onChange({ ...wParams, untiered: !wParams.untiered } as never)}
-                    className={`text-xs px-2 py-1 rounded ${wParams.untiered ? 'bg-purple-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >미배치티어</button>
                 </div>
               </>
             )}
@@ -870,11 +939,6 @@ export default function SearchBar(props: Props) {
                       }}
                       className={`text-xs px-2 py-1 rounded ${aParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : aParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
                     >{aParams.excludeFilter === 'hide' ? '제외숨김' : aParams.excludeFilter === 'include' ? '제외포함' : '제외한정'}</button>
-                    <button
-                      type="button"
-                      onClick={() => onChange({ ...aParams, untiered: !aParams.untiered } as never)}
-                      className={`text-xs px-2 py-1 rounded ${aParams.untiered ? 'bg-purple-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >미배치티어</button>
                   </div>
                 </>
               )}
