@@ -26,7 +26,6 @@ const defaultScores = { face: 0, bust: 0, hip: 0, physical: 0, skin: 0, acting: 
 
 export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex = 60, hideTierButton }: Props) {
   const [actor, setActor] = useState<(Actor & { works?: Work[]; tags?: Tag[] }) | null>(null)
-  const [hoverActorPhoto, setHoverActorPhoto] = useState<string | null>(null)
   const [physScore, setPhysScore] = useState<number | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [tagCloud, setTagCloud] = useState<{ category_id: number | null; category_name: string | null; category_sort_order: number | null; tag_id: number; tag_name: string; count: number }[] | null>(null)
@@ -105,16 +104,6 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
 
   return (
     <>
-      {/* hover 미리보기 */}
-      {hoverActorPhoto && (
-        <div
-          className="fixed z-50 pointer-events-none"
-          style={{ left: '50vw', top: '50%', transform: 'translateY(-50%)', width: 'calc(50vw - 16px)', maxHeight: '80vh', zIndex: (zIndex ?? 60) + 10 }}
-        >
-          <ImagePreview path={hoverActorPhoto} alt="추가 사진 미리보기" className="w-full h-full object-contain rounded-lg shadow-2xl" style={{ maxHeight: '80vh' }} />
-        </div>
-      )}
-
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center" style={{ zIndex }} onClick={onClose}>
         <div className="bg-gray-800 rounded-lg w-[1000px] h-[95vh] flex flex-row relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
           <button
@@ -205,24 +194,17 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               <RadarChart scores={actor.scores ?? defaultScores} size={264} />
             </div>
 
-            {/* 추가 사진 */}
-            {(actor as any).photos?.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 justify-center mt-2">
-                {((actor as any).photos as { id: number; photo_path: string }[]).map((photo) => (
-                  <div
-                    key={photo.id}
-                    onMouseEnter={() => setHoverActorPhoto(photo.photo_path)}
-                    onMouseLeave={() => setHoverActorPhoto(null)}
-                  >
-                    <ImagePreview path={photo.photo_path} alt="추가 사진" className="w-20 h-20 rounded cursor-pointer object-cover" />
-                  </div>
-                ))}
+            {/* 코멘트 */}
+            {actor.comment && (
+              <div className="mt-2">
+                <p className="text-xs text-gray-500 mb-1">코멘트</p>
+                <p className="text-sm text-gray-300 whitespace-pre-wrap text-left">{actor.comment}</p>
               </div>
             )}
 
           </div>
 
-          {/* 우측 - 본명/다른이름/코멘트/태그 */}
+          {/* 우측 - 본명/다른이름/태그 */}
           <div className="w-[500px] border-l border-gray-700 flex flex-col">
             <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3">
 
@@ -245,13 +227,6 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                       <span key={alias} className="text-xs px-2 py-0.5 rounded bg-fuchsia-700 text-fuchsia-200">{alias}</span>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {actor.comment && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">코멘트</p>
-                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{actor.comment}</p>
                 </div>
               )}
 

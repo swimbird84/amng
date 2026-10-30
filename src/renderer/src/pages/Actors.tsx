@@ -15,6 +15,7 @@ import { getDivision, DIV_LABEL, DIV_COLOR } from '../components/cup/cupConstant
 import { getAge, getDebutAge } from '../utils/dateHelpers'
 import TierEditor from '../components/TierEditor'
 import WorkDetailModal from '../components/WorkDetailModal'
+import { useDataChanged } from '../dataEvents'
 
 interface ActorsProps {
   onNavigateToWork?: (id: number) => void
@@ -231,6 +232,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     window.addEventListener('actorScoresUpdated', handler)
     return () => window.removeEventListener('actorScoresUpdated', handler)
   }, [loadActors, computePhysScores, loadMasterPoints, loadTierMap])
+  useDataChanged(() => { loadActors(); loadTierMap(); loadMasterPoints() })
   useEffect(() => { localStorage.setItem('actors:search', JSON.stringify(search)) }, [search])
 
   const handleSelect = async (id: number) => {

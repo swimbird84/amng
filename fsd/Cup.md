@@ -128,6 +128,25 @@
 | `master_ranking_history` | 마스터 랭킹 이력 (run_id, type, item_id, points, recorded_at, season_id) |
 | `master_ranking_seasons` | 시즌 관리 (type, name, created_at, ended_at) |
 | `ranking_settings` | 랭킹 설정 (type, settings_json) |
+| `tier_levels` | 티어 등급 (is_cup_excluded로 대회 제외 관리) |
+| `tier_items` | 티어 배치 (마스터 대회 참가 조건 판정용) |
+
+## 마스터 대회 참가 조건 (티어 기반)
+
+마스터 대회 참가 가능 조건:
+- `is_excluded = 0`
+- 마스터 티어에 등록됨
+- 등록된 티어 등급의 `is_cup_excluded = 0`
+
+### 대회와 랭킹의 분리
+- **대회**: 시작 시점에 `cup_entries`로 참가자 스냅샷 → 이후 티어 변경 영향 없음
+- **랭킹**: 실시간 티어 기준 필터 → 미등록/제외 등급은 랭킹에서 완전 제외 (RANK() 전 필터, 순위 공백 없음)
+- **복귀**: 등급 복귀 시 기존 포인트로 랭킹 자동 복귀
+
+### 영향받는 IPC
+- `getEligibleItemIds()` — 마스터 대회 참가자 조회에 tierJoin 추가
+- `master-ranking:list` — actor/work 양쪽 WITH ranked 쿼리에 티어 JOIN
+- `cup:item-count` — 참가자 수 계산에 반영
 
 ## 대회 포맷별 진행 방식
 

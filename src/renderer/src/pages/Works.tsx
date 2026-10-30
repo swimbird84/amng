@@ -11,6 +11,7 @@ import WorkCard from '../components/WorkCard'
 import UrlReplaceModal from '../components/UrlReplaceModal'
 import TierEditor from '../components/TierEditor'
 import ActorDetailModal from '../components/ActorDetailModal'
+import { useDataChanged } from '../dataEvents'
 
 const BATCH_SIZE = 100
 
@@ -215,6 +216,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     studiosApi.list().then((d) => setStudioList(d as Studio[]))
   }, [])
   useEffect(() => { localStorage.setItem('works:search', JSON.stringify(search)) }, [search])
+  useDataChanged(() => { refreshWorks(); loadTierMap(); loadMasterPoints() })
 
   const handleSelect = async (id: number) => {
     const detail = await worksApi.get(id) as Work & { actors?: Actor[]; tags?: Tag[] }
@@ -609,10 +611,10 @@ export default function Works({ onNavigateToActor }: WorksProps) {
           <div className="bg-gray-800 rounded-lg p-6 flex flex-col gap-3 min-w-[280px]" onClick={(e) => e.stopPropagation()}>
             <p className="text-white text-sm font-bold">선택된 {selectedDeleteIds.size}개 작품</p>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={handleBulkDelete} className="bg-red-800 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">DB삭제</button>
-              <button onClick={handleBulkArchive} className="bg-orange-700 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm">아카이빙</button>
-              <button onClick={handleBulkTrashFolders} className="bg-orange-800 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">폴더삭제</button>
-              <button onClick={handleBulkFullDelete} className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded text-sm">완전삭제</button>
+              <button onClick={handleBulkDelete} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded text-sm flex items-center justify-center gap-1"><svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm4 2v6h2V7H7zm4 0v6h2V7h-2z"/></svg>DB삭제</button>
+              <button onClick={handleBulkArchive} className="bg-blue-700 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm flex items-center justify-center gap-1"><svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 3a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm1 4h14v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7zm4 3a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"/></svg>아카이빙</button>
+              <button onClick={handleBulkTrashFolders} className="bg-orange-700 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm flex items-center justify-center gap-1"><svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>폴더삭제</button>
+              <button onClick={handleBulkFullDelete} className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded text-sm flex items-center justify-center gap-1"><svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>완전삭제</button>
             </div>
             <button onClick={() => setDeleteConfirm(false)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">취소</button>
           </div>

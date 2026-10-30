@@ -17,7 +17,8 @@
 - IntersectionObserver 기반 무한 스크롤 (BATCH_SIZE=100)
 - 정렬: 등록일/품번/마스터랭킹/별점/발매일/타이틀/배우/레이블
 - 마스터랭킹 정렬: 서버 사이드 (현재 시즌 마스터포인트 합산 DESC → 품번 ASC)
-- 검색: 품번 키워드, 태그(AND/OR), 배우, 스튜디오, 발매일 범위, 별점 범위, 타이틀, 코멘트, 배우수, 찜/삭제예정 필터
+- 상단바: 파일상태 토글 버튼 (전체/파일/링크/둘다/없음, 색상별 순환)
+- 검색: 품번 키워드, 태그(AND/OR), 티어 등급별 필터, 랭킹 디비전 필터(1부/2부/3부), 배우(상세검색 내), 스튜디오, 발매일 범위, 별점 범위, 타이틀, 코멘트, 배우수, 찜/삭제예정 필터
 
 ### 2. 작품 등록 (WorkForm)
 - 수동 등록: 파일경로, 표지, 품번, 타이틀, 발매일, 별점, 스튜디오, 배우, 태그 입력
@@ -32,7 +33,7 @@
 - 표지, 품번, 스튜디오, 별점, 발매일, 배우, 코멘트, 태그 표시
 - 재생 버튼 (파일 존재 여부 확인)
 - 대표 태그/대표 배우 토글
-- 수정/삭제/폴더 삭제
+- 수정/삭제 (순서: DB삭제→아카이빙→폴더삭제→완전삭제)
 - ☆전적 버튼 (품번 라인 우측): 마스터 전적 모달 (MasterRecordModal) 진입
 
 ### 5. 대량 삭제 모드
@@ -59,7 +60,9 @@
 | `worksApi.update(id, data)` | `works:update` | 작품 수정 (별점, 찜, 대표태그 등) |
 | `worksApi.delete(id)` | `works:delete` | 작품 삭제 (진행 중 대회 참가 시 차단) |
 | `masterRankingApi.list({ type: 'work', limit: 99999 })` | `master-ranking:list` | 현재 시즌 마스터랭킹 (카드 표시) |
-| `workTagsApi.list()` | `work-tags:list` | 작품 태그 마스터 목록 |
+| `workTagsApi.list({ withAliases: true })` | `work-tags:list` | 작품 태그 마스터 목록 (별칭 포함) |
+| `tierApi.masterLevelCounts('work')` | `tier:masterLevelCounts` | 티어 등급별 카운트 |
+| `cupApi.divisionCounts('work')` | `cup:division-counts` | 디비전별 카운트 |
 | `actorsApi.list()` | `actors:list` | 배우 목록 (검색바 드롭다운) |
 | `actorsApi.findOrCreate()` | `actors:findOrCreate` | 스캔 시 배우 자동 생성 |
 | `studiosApi.list()` | `studios:list` | 스튜디오 목록 (검색바 드롭다운) |

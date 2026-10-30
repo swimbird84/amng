@@ -17,18 +17,19 @@
 ### 1. 배우 목록
 - 정렬: 등록일/이름/평점/마스터랭킹/피지컬/생년월일/데뷔일/작품수/작품발매일/작품등록일
 - 마스터랭킹 정렬: 클라이언트 사이드 (마스터포인트 DESC → 평점평균 DESC)
-- 검색: 이름 키워드, 태그(AND/OR), 나이 범위, 데뷔일 범위, 작품수 범위, 평점 범위, 각 점수 항목별 범위, 피지컬 범위, 신체 수치(키/바스트/웨이스트/힙/컵) 범위, NULL 필터, 제외 필터, 코멘트, 삭제예정
+- 검색: 이름 키워드, 태그(AND/OR), 티어 등급별 필터, 랭킹 디비전 필터(1부/2부/3부 등), 나이 범위, 데뷔일 범위, 작품수 범위, 평점 범위, 각 점수 항목별 범위, 피지컬 범위, 신체 수치(키/바스트/웨이스트/힙/컵) 범위, NULL 필터, 제외 필터, 코멘트, 삭제예정
 
 ### 2. 배우 등록/수정 (ActorForm)
 - 이름, 사진, 생년월일, 데뷔일, 신체 정보(키/BWH/컵), 코멘트
 - 10개 점수 항목 (face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions)
-- 태그 선택, 대표 태그 지정
+- 태그 선택, 대표 태그 지정, 태그 자동 매칭 (별칭 aliases 포함)
 - 제외 플래그, 삭제예정 플래그
 
 ### 3. 배우 상세 모달
-- **좌측**: 프로필 사진, 기본 정보, 신체 정보, 레이더 차트(RadarChart), 코멘트, 태그(대표태그 토글)
-- **우측**: 출연작 목록 (발매일/평점 정렬), 재생 버튼, 태그 클라우드 버튼
+- **좌측**: 프로필 사진, 기본 정보, 신체 정보, 레이더 차트(RadarChart, 264px 가운데 정렬), 추가 사진(레이더차트 아래 flex-wrap)
+- **우측**: 본명 → 다른이름 → 코멘트 → 태그(대표태그 토글) 순서로 표시
 - ☆전적 버튼 (이름 라인 우측): 마스터 전적 모달 (MasterRecordModal) 진입
+- 전체 출연작 모달 (ActorWorksModal)로 출연작 확인
 
 ### 4. 태그 클라우드
 - 해당 배우 출연작의 모든 태그를 카테고리별로 빈도 표시
@@ -66,7 +67,9 @@
 | `actorsApi.workTags(actorId)` | `actors:workTags` | 출연작 태그 클라우드 |
 | `actorsApi.scoreGradeCounts(excludeId)` | `actors:scoreGradeCounts` | 11점 이상 점수 현황 |
 | `masterRankingApi.list({ type: 'actor', limit: 99999 })` | `master-ranking:list` | 현재 시즌 마스터랭킹 (카드 표시 + 정렬) |
-| `actorTagsApi.list()` | `actor-tags:list` | 배우 태그 마스터 목록 |
+| `actorTagsApi.list({ withAliases: true })` | `actor-tags:list` | 배우 태그 마스터 목록 (별칭 포함) |
+| `tierApi.masterLevelCounts('actor')` | `tier:masterLevelCounts` | 티어 등급별 카운트 |
+| `cupApi.divisionCounts('actor')` | `cup:division-counts` | 디비전별 카운트 |
 | `shellApi.openPath(path)` | `shell:openPath` | 파일 재생 |
 | `shellApi.fileExists(path)` | `shell:fileExists` | 파일 존재 확인 |
 
@@ -74,7 +77,7 @@
 
 | 테이블 | 역할 |
 |--------|------|
-| `actors` | 배우 메인 테이블 (name, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, comment, score_excluded, delete_pending) |
+| `actors` | 배우 메인 테이블 (name, birthday, debut_date, height, bust, waist, hip, cup, phys_arbitrary, comment, is_excluded, delete_pending) |
 | `actor_scores` | 배우 점수 10개 항목 (face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions) |
 | `actor_tags` | 배우-태그 연결 (is_rep: 대표태그) |
 | `actor_tags_master` | 배우 태그 마스터 |

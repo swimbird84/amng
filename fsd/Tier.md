@@ -46,7 +46,8 @@ CREATE TABLE tier_levels (
   set_id INTEGER NOT NULL REFERENCES tier_sets(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   color TEXT NOT NULL,
-  sort_order INTEGER NOT NULL DEFAULT 0
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_cup_excluded INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE tier_items (
@@ -111,7 +112,7 @@ CREATE TABLE tier_items (
 | `tier:setMaster` | 마스터 지정 |
 | `tier:listLevels` | 세트의 티어 목록 |
 | `tier:createLevel` | 티어 생성 |
-| `tier:updateLevel` | 티어 수정/순서 변경 |
+| `tier:updateLevel` | 티어 수정/순서 변경/대회 제외 설정 (is_cup_excluded) |
 | `tier:deleteLevel` | 티어 삭제 |
 | `tier:listItems` | 세트의 배치 목록 |
 | `tier:setItem` | 아이템 티어 배치/이동 |
@@ -189,7 +190,9 @@ CREATE TABLE tier_items (
 └─────────────────────────────────────────────────────────┘
 ```
 
-- 좌측: 티어 라벨 (사용자 정의 색상 배경) — **클릭 시 편집 모달** (이름/색상 수정/삭제)
+- 상단: ← 목록 + 티어명 + 타입 뱃지 + 전체 접기/펴기 SVG 아이콘 버튼
+- 좌측: 티어 라벨 (사용자 정의 색상 배경) — **클릭 시 편집 모달** (이름/색상 수정/대회 제외 체크박스/삭제)
+  - 대회 제외 체크 시 라벨에 SVG 금지 아이콘(원+대각선) 표시
 - 중앙: 배치된 아이템 (배우 사진 / 작품 커버), 드래그 앤 드롭으로 배치/이동
 - 우측: ∧∨ 순서 이동 버튼 (하나의 영역에 위아래 배치)
 - 하단: 미배치 아이템 풀
@@ -292,9 +295,23 @@ CREATE TABLE tier_items (
 
 ---
 
+## 접기/펴기 가상화
+
+- 접힌 등급은 CSS maxHeight가 아닌 카드 수 기반 slice로 렌더링
+- 접기 기준: 작품 27개, 배우 39개 초과 시 펼치기 버튼 표시
+- 펼친 등급만 전체 아이템 렌더링 (성능 최적화)
+
+## 마스터 대회 참가 조건
+
+- 마스터 티어에 등록되지 않은 항목 → 마스터 대회 불참
+- `is_cup_excluded = 1`인 등급의 항목 → 마스터 대회 불참
+- 대회는 시작 시점에 cup_entries로 참가자 스냅샷 → 이후 티어 변경 영향 없음
+- 마스터 랭킹 조회 시에도 동일 조건 적용 (RANK() 전에 필터, 순위 공백 없음)
+- 포인트는 DB에 유지, 등급 복귀 시 기존 포인트로 랭킹 복귀
+
 ## 고려 사항
 
 - 마스터 티어는 타입별 1개만 → DB 레벨에서 트리거 또는 앱 레벨에서 체크
-- 기존 월드컵/마스터랭킹과 독립 운영 — 데이터 충돌 없음
+- 마스터 대회/랭킹과 티어 기반 참가 조건으로 연동
 - 작품이 많으므로 미배치 풀은 100개씩 표시 + [채움] 버튼으로 추가 로딩
 - 배우 soft delete된 항목은 티어에서도 숨김 처리
