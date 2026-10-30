@@ -56,10 +56,10 @@ export default function WorkCard({
       >
         <ImagePreview path={w.cover_path} alt={w.title || ''} className="w-full h-40" version={refreshKey} />
         {w.product_number && (
-          <div className="absolute bottom-1 left-1 opacity-0 group-hover:opacity-100 transition z-10 flex gap-1" onClick={e => e.stopPropagation()}>
-            <QuickSearchButton productNumber={w.product_number} className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded" />
-            <ImagePreviewButton path={w.cover_path} className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded" />
-            <CommentButton workId={w.id} comment={w.comment} className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded" onSave={onCommentSave} />
+          <div className="absolute bottom-1 left-1 z-10 flex gap-1" onClick={e => e.stopPropagation()}>
+            <QuickSearchButton productNumber={w.product_number} className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer" />
+            <ImagePreviewButton path={w.cover_path} className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer" />
+            <CommentButton workId={w.id} comment={w.comment} className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer" onSave={onCommentSave} />
           </div>
         )}
         {deleteMode && deleteSelected && (
@@ -110,7 +110,7 @@ export default function WorkCard({
             <Rating value={w.rating} readonly small />
           </div>
         </div>
-        {mp && (() => {
+        {mp ? (() => {
           const div = getDivision(mp.rank, mp.master_run_count, 'work')
           const isUnranked = mp.master_run_count === 0
           return (
@@ -122,7 +122,9 @@ export default function WorkCard({
               <span className={`text-xs ${isUnranked ? 'text-gray-500' : 'text-green-400'}`}>{isUnranked ? '-' : mp.total_points.toFixed(1)}pt</span>
             </div>
           )
-        })()}
+        })() : (
+          <div><span className="text-[10px] text-gray-500">미참가</span></div>
+        )}
         <p className="text-xs text-gray-500">발매일:{w.release_date || '-'} 등록일:{w.created_at?.slice(0, 10) || '-'}</p>
         {w.rep_actors && w.rep_actors.length > 0 && (
           <div className="flex flex-wrap gap-0.5 mt-0.5">

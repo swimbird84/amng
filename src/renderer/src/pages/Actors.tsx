@@ -448,7 +448,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                   </div>
                   {(() => {
                     const mp = masterPointsMap.get(a.id)
-                    if (!mp) return null
+                    if (!mp) return <div><span className="text-[10px] text-gray-500">미참가</span></div>
                     const div = getDivision(mp.rank, mp.master_run_count, 'actor')
                     const isUnranked = mp.master_run_count === 0
                     return (
