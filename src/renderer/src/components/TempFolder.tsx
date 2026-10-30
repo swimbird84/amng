@@ -427,23 +427,27 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                     ) : (
                       <span className="text-3xl">📹</span>
                     )}
-                    <div className="absolute bottom-1 left-1 flex gap-1 opacity-0 group-hover/thumb:opacity-100 transition">
+                    <div className="absolute bottom-1 left-1 flex gap-1">
                       <button
                         onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
-                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                        onDoubleClick={e => e.stopPropagation()}
+                        className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-                      <QuickSearchButton productNumber={getProductNumber(file.baseName, files.map(f => f.baseName))} className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded" />
+                      <QuickSearchButton productNumber={getProductNumber(file.baseName, files.map(f => f.baseName))} className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer" />
                       {!file.thumbPath ? <button
                         onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', file.baseName, res.error); showToast('다운로드 실패') } }}
-                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                        onDoubleClick={e => e.stopPropagation()}
+                        className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                       : <button
                         onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { if (res.debug) console.log('[autoPlace]', file.baseName, res.debug); showToast('배치 대상이 없습니다') } }}
-                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                        onDoubleClick={e => e.stopPropagation()}
+                        className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
                       {file.thumbPath && <button
                         onClick={e => { e.stopPropagation(); setPreviewImage({ path: file.thumbPath!, fileName: file.fileName }) }}
-                        className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded"
+                        onDoubleClick={e => e.stopPropagation()}
+                        className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>}
                     </div>
                   </div>

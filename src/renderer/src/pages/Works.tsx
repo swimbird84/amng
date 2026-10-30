@@ -581,6 +581,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 onToggleFavorite={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
                 onPlay={() => handlePlay(w.id)}
                 onTierClick={() => { setTierEditorWorkId(w.id) }}
+                onCommentSave={() => refreshWorks()}
               />
             ))}
           </div>

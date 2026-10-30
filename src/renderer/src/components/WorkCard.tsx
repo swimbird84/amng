@@ -2,6 +2,8 @@ import type { Work } from '../types'
 import ImagePreview from './ImagePreview'
 import Rating from './Rating'
 import QuickSearchButton from './QuickSearchButton'
+import ImagePreviewButton from './ImagePreviewButton'
+import CommentButton from './CommentButton'
 import { studioColor } from '../utils/colorHelpers'
 import { getDivision, DIV_LABEL, DIV_COLOR } from './cup/cupConstants'
 
@@ -23,13 +25,14 @@ interface WorkCardProps {
   onToggleFavorite?: (e: React.MouseEvent) => void
   onPlay?: (e: React.MouseEvent) => void
   onTierClick?: (e: React.MouseEvent) => void
+  onCommentSave?: () => void
 }
 
 export default function WorkCard({
   work: w, refreshKey, selected, deleteMode, deleteSelected,
   filePlayable, fileType, masterPoints: mp, tierInfo,
   onClick, onMouseDown, onMouseEnter,
-  onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onTierClick,
+  onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onTierClick, onCommentSave,
 }: WorkCardProps) {
   return (
     <div
@@ -53,8 +56,10 @@ export default function WorkCard({
       >
         <ImagePreview path={w.cover_path} alt={w.title || ''} className="w-full h-40" version={refreshKey} />
         {w.product_number && (
-          <div className="absolute bottom-1 left-1 opacity-0 group-hover:opacity-100 transition z-10">
+          <div className="absolute bottom-1 left-1 opacity-0 group-hover:opacity-100 transition z-10 flex gap-1" onClick={e => e.stopPropagation()}>
             <QuickSearchButton productNumber={w.product_number} className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded" />
+            <ImagePreviewButton path={w.cover_path} className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded" />
+            <CommentButton workId={w.id} comment={w.comment} className="bg-black/60 hover:bg-black/80 text-white px-1 py-0.5 rounded" onSave={onCommentSave} />
           </div>
         )}
         {deleteMode && deleteSelected && (

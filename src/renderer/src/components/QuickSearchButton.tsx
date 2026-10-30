@@ -82,7 +82,7 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
 
   return (
     <>
-      <button onClick={handleClick} className={`${className} ${popup ? 'relative z-[101]' : ''}`}>
+      <button onClick={handleClick} onDoubleClick={e => e.stopPropagation()} className={`${className} ${popup ? 'relative z-[101]' : ''}`}>
         <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       </button>
       {popup && (

@@ -106,12 +106,13 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     loadUnplaced(0)
   }, [loadLevels, loadItems, loadUnplaced])
 
-  // Auto-scroll to focused item
+  // Auto-scroll to focused item (once)
+  const focusScrolledRef = useRef(false)
   useEffect(() => {
-    if (!focusItemId) return
+    if (!focusItemId || focusScrolledRef.current) return
     requestAnimationFrame(() => {
       const el = document.querySelector(`[data-item-id="${focusItemId}"]`) as HTMLElement | null
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); focusScrolledRef.current = true }
     })
   }, [focusItemId, items, unplaced])
 

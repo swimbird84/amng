@@ -283,6 +283,33 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                 )
               })()}
 
+              {/* 참가 작품 */}
+              {(() => {
+                const recentWorks = [...(actor.works ?? [])].filter(w => !w.is_excluded)
+                  .sort((a, b) => (b.release_date ?? '').localeCompare(a.release_date ?? ''))
+                  .slice(0, 12)
+                if (recentWorks.length === 0) return null
+                return (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">참가 작품 ({(actor.works ?? []).filter(w => !w.is_excluded).length})</p>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {recentWorks.map(w => (
+                        <div
+                          key={w.id}
+                          className="cursor-pointer"
+                          onClick={() => onViewWork(w.id)}
+                          onMouseMove={e => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
+                          onMouseLeave={() => setTooltip(null)}
+                        >
+                          <ImagePreview path={w.cover_path} alt={w.product_number || '-'} className="w-full aspect-[800/540] rounded object-cover" />
+                          <p className="text-[10px] text-gray-400 text-center truncate mt-0.5">{w.product_number || w.title || '-'}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
             </div>
           </div>
         </div>
