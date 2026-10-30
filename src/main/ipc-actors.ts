@@ -54,6 +54,7 @@ export function registerActorsHandlers(): void {
     untiered?: boolean
     tierLevelId?: number
     division?: number
+    searchMode?: 'and' | 'or'
   }) => {
     let sql = `
       WITH stats AS (
@@ -228,7 +229,8 @@ export function registerActorsHandlers(): void {
     }
 
     if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ')
+      const joiner = params?.searchMode === 'or' ? ' OR ' : ' AND '
+      sql += ' WHERE ' + conditions.join(joiner)
     }
 
     const sortDir = params?.sortDir === 'asc' ? 'ASC' : 'DESC'

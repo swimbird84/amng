@@ -329,9 +329,9 @@ export function registerTierHandlers(): void {
       const items = db().prepare(`
         SELECT ti.item_id AS id, a.name, a.photo_path, ti.sort_order
         FROM tier_items ti
-        JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0 AND is_excluded = 0
+        JOIN actors a ON a.id = ti.item_id AND a.is_deleted = 0 AND a.is_excluded = 0
         WHERE ti.set_id = ? AND ti.level_id = ?
-        ORDER BY ti.sort_order ASC
+        ORDER BY ti.sort_order ASC LIMIT 20
       `).all(set.id, topLevel.id)
       return { tierName: topLevel.name, tierColor: topLevel.color, items }
     } else {
@@ -340,7 +340,7 @@ export function registerTierHandlers(): void {
         FROM tier_items ti
         JOIN works w ON w.id = ti.item_id
         WHERE ti.set_id = ? AND ti.level_id = ?
-        ORDER BY ti.sort_order ASC
+        ORDER BY ti.sort_order ASC LIMIT 20
       `).all(set.id, topLevel.id)
       return { tierName: topLevel.name, tierColor: topLevel.color, items }
     }

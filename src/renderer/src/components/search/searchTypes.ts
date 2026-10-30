@@ -25,6 +25,7 @@ export interface WorkSearchParams {
   untiered: boolean
   tierLevelId: number | ''
   division: number | ''
+  searchMode: 'and' | 'or'
 }
 
 export interface ActorSearchParams {
@@ -72,6 +73,7 @@ export interface ActorSearchParams {
   untiered: boolean
   tierLevelId: number | ''
   division: number | ''
+  searchMode: 'and' | 'or'
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
@@ -86,6 +88,7 @@ export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
   untiered: false,
   tierLevelId: '',
   division: '',
+  searchMode: 'and',
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
@@ -110,4 +113,5 @@ export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
   untiered: false,
   tierLevelId: '',
   division: '',
+  searchMode: 'and',
 }

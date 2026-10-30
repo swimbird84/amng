@@ -502,6 +502,12 @@ export default function SearchBar(props: Props) {
         </div>
       )}
 
+      {/* search mode toggle */}
+      <button
+        onClick={() => onChange({ ...params, searchMode: params.searchMode === 'and' ? 'or' : 'and' } as never)}
+        className={`w-10 py-1.5 rounded text-sm font-bold shrink-0 ${params.searchMode === 'or' ? 'bg-orange-600 text-white' : 'bg-blue-600 text-white'}`}
+      >{params.searchMode === 'or' ? 'OR' : 'AND'}</button>
+
       {/* reset */}
       <button onClick={handleReset} className="px-3 py-1.5 rounded text-sm bg-gray-600 hover:bg-gray-500 text-gray-300 shrink-0">
         초기화
@@ -790,7 +796,7 @@ export default function SearchBar(props: Props) {
                       onChange({ ...wParams, excludeFilter: next } as never)
                     }}
                     className={`text-xs px-2 py-1 rounded ${wParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : wParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
-                  >{wParams.excludeFilter === 'hide' ? '제외숨김' : wParams.excludeFilter === 'include' ? '제외포함' : '제외한정'}</button>
+                  >{wParams.excludeFilter === 'hide' ? '제외 숨김' : wParams.excludeFilter === 'include' ? '제외 포함' : '제외 한정'}</button>
                 </div>
               </>
             )}
@@ -942,7 +948,7 @@ export default function SearchBar(props: Props) {
                         onChange({ ...aParams, excludeFilter: next } as never)
                       }}
                       className={`text-xs px-2 py-1 rounded ${aParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : aParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
-                    >{aParams.excludeFilter === 'hide' ? '제외숨김' : aParams.excludeFilter === 'include' ? '제외포함' : '제외한정'}</button>
+                    >{aParams.excludeFilter === 'hide' ? '제외 숨김' : aParams.excludeFilter === 'include' ? '제외 포함' : '제외 한정'}</button>
                   </div>
                 </>
               )}

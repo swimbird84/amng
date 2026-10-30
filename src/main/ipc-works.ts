@@ -34,6 +34,7 @@ export function registerWorksHandlers(): void {
     untiered?: boolean
     tierLevelId?: number
     division?: number
+    searchMode?: 'and' | 'or'
     actorCountFrom?: number
     actorCountTo?: number
     actorCountNull?: boolean
@@ -203,7 +204,8 @@ export function registerWorksHandlers(): void {
     }
 
     if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ')
+      const joiner = params?.searchMode === 'or' ? ' OR ' : ' AND '
+      sql += ' WHERE ' + conditions.join(joiner)
     }
     sql += ' GROUP BY w.id'
 

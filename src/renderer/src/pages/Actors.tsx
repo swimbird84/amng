@@ -159,6 +159,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
     if (search.untiered) params.untiered = true
     if (search.tierLevelId !== '') params.tierLevelId = Number(search.tierLevelId)
     if (search.division !== '') params.division = Number(search.division)
+    if (search.searchMode === 'or') params.searchMode = 'or'
     const list = await actorsApi.list(params) as Actor[]
     setActors(list)
   }, [search, sortBy, sortDir])

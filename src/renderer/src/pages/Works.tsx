@@ -98,6 +98,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     if (search.untiered) params.untiered = true
     if (search.tierLevelId !== '') params.tierLevelId = Number(search.tierLevelId)
     if (search.division !== '') params.division = Number(search.division)
+    if (search.searchMode === 'or') params.searchMode = 'or'
     params.limit = limit
     params.offset = offset
     const result = await worksApi.list(params) as { items: Work[]; total: number }
