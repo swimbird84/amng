@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { tierApi } from '../api'
+import { emitDataChanged } from '../dataEvents'
 import ImagePreview from './ImagePreview'
 import CardTooltip, { type TooltipState } from './CardTooltip'
 
@@ -254,7 +255,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-4 shrink-0 flex items-center gap-3 border-b border-gray-700">
-        <button onClick={onBack} className="text-gray-400 hover:text-white text-sm">← 목록</button>
+        <button onClick={() => { emitDataChanged(); onBack() }} className="text-gray-400 hover:text-white text-sm">← 목록</button>
         <span className="text-white font-bold text-base">{setName}</span>
         <span className={`text-xs px-1.5 py-0.5 rounded ${setType === 'actor' ? 'bg-purple-600 text-white' : 'bg-green-600 text-white'}`}>
           {setType === 'actor' ? '배우' : '작품'}

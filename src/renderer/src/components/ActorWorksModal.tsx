@@ -23,7 +23,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
   const [search, setSearch] = useState<WorkSearchParams>(() => {
     try { const s = localStorage.getItem('actorWorksModal:search'); return s ? { ...DEFAULT_WORK_SEARCH, ...JSON.parse(s) } : DEFAULT_WORK_SEARCH } catch { return DEFAULT_WORK_SEARCH }
   })
-  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points'>(
+  const [sortBy, setSortBy] = useState<'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points' | 'tier'>(
     () => (localStorage.getItem('actorWorksModal:sortBy') as any) || 'release_date'
   )
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
@@ -200,7 +200,8 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
               >
                 <option value="release_date">발매일</option>
                 <option value="created_at">등록일</option>
-                <option value="master_points">마스터랭킹</option>
+                <option value="master_points">월드컵</option>
+                <option value="tier">티어</option>
                 <option value="actor">배우</option>
                 <option value="studio">레이블</option>
                 <option value="rating">별점</option>
