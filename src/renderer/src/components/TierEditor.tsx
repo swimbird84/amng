@@ -284,7 +284,7 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
               <div className="flex" style={{ minHeight: 80 }}>
                 {/* Label */}
                 <div
-                  className="w-16 shrink-0 flex flex-col items-center justify-center cursor-pointer font-bold text-sm text-white rounded-l"
+                  className="w-16 shrink-0 flex flex-col items-center justify-center cursor-pointer font-bold text-sm text-white rounded-l relative"
                   style={{ backgroundColor: level.color }}
                   onClick={() => { setEditLevel(level); setEditName(level.name); setEditColor(level.color); setEditCupExcluded(!!level.is_cup_excluded) }}
                 >
@@ -293,6 +293,12 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                     {level.name}
                   </span>
                   {levelItems.length > 0 && <span className="text-[10px] font-normal opacity-70">({levelItems.length})</span>}
+                  {overflows && (
+                    <span
+                      onClick={e => { e.stopPropagation(); setExpandedLevels(prev => { const next = new Set(prev); if (next.has(level.id)) next.delete(level.id); else next.add(level.id); return next }) }}
+                      className="absolute bottom-0.5 text-[10px] font-normal text-gray-300 hover:text-white cursor-pointer"
+                    >{isExpanded ? '접기−' : '펴기+'}</span>
+                  )}
                 </div>
 
                 {/* Items area */}
@@ -336,12 +342,6 @@ export default function TierEditor({ setId, setName, setType, onBack, onNavigate
                   </button>
                 </div>
               </div>
-              {overflows && (
-                <button
-                  onClick={() => setExpandedLevels(prev => { const next = new Set(prev); if (next.has(level.id)) next.delete(level.id); else next.add(level.id); return next })}
-                  className="w-full text-xs text-gray-400 hover:text-white bg-gray-800/50 py-0.5 text-center"
-                >{isExpanded ? '접기 −' : `더보기 +`}</button>
-              )}
             </div>
           )
         })}
