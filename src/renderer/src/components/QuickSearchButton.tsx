@@ -13,6 +13,11 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
   const [popup, setPopup] = useState<{ x: number; y: number; btnH: number } | null>(null)
   const [adjustedStyle, setAdjustedStyle] = useState<React.CSSProperties>({})
   const popupRef = useRef<HTMLDivElement>(null)
+  const getLastUrlId = () => {
+    const saved = localStorage.getItem('quickSearch:lastUrlId')
+    return saved ? Number(saved) : null
+  }
+  const [lastSelectedUrlId, setLastSelectedUrlId] = useState<number | null>(getLastUrlId)
 
   const load = useCallback(async () => {
     const list = await searchUrlApi.list()
@@ -61,7 +66,15 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
     e.stopPropagation()
     if (searchUrls.length === 1) {
       shellApi.openExternal(searchUrls[0].url + productNumber)
+    } else if (popup) {
+      // 팝업 열린 상태에서 다시 클릭 → 마지막 선택 URL로 바로 열기
+      const lastUrl = searchUrls.find(su => su.id === lastSelectedUrlId)
+      if (lastUrl) {
+        shellApi.openExternal(lastUrl.url + productNumber)
+        setPopup(null)
+      }
     } else {
+      setLastSelectedUrlId(getLastUrlId())
       const rect = e.currentTarget.getBoundingClientRect()
       setPopup({ x: rect.left + rect.width / 2, y: rect.top, btnH: rect.height })
     }
@@ -69,11 +82,11 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
 
   return (
     <>
-      <button onClick={handleClick} className={className}>
+      <button onClick={handleClick} className={`${className} ${popup ? 'relative z-[101]' : ''}`}>
         <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       </button>
       {popup && (
-        <div className="fixed inset-0 z-50" onClick={() => { setPopup(null); setAdjustedStyle({}) }}>
+        <div className="fixed inset-0 z-[100]" onClick={() => { setPopup(null); setAdjustedStyle({}) }}>
           <div
             ref={popupRef}
             className="absolute flex gap-1 bg-gray-800 border border-gray-600 rounded-lg p-1.5 shadow-xl"
@@ -83,8 +96,8 @@ export default function QuickSearchButton({ productNumber, className = 'text-gra
             {searchUrls.map(su => (
               <button
                 key={su.id}
-                onClick={() => { shellApi.openExternal(su.url + productNumber); setPopup(null) }}
-                className="w-8 h-8 rounded-md hover:bg-gray-600 flex items-center justify-center transition"
+                onClick={() => { setLastSelectedUrlId(su.id); localStorage.setItem('quickSearch:lastUrlId', String(su.id)); shellApi.openExternal(su.url + productNumber); setPopup(null) }}
+                className={`w-8 h-8 rounded-md hover:bg-gray-600 flex items-center justify-center transition ${lastSelectedUrlId === su.id ? 'ring-2 ring-blue-500 bg-gray-700' : ''}`}
                 title={su.url}
               >
                 {faviconCache.has(su.id)
