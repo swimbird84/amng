@@ -73,6 +73,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
   }
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileName: string } | null>(null)
   const [deleteModal, setDeleteModal] = useState(false)
+  const [batchPopup, setBatchPopup] = useState<{ x: number; y: number } | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [removeStr, setRemoveStr] = useState(() => localStorage.getItem('files:removeString') || '')
@@ -353,19 +354,9 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
           iconSize={14}
         />}
         {folderPath && <button
-          onClick={async () => {
-            const hasThumb = files.filter(f => f.thumbPath && f.videoPath && !f.registeredWorkId)
-            if (hasThumb.length === 0) { showToast('배치할 파일이 없습니다'); return }
-            let placedCount = 0
-            for (let i = 0; i < hasThumb.length; i++) {
-              showToast(`${i + 1}/${hasThumb.length} 배치 중... (${hasThumb[i].baseName})`, true)
-              const res = await tempApi.fetchCover(hasThumb[i].baseName, folderPath, undefined, true)
-              if (res.ok && res.autoPlaced) placedCount++
-              else if (res.debug) console.log('[autoPlace]', hasThumb[i].baseName, res.debug)
-            }
-            showToast(placedCount > 0 ? `${placedCount}/${hasThumb.length}개 자동 배치 완료` : '배치 대상이 없습니다')
-            loadFiles()
-            if (placedCount > 0) onTreeRefresh?.()
+          onClick={e => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            setBatchPopup({ x: rect.left + rect.width / 2, y: rect.bottom + 4 })
           }}
           className="text-gray-300 bg-gray-700 hover:bg-gray-600 p-1.5 rounded"
           title="자동 배치"
@@ -489,6 +480,11 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
                         onDoubleClick={e => e.stopPropagation()}
                         className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
+                      : file.registeredWorkId ? <button
+                        onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 이동 중...`); const res = await tempApi.moveToExisting(folderPath, file.fileName, file.registeredWorkId!); if (res.ok) { showToast(`${file.baseName} 이동 완료`); loadFiles(); onTreeRefresh?.() } else { showToast(res.reason || '이동 실패') } }}
+                        onDoubleClick={e => e.stopPropagation()}
+                        className="bg-black/40 hover:bg-green-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
+                      ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
                       : <button disabled className="bg-black/40 text-gray-500 px-1 py-0.5 rounded cursor-default"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
                       {file.thumbPath && <button
@@ -547,7 +543,10 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
                         <button onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                         <QuickSearchButton productNumber={getProductNumber(file.baseName, files.map(f => f.baseName))} className="text-gray-400 hover:text-white" />
                         <CoverDownloadButton onSelect={async (source) => { showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, source); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', source, file.baseName, res.error); showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white" />
-                        <button onClick={async e => { e.stopPropagation(); if (!file.thumbPath || !file.videoPath || file.registeredWorkId) return; showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, undefined, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { if (res.debug) console.log('[autoPlace]', file.baseName, res.debug); showToast('배치 대상이 없습니다') } }} className={file.thumbPath && file.videoPath && !file.registeredWorkId ? 'text-white hover:text-blue-400' : 'text-gray-600 cursor-default'}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
+                        {file.registeredWorkId
+                          ? <button onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 이동 중...`); const res = await tempApi.moveToExisting(folderPath, file.fileName, file.registeredWorkId!); if (res.ok) { showToast(`${file.baseName} 이동 완료`); loadFiles(); onTreeRefresh?.() } else { showToast(res.reason || '이동 실패') } }} className="text-green-400 hover:text-green-300"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
+                          : <button onClick={async e => { e.stopPropagation(); if (!file.thumbPath || !file.videoPath) return; showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, undefined, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { if (res.debug) console.log('[autoPlace]', file.baseName, res.debug); showToast('배치 대상이 없습니다') } }} className={file.thumbPath && file.videoPath ? 'text-white hover:text-blue-400' : 'text-gray-600 cursor-default'}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
+                        }
                         <button onClick={e => { e.stopPropagation(); if (!file.thumbPath) return; setPreviewImage({ path: file.thumbPath, fileName: file.fileName }) }} className={file.thumbPath ? 'text-white hover:text-blue-400' : 'text-gray-600 cursor-default'}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                       </span>
                       <span className="text-xs text-gray-500 w-36 text-center shrink-0">{formatDate(file.mtime)}</span>
@@ -696,6 +695,54 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
       )}
 
       {/* Toast */}
+      {/* Batch popup */}
+      {batchPopup && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setBatchPopup(null)} />
+          <div
+            className="fixed flex gap-1 bg-gray-800 border border-gray-600 rounded-lg p-1.5 shadow-xl z-50"
+            style={{ left: batchPopup.x, top: batchPopup.y, transform: 'translateX(-50%)' }}
+          >
+            <button
+              onClick={async () => {
+                setBatchPopup(null)
+                const targets = files.filter(f => f.thumbPath && f.videoPath && !f.registeredWorkId)
+                if (targets.length === 0) { showToast('신규 배치할 파일이 없습니다'); return }
+                let placedCount = 0
+                for (let i = 0; i < targets.length; i++) {
+                  showToast(`${i + 1}/${targets.length} 신규 배치 중... (${targets[i].baseName})`, true)
+                  const res = await tempApi.fetchCover(targets[i].baseName, folderPath, undefined, true)
+                  if (res.ok && res.autoPlaced) placedCount++
+                  else if (res.debug) console.log('[autoPlace]', targets[i].baseName, res.debug)
+                }
+                showToast(placedCount > 0 ? `${placedCount}/${targets.length}개 신규 배치 완료` : '배치 대상이 없습니다')
+                loadFiles()
+                if (placedCount > 0) onTreeRefresh?.()
+              }}
+              className="text-xs text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded whitespace-nowrap"
+            >신규등록</button>
+            <button
+              onClick={async () => {
+                setBatchPopup(null)
+                const targets = files.filter(f => f.registeredWorkId)
+                if (targets.length === 0) { showToast('변경할 파일이 없습니다'); return }
+                let movedCount = 0
+                for (let i = 0; i < targets.length; i++) {
+                  showToast(`${i + 1}/${targets.length} 이동 중... (${targets[i].baseName})`, true)
+                  const res = await tempApi.moveToExisting(folderPath, targets[i].fileName, targets[i].registeredWorkId!)
+                  if (res.ok) movedCount++
+                  else console.log('[moveToExisting]', targets[i].baseName, res.reason)
+                }
+                showToast(movedCount > 0 ? `${movedCount}/${targets.length}개 기존 변경 완료` : '변경 대상이 없습니다')
+                loadFiles()
+                if (movedCount > 0) onTreeRefresh?.()
+              }}
+              className="text-xs text-white bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded whitespace-nowrap"
+            >기존변경</button>
+          </div>
+        </>
+      )}
+
       {workTooltip && <CardTooltip tooltip={workTooltip} />}
 
       {toast && (

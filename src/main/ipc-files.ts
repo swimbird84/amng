@@ -488,6 +488,147 @@ export function registerFilesHandlers(): void {
     return { ok: true, deleted }
   })
 
+  // Move temp file to existing work's folder
+  ipcMain.handle('temp:moveToExisting', async (_e, srcFolder: string, fileName: string, workId: number) => {
+    try {
+      const work = db().prepare('SELECT id, cover_path, product_number, release_date FROM works WHERE id = ?').get(workId) as { id: number; cover_path: string | null; product_number: string | null; release_date: string | null } | undefined
+      if (!work) return { ok: false, reason: '작품을 찾을 수 없습니다' }
+
+      const localFiles = db().prepare("SELECT id, file_path FROM work_files WHERE work_id = ? AND type = 'local'").all(workId) as { id: number; file_path: string }[]
+      const urlFiles = db().prepare("SELECT id, file_path FROM work_files WHERE work_id = ? AND type = 'url'").all(workId) as { id: number; file_path: string }[]
+
+      // Check: multi-file excluded
+      if (localFiles.length > 1 || urlFiles.length > 1 || (localFiles.length >= 1 && urlFiles.length >= 1)) {
+        return { ok: false, reason: '다중 파일 작품은 수동 처리가 필요합니다' }
+      }
+
+      const srcPath = path.join(srcFolder, fileName)
+      const srcExt = path.extname(fileName).toLowerCase()
+      const srcBase = path.basename(fileName, path.extname(fileName))
+      const isVideo = VIDEO_EXTS.has(srcExt)
+      const isImage = IMAGE_EXTS.has(srcExt)
+
+      // Find matching thumb image in temp folder
+      let srcThumbPath: string | null = null
+      if (isVideo) {
+        const entries = await fs.promises.readdir(srcFolder).catch(() => [] as string[])
+        for (const entry of entries as string[]) {
+          const ext = path.extname(entry).toLowerCase()
+          if (IMAGE_EXTS.has(ext) && path.basename(entry, ext).toLowerCase() === srcBase.toLowerCase()) {
+            srcThumbPath = path.join(srcFolder, entry)
+            break
+          }
+        }
+      }
+
+      // === Case 1: file_path only ===
+      if (localFiles.length === 1 && urlFiles.length === 0) {
+        const existingFile = localFiles[0]
+        const targetDir = path.dirname(existingFile.file_path)
+
+        // Delete existing video in target folder
+        if (isVideo || srcThumbPath) {
+          if (isVideo) {
+            try { if (fs.existsSync(existingFile.file_path)) await shell.trashItem(existingFile.file_path) } catch { /* skip */ }
+          }
+          // Delete existing images in target folder
+          if (srcThumbPath || isImage) {
+            const targetEntries = await fs.promises.readdir(targetDir).catch(() => [] as string[])
+            for (const entry of targetEntries as string[]) {
+              const ext = path.extname(entry).toLowerCase()
+              if (IMAGE_EXTS.has(ext)) {
+                try { await shell.trashItem(path.join(targetDir, entry)) } catch { /* skip */ }
+              }
+            }
+          }
+        }
+        if (isImage && !isVideo) {
+          // Image only — delete existing images in target
+          const targetEntries = await fs.promises.readdir(targetDir).catch(() => [] as string[])
+          for (const entry of targetEntries as string[]) {
+            const ext = path.extname(entry).toLowerCase()
+            if (IMAGE_EXTS.has(ext)) {
+              try { await shell.trashItem(path.join(targetDir, entry)) } catch { /* skip */ }
+            }
+          }
+        }
+
+        // Move new files
+        if (isVideo) {
+          const destPath = path.join(targetDir, fileName)
+          await fs.promises.rename(srcPath, destPath)
+          db().prepare('UPDATE work_files SET file_path = ? WHERE id = ?').run(destPath, existingFile.id)
+          db().prepare('UPDATE works SET file_path = ? WHERE id = ?').run(destPath, workId)
+        }
+        if (srcThumbPath) {
+          const thumbName = path.basename(srcThumbPath)
+          const thumbDest = path.join(targetDir, thumbName)
+          await fs.promises.rename(srcThumbPath, thumbDest)
+          db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(thumbDest, workId)
+        }
+        if (isImage && !isVideo) {
+          const destPath = path.join(targetDir, fileName)
+          await fs.promises.rename(srcPath, destPath)
+          db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(destPath, workId)
+        }
+
+        return { ok: true, mode: 'replaced' }
+      }
+
+      // === Case 2: url_path only + cover images ===
+      if (urlFiles.length === 1 && localFiles.length === 0) {
+        const coverPath = work.cover_path ? normalizePath(work.cover_path) : ''
+        if (!coverPath.includes('/cover images/')) {
+          return { ok: false, reason: 'cover images 경로가 없어 이동할 수 없습니다' }
+        }
+
+        const coverImagesDir = path.dirname(work.cover_path!)
+        const actorDir = path.dirname(coverImagesDir)
+        const productNumber = work.product_number || srcBase
+        const releaseDate = work.release_date || '0000-00-00'
+        const workFolderName = `${releaseDate} ${productNumber}`
+        const workFolderPath = path.join(actorDir, workFolderName)
+        await fs.promises.mkdir(workFolderPath, { recursive: true })
+
+        if (isVideo) {
+          // Move video
+          const destPath = path.join(workFolderPath, fileName)
+          await fs.promises.rename(srcPath, destPath)
+          db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, ?)').run(workId, destPath, 'local', 0)
+          db().prepare('UPDATE works SET file_path = ? WHERE id = ?').run(destPath, workId)
+
+          if (srcThumbPath) {
+            // Move thumb + delete cover images old
+            const thumbName = path.basename(srcThumbPath)
+            const thumbDest = path.join(workFolderPath, thumbName)
+            await fs.promises.rename(srcThumbPath, thumbDest)
+            if (work.cover_path && fs.existsSync(work.cover_path)) {
+              try { await shell.trashItem(work.cover_path) } catch { /* skip */ }
+            }
+            db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(thumbDest, workId)
+          }
+        } else if (isImage) {
+          // Image only — replace cover images
+          if (work.cover_path && fs.existsSync(work.cover_path)) {
+            try { await shell.trashItem(work.cover_path) } catch { /* skip */ }
+          }
+          const coverExt = path.extname(fileName)
+          const newCoverName = `${releaseDate} ${productNumber}${coverExt}`
+          const destPath = path.join(coverImagesDir, newCoverName)
+          await fs.promises.rename(srcPath, destPath)
+          db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(destPath, workId)
+        }
+
+        return { ok: true, mode: 'added' }
+      }
+
+      // === Case 4: both empty ===
+      return { ok: false, reason: '이동할 대상 폴더를 알 수 없습니다' }
+    } catch (err: unknown) {
+      return { ok: false, reason: (err as Error).message }
+    }
+  })
+
   // Extract product number from filename (strip _N suffix)
   function getProductNumber(baseName: string): string {
     const m = baseName.match(/^(.+?)_\d+$/)

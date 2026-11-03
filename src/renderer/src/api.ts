@@ -153,6 +153,7 @@ export const tempApi = {
   moveWithNewActor: (srcFolder: string, fileNames: string[], parentFolder: string, actorName: string, actorBirthday: string, releaseDate: string) => api.invoke('temp:moveWithNewActor', srcFolder, fileNames, parentFolder, actorName, actorBirthday, releaseDate) as Promise<{ ok: boolean; moved: string[]; actorId: number }>,
   moveToTreeAsLink: (srcFolder: string, imageFileName: string, targetActorFolder: string, releaseDate: string, url: string) => api.invoke('temp:moveToTreeAsLink', srcFolder, imageFileName, targetActorFolder, releaseDate, url) as Promise<{ ok: boolean; workId?: number }>,
   moveToTreeAsLinkNewActor: (srcFolder: string, imageFileName: string, parentFolder: string, actorName: string, actorBirthday: string, releaseDate: string, url: string) => api.invoke('temp:moveToTreeAsLinkNewActor', srcFolder, imageFileName, parentFolder, actorName, actorBirthday, releaseDate, url) as Promise<{ ok: boolean; workId?: number; actorId?: number }>,
+  moveToExisting: (srcFolder: string, fileName: string, workId: number) => api.invoke('temp:moveToExisting', srcFolder, fileName, workId) as Promise<{ ok: boolean; reason?: string; mode?: string }>,
 }
 
 export const coverApi = {
