@@ -325,10 +325,8 @@ export default function SearchBar(props: Props) {
     if (wp.actorCountFrom !== '' || wp.actorCountTo !== '')
       conditions.push({ label: `배우수: ${wp.actorCountFrom !== '' ? wp.actorCountFrom : '?'}~${wp.actorCountTo !== '' ? wp.actorCountTo : '?'}`, onClear: () => onChange({ ...wp, actorCountFrom: '', actorCountTo: '' } as never) })
     if (wp.actorCountNull) conditions.push({ label: '배우없음', onClear: () => onChange({ ...wp, actorCountNull: false } as never) })
-    if (wp.titleSearch) conditions.push({ label: `타이틀: ${wp.titleSearch}`, onClear: () => onChange({ ...wp, titleSearch: '' } as never) })
     if (wp.titleNull) conditions.push({ label: '타이틀없음', onClear: () => onChange({ ...wp, titleNull: false } as never) })
     if (wp.releaseDateNull) conditions.push({ label: '발매일없음', onClear: () => onChange({ ...wp, releaseDateNull: false } as never) })
-    if (wp.commentSearch) conditions.push({ label: `코멘트: ${wp.commentSearch}`, onClear: () => onChange({ ...wp, commentSearch: '' } as never) })
     if (wp.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...wp, commentNull: false } as never) })
     if (wp.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...wp, favoriteOnly: false } as never) })
     if (wp.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...wp, deletePending: false } as never) })
@@ -376,7 +374,6 @@ export default function SearchBar(props: Props) {
     if (ap.cupNull) conditions.push({ label: '컵없음', onClear: () => onChange({ ...ap, cupNull: false } as never) })
     if (ap.cupFrom || ap.cupTo) conditions.push({ label: `컵: ${ap.cupFrom || '?'}~${ap.cupTo || '?'}`, onClear: () => onChange({ ...ap, cupFrom: '', cupTo: '' } as never) })
     if (ap.favoriteOnly) conditions.push({ label: '♥찜', onClear: () => onChange({ ...ap, favoriteOnly: false } as never) })
-    if (ap.commentSearch) conditions.push({ label: `코멘트: ${ap.commentSearch}`, onClear: () => onChange({ ...ap, commentSearch: '' } as never) })
     if (ap.commentNull) conditions.push({ label: '코멘트없음', onClear: () => onChange({ ...ap, commentNull: false } as never) })
     if (ap.realNameNull) conditions.push({ label: '본명없음', onClear: () => onChange({ ...ap, realNameNull: false } as never) })
     if (ap.deletePending) conditions.push({ label: '삭제예정', onClear: () => onChange({ ...ap, deletePending: false } as never) })
@@ -399,7 +396,7 @@ export default function SearchBar(props: Props) {
         type="text"
         value={params.keyword}
         onChange={e => onChange({ ...params, keyword: e.target.value } as never)}
-        placeholder={type === 'works' ? '품번 검색' : '이름 검색'}
+        placeholder={type === 'works' ? '품번/배우명/타이틀/코멘트' : '배우명/품번/타이틀/코멘트'}
         className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded flex-1 min-w-0"
       />
 
@@ -737,47 +734,18 @@ export default function SearchBar(props: Props) {
                   <button type="button" onClick={() => onChange({ ...wParams, actorCountNull: !wParams.actorCountNull, actorCountFrom: '', actorCountTo: '' } as never)} className={`text-xs px-2 py-1 rounded shrink-0 ${wParams.actorCountNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>배우없음</button>
                 </div>
 
-                {/* 타이틀 */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-14 shrink-0">타이틀</span>
-                  <input
-                    type="text"
-                    value={wParams.titleSearch}
-                    disabled={wParams.titleNull}
-                    onChange={e => onChange({ ...wParams, titleSearch: e.target.value } as never)}
-                    placeholder="타이틀 검색"
-                    className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onChange({ ...wParams, titleNull: !wParams.titleNull, titleSearch: '' } as never)}
-                    className={`text-xs px-2 py-1 rounded shrink-0 ${wParams.titleNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >
-                    타이틀없음
-                  </button>
-                </div>
-
-                {/* 코멘트 */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-14 shrink-0">코멘트</span>
-                  <input
-                    type="text"
-                    value={wParams.commentSearch}
-                    disabled={wParams.commentNull}
-                    onChange={e => onChange({ ...wParams, commentSearch: e.target.value } as never)}
-                    placeholder="코멘트 검색"
-                    className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onChange({ ...wParams, commentNull: !wParams.commentNull, commentSearch: '' } as never)}
-                    className={`text-xs px-2 py-1 rounded shrink-0 ${wParams.commentNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >
-                    코멘트없음
-                  </button>
-                </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...wParams, titleNull: !wParams.titleNull } as never)}
+                    className={`text-xs px-2 py-1 rounded ${wParams.titleNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >타이틀없음</button>
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...wParams, commentNull: !wParams.commentNull } as never)}
+                    className={`text-xs px-2 py-1 rounded ${wParams.commentNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >코멘트없음</button>
                   <button
                     type="button"
                     onClick={() => onChange({ ...wParams, deletePending: !wParams.deletePending } as never)}
@@ -909,22 +877,12 @@ export default function SearchBar(props: Props) {
               {type === 'actors' && aParams && (
                 <>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-14 shrink-0">코멘트</span>
-                    <input
-                      type="text"
-                      value={aParams.commentSearch}
-                      onChange={e => onChange({ ...aParams, commentSearch: e.target.value, commentNull: false } as never)}
-                      placeholder="코멘트 검색..."
-                      className="bg-gray-700 text-white text-xs px-2 py-1 rounded flex-1 outline-none focus:ring-1 focus:ring-blue-500"
-                    />
+                    <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
                     <button
                       type="button"
-                      onClick={() => onChange({ ...aParams, commentNull: !aParams.commentNull, commentSearch: '' } as never)}
+                      onClick={() => onChange({ ...aParams, commentNull: !aParams.commentNull } as never)}
                       className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.commentNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                     >코멘트없음</button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
                     <button
                       type="button"
                       onClick={() => onChange({ ...aParams, realNameNull: !aParams.realNameNull } as never)}

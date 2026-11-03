@@ -81,9 +81,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     if (search.releaseDateTo) params.releaseDateTo = search.releaseDateTo
     if (search.ratingFrom !== '') params.ratingFrom = Number(search.ratingFrom)
     if (search.ratingTo !== '') params.ratingTo = Number(search.ratingTo)
-    if (search.titleSearch) params.titleSearch = search.titleSearch
     if (search.titleNull) params.titleNull = true
-    if (search.commentSearch) params.commentSearch = search.commentSearch
     if (search.commentNull) params.commentNull = true
     if (search.releaseDateNull) params.releaseDateNull = true
     if (search.actorCountFrom !== '') params.actorCountFrom = Number(search.actorCountFrom)

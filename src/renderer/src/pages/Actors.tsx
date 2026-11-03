@@ -151,7 +151,6 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
       params.sortDir = sortDir
     }
     if (search.favoriteOnly) params.favoriteOnly = true
-    if (search.commentSearch) params.commentSearch = search.commentSearch
     if (search.commentNull) params.commentNull = true
     if (search.realNameNull) params.realNameNull = true
     if (search.deletePending) params.deletePending = true

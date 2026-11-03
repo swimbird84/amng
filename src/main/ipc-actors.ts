@@ -110,8 +110,8 @@ export function registerActorsHandlers(): void {
     }
 
     if (params?.keyword) {
-      conditions.push('(a.name LIKE ? OR a.aliases LIKE ? OR a.real_name LIKE ? OR EXISTS (SELECT 1 FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id WHERE wa2.actor_id = a.id AND w2.product_number LIKE ?))')
-      bindings.push(`%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`)
+      conditions.push('(a.name LIKE ? OR a.aliases LIKE ? OR a.real_name LIKE ? OR a.comment LIKE ? OR EXISTS (SELECT 1 FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id WHERE wa2.actor_id = a.id AND (w2.product_number LIKE ? OR w2.title LIKE ?)))')
+      bindings.push(`%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`)
     }
     if (params?.ageFrom !== undefined) {
       conditions.push("(julianday('now') - julianday(a.birthday)) / 365.25 >= ?")

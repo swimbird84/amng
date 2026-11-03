@@ -287,7 +287,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
               {(() => {
                 const recentWorks = [...(actor.works ?? [])].filter(w => !w.is_excluded)
                   .sort((a, b) => (b.release_date ?? '').localeCompare(a.release_date ?? ''))
-                  .slice(0, 12)
+                  .slice(0, 16)
                 if (recentWorks.length === 0) return null
                 return (
                   <div>
