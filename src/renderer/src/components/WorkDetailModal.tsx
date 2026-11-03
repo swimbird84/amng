@@ -74,14 +74,14 @@ export default function WorkDetailModal({ workId, onClose, onViewActor, zIndex =
   const handleTrashFolder = async () => {
     if (!work || !confirm('폴더를 휴지통으로 이동합니다. 아카이빙 없이 폴더만 삭제됩니다.\nDB 작품 정보는 유지됩니다.\n계속하시겠습니까?')) return
     const res = await worksApi.trashFolder(work.id)
-    if (res.ok) { alert('폴더 삭제 완료'); loadWork() }
+    if (res.ok) { alert('폴더 삭제 완료'); loadWork(); emitDataChanged('work') }
     else alert(res.error || '삭제 실패')
   }
 
   const handleArchive = async () => {
     if (!work || !confirm('커버 이미지를 아카이빙하고 폴더를 휴지통으로 이동합니다.\nDB 작품 정보는 유지됩니다.\n계속하시겠습니까?')) return
     const res = await worksApi.archiveFolder(work.id)
-    if (res.ok) { alert('아카이빙 완료'); loadWork() }
+    if (res.ok) { alert('아카이빙 완료'); loadWork(); emitDataChanged('work') }
     else alert(res.error || '아카이빙 실패')
   }
 

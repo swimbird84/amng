@@ -130,6 +130,9 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   }, [])
 
   const refreshWorks = useCallback((extraCount = 0) => {
+    playCheckedRef.current.clear()
+    setPlayFiles({})
+    setPlayable({})
     const count = Math.max(worksCountRef.current + extraCount, BATCH_SIZE)
     return fetchWorks(0, true, count)
   }, [fetchWorks])

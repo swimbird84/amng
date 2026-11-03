@@ -144,13 +144,19 @@ export const folderApi = {
 }
 
 export const tempApi = {
-  listFiles: (folderPath: string) => api.invoke('temp:listFiles', folderPath) as Promise<{ ok: boolean; error?: string; files: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null; fileSize: number; mtime: number }[] }>,
+  listFiles: (folderPath: string) => api.invoke('temp:listFiles', folderPath) as Promise<{ ok: boolean; error?: string; files: { fileName: string; baseName: string; videoPath: string | null; thumbPath: string | null; fileSize: number; mtime: number }[] }>,
   renameFile: (folderPath: string, oldName: string, newName: string) => api.invoke('temp:renameFile', folderPath, oldName, newName) as Promise<{ ok: boolean; error?: string }>,
-  deleteFile: (folderPath: string, fileNames: string[]) => api.invoke('temp:deleteFile', folderPath, fileNames) as Promise<{ ok: boolean; deleted: number }>,
+  deleteFile: (folderPath: string, fileNames: string[], mode: 'all' | 'videoOnly' | 'imageOnly' = 'all') => api.invoke('temp:deleteFile', folderPath, fileNames, mode) as Promise<{ ok: boolean; deleted: number }>,
   moveToTree: (srcFolder: string, fileNames: string[], targetActorFolder: string, releaseDate: string) => api.invoke('temp:moveToTree', srcFolder, fileNames, targetActorFolder, releaseDate) as Promise<{ ok: boolean; moved: string[] }>,
   removeString: (folderPath: string, str: string) => api.invoke('temp:removeString', folderPath, str) as Promise<{ ok: boolean; error?: string; count?: number }>,
-  fetchCover: (productNumber: string, saveFolder: string, autoPlace?: boolean) => api.invoke('temp:fetchCover', productNumber, saveFolder, autoPlace) as Promise<{ ok: boolean; error?: string; savePath?: string; autoPlaced?: boolean; actorName?: string; movedCount?: number }>,
+  fetchCover: (productNumber: string, saveFolder: string, source?: 'sukebei' | 'javbus', autoPlace?: boolean) => api.invoke('temp:fetchCover', productNumber, saveFolder, source, autoPlace) as Promise<{ ok: boolean; error?: string; savePath?: string; autoPlaced?: boolean; actorName?: string; movedCount?: number }>,
   moveWithNewActor: (srcFolder: string, fileNames: string[], parentFolder: string, actorName: string, actorBirthday: string, releaseDate: string) => api.invoke('temp:moveWithNewActor', srcFolder, fileNames, parentFolder, actorName, actorBirthday, releaseDate) as Promise<{ ok: boolean; moved: string[]; actorId: number }>,
+  moveToTreeAsLink: (srcFolder: string, imageFileName: string, targetActorFolder: string, releaseDate: string, url: string) => api.invoke('temp:moveToTreeAsLink', srcFolder, imageFileName, targetActorFolder, releaseDate, url) as Promise<{ ok: boolean; workId?: number }>,
+  moveToTreeAsLinkNewActor: (srcFolder: string, imageFileName: string, parentFolder: string, actorName: string, actorBirthday: string, releaseDate: string, url: string) => api.invoke('temp:moveToTreeAsLinkNewActor', srcFolder, imageFileName, parentFolder, actorName, actorBirthday, releaseDate, url) as Promise<{ ok: boolean; workId?: number; actorId?: number }>,
+}
+
+export const coverApi = {
+  getSources: () => api.invoke('cover:getSources') as Promise<{ key: string; domain: string; faviconPath: string | null }[]>,
 }
 
 export const workFilesApi = {

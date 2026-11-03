@@ -797,7 +797,7 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                 </div>
                 <div className="border-t border-gray-700" />
                 <div className="flex flex-wrap gap-1.5">
-                  {allActors.filter((a) => !newActor || a.name.toLowerCase().includes(newActor.toLowerCase()) || (a.aliases && a.aliases.toLowerCase().includes(newActor.toLowerCase()))).map((actor) => {
+                  {allActors.filter((a) => !newActor || a.name.toLowerCase().includes(newActor.toLowerCase()) || (a.aliases && a.aliases.toLowerCase().includes(newActor.toLowerCase())) || (a.real_name && a.real_name.toLowerCase().includes(newActor.toLowerCase()))).map((actor) => {
                     const isRep = repActorIds.includes(actor.id)
                     return (<button
                       key={actor.id}

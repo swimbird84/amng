@@ -1,4 +1,4 @@
-import { ipcMain, shell, BrowserWindow, net, session } from 'electron'
+import { ipcMain, shell, BrowserWindow, net, session, app } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import { getDatabase } from './db'
@@ -337,21 +337,37 @@ export function registerFilesHandlers(): void {
         }
       }
 
-      const result: { fileName: string; baseName: string; videoPath: string; thumbPath: string | null; fileSize: number; mtime: number }[] = []
+      const result: { fileName: string; baseName: string; videoPath: string | null; thumbPath: string | null; fileSize: number; mtime: number }[] = []
+      const matchedImageBases = new Set<string>()
       for (const name of fileNames) {
         const ext = path.extname(name).toLowerCase()
         if (!VIDEO_EXTS.has(ext)) continue
         const base = path.basename(name, ext)
         // Image matching: exact match first, then _prefix match
         let thumb = imageMap.get(base.toLowerCase()) ?? null
+        if (thumb) matchedImageBases.add(base.toLowerCase())
         if (!thumb) {
           const prefixMatch = base.match(/^(.+?)_\d+$/)
-          if (prefixMatch) thumb = imageMap.get(prefixMatch[1].toLowerCase()) ?? null
+          if (prefixMatch) {
+            thumb = imageMap.get(prefixMatch[1].toLowerCase()) ?? null
+            if (thumb) matchedImageBases.add(prefixMatch[1].toLowerCase())
+          }
         }
         let fileSize = 0
         let mtime = 0
         try { const st = await fs.promises.stat(path.join(folderPath, name)); fileSize = st.size; mtime = st.mtimeMs } catch { /* skip */ }
         result.push({ fileName: name, baseName: base, videoPath: path.join(folderPath, name), thumbPath: thumb, fileSize, mtime })
+      }
+      // Add image-only entries (no matching video)
+      for (const [baseLower, imgPath] of imageMap) {
+        if (matchedImageBases.has(baseLower)) continue
+        const imgName = path.basename(imgPath)
+        const ext = path.extname(imgName)
+        const base = path.basename(imgName, ext)
+        let fileSize = 0
+        let mtime = 0
+        try { const st = await fs.promises.stat(imgPath); fileSize = st.size; mtime = st.mtimeMs } catch { /* skip */ }
+        result.push({ fileName: imgName, baseName: base, videoPath: null, thumbPath: imgPath, fileSize, mtime })
       }
       result.sort((a, b) => a.fileName.localeCompare(b.fileName))
       return { ok: true, files: result }
@@ -381,22 +397,41 @@ export function registerFilesHandlers(): void {
     }
   })
 
-  ipcMain.handle('temp:deleteFile', async (_e, folderPath: string, fileNames: string[]) => {
+  ipcMain.handle('temp:deleteFile', async (_e, folderPath: string, fileNames: string[], mode: 'all' | 'videoOnly' | 'imageOnly' = 'all') => {
     let deleted = 0
     for (const fileName of fileNames) {
+      const ext = path.extname(fileName).toLowerCase()
       const base = path.basename(fileName, path.extname(fileName))
+      const isImageFile = IMAGE_EXTS.has(ext)
       try {
-        // Delete video
-        const videoPath = path.join(folderPath, fileName)
-        if (fs.existsSync(videoPath)) { await shell.trashItem(videoPath); deleted++ }
-        // Delete matching image
-        const entries = await fs.promises.readdir(folderPath).catch(() => [] as string[])
-        for (const entry of (entries as unknown as string[])) {
-          const ext = path.extname(entry).toLowerCase()
-          if (IMAGE_EXTS.has(ext) && path.basename(entry, ext).toLowerCase() === base.toLowerCase()) {
-            await shell.trashItem(path.join(folderPath, entry))
-            break
+        // Delete video (or the file itself if it's an image-only item in 'all' mode)
+        if (mode !== 'imageOnly') {
+          if (isImageFile) {
+            // Image-only item: in 'videoOnly' mode, nothing to delete; in 'all' mode, delete the image
+            if (mode === 'all') {
+              const filePath = path.join(folderPath, fileName)
+              if (fs.existsSync(filePath)) { await shell.trashItem(filePath); deleted++ }
+            }
+          } else {
+            const videoPath = path.join(folderPath, fileName)
+            if (fs.existsSync(videoPath)) { await shell.trashItem(videoPath); deleted++ }
           }
+        }
+        // Delete matching image
+        if (mode !== 'videoOnly' && !isImageFile) {
+          const entries = await fs.promises.readdir(folderPath).catch(() => [] as string[])
+          for (const entry of (entries as unknown as string[])) {
+            const entryExt = path.extname(entry).toLowerCase()
+            if (IMAGE_EXTS.has(entryExt) && path.basename(entry, entryExt).toLowerCase() === base.toLowerCase()) {
+              await shell.trashItem(path.join(folderPath, entry))
+              break
+            }
+          }
+        }
+        // Image-only item with imageOnly mode: delete the image file itself
+        if (mode === 'imageOnly' && isImageFile) {
+          const filePath = path.join(folderPath, fileName)
+          if (fs.existsSync(filePath)) { await shell.trashItem(filePath); deleted++ }
         }
       } catch { /* skip */ }
     }
@@ -515,6 +550,105 @@ export function registerFilesHandlers(): void {
 
     const moved = await moveFilesToActorFolder(srcFolder, fileNames, targetActorFolder, releaseDate, actorId)
     return { ok: true, moved }
+  })
+
+  // Helper: create work from image-only item with URL link
+  async function createWorkAsLink(srcFolder: string, imageFileName: string, targetFolder: string, releaseDate: string, url: string, actorId: number | null): Promise<{ ok: boolean; workId?: number }> {
+    const ext = path.extname(imageFileName)
+    const base = path.basename(imageFileName, ext)
+    const productNumber = getProductNumber(base)
+
+    // Lookup studio
+    const codeMatch = productNumber.match(/^(.+)-\d/)
+    const suffixMatch = !codeMatch ? null : productNumber.match(/^\d[\d-]*-([A-Za-z]+)$/)
+    const studioCode = suffixMatch ? suffixMatch[1] : codeMatch ? codeMatch[1] : null
+    let studioId: number | null = null
+    if (studioCode) {
+      const studioRow = db().prepare('SELECT studio_id FROM studio_codes WHERE code = ?').get(studioCode.toUpperCase()) as { studio_id: number } | undefined
+      studioId = studioRow?.studio_id ?? null
+    }
+
+    // Copy image to targetFolder/cover images/{releaseDate} {productNumber}.ext
+    const imgSrc = path.join(srcFolder, imageFileName)
+    const coverImagesDir = path.join(targetFolder, 'cover images')
+    fs.mkdirSync(coverImagesDir, { recursive: true })
+    const coverDest = path.join(coverImagesDir, `${releaseDate} ${productNumber}${ext}`)
+    fs.copyFileSync(imgSrc, coverDest)
+
+    // Insert work
+    const result = db().prepare(`
+      INSERT INTO works (file_path, cover_path, product_number, release_date, rating, comment, studio_id)
+      VALUES (?, ?, ?, ?, 0, NULL, ?)
+    `).run('', coverDest, productNumber, releaseDate, studioId)
+    const workId = result.lastInsertRowid as number
+
+    // Register URL as work_file
+    db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, ?)').run(workId, url, 'url', 0)
+
+    // Link actor
+    if (actorId) {
+      db().prepare('INSERT OR IGNORE INTO work_actors (work_id, actor_id, is_rep) VALUES (?, ?, 1)').run(workId, actorId)
+    }
+
+    // Trash source image
+    try { await shell.trashItem(imgSrc) } catch { /* skip */ }
+
+    return { ok: true, workId }
+  }
+
+  ipcMain.handle('temp:moveToTreeAsLink', async (_e, srcFolder: string, imageFileName: string, targetActorFolder: string, releaseDate: string, url: string) => {
+    // Find actor from folder name
+    const actorFolderName = path.basename(targetActorFolder)
+    const actorMatch = actorFolderName.match(/^(.+)\s+(\d{4}-\d{2}-\d{2})$/)
+    let actorId: number | null = null
+    if (actorMatch) {
+      const actorName = actorMatch[1].trim()
+      const actorBirthday = actorMatch[2]
+      const actors = db().prepare('SELECT id, name, aliases, birthday FROM actors WHERE is_deleted = 0').all() as { id: number; name: string; aliases: string | null; birthday: string | null }[]
+      const actor = actors.find(a => {
+        if (a.birthday !== actorBirthday) return false
+        if (a.name === actorName) return true
+        if (a.aliases) return a.aliases.split(',').map(s => s.trim()).includes(actorName)
+        return false
+      })
+      actorId = actor?.id ?? null
+    }
+
+    return createWorkAsLink(srcFolder, imageFileName, targetActorFolder, releaseDate, url, actorId)
+  })
+
+  ipcMain.handle('temp:moveToTreeAsLinkNewActor', async (_e, srcFolder: string, imageFileName: string, parentFolder: string, actorName: string, actorBirthday: string, releaseDate: string, url: string) => {
+    const existingActor = db().prepare('SELECT id FROM actors WHERE name = ? AND birthday = ? AND is_deleted = 0').get(actorName, actorBirthday) as { id: number } | undefined
+    let actorId: number
+    if (existingActor) {
+      actorId = existingActor.id
+    } else {
+      const actorResult = db().prepare('INSERT INTO actors (name, birthday) VALUES (?, ?)').run(actorName, actorBirthday)
+      actorId = actorResult.lastInsertRowid as number
+      db().prepare('INSERT OR REPLACE INTO actor_scores (actor_id, face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions) VALUES (?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)').run(actorId)
+    }
+
+    // Find existing actor folder or create under parentFolder
+    const actorFolderName = `${actorName} ${actorBirthday}`
+    let actorFolderPath = path.join(parentFolder, actorFolderName)
+    if (existingActor) {
+      const existingFile = db().prepare(`
+        SELECT wf.file_path FROM work_files wf
+        JOIN work_actors wa ON wa.work_id = wf.work_id
+        WHERE wa.actor_id = ? AND wf.type = 'local'
+        LIMIT 1
+      `).get(existingActor.id) as { file_path: string } | undefined
+      if (existingFile) {
+        const workFolder = path.dirname(existingFile.file_path)
+        const candidateActorFolder = path.dirname(workFolder)
+        if (fs.existsSync(candidateActorFolder)) {
+          actorFolderPath = candidateActorFolder
+        }
+      }
+    }
+
+    const result = await createWorkAsLink(srcFolder, imageFileName, actorFolderPath, releaseDate, url, actorId)
+    return { ...result, actorId }
   })
 
   ipcMain.handle('temp:removeString', async (_e, folderPath: string, str: string) => {
@@ -748,7 +882,251 @@ export function registerFilesHandlers(): void {
     return { ...result, debug: debugLog.join(' | ') }
   }
 
-  ipcMain.handle('temp:fetchCover', async (_e, rawProductNumber: string, saveFolder: string, autoPlace?: boolean) => {
+  // Helper: fetch with retry (for flaky DNS/connection)
+  async function fetchWithRetry(url: string, opts: Parameters<typeof net.fetch>[1], retries = 2): Promise<Response> {
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const res = await net.fetch(url, opts)
+        return res
+      } catch (err) {
+        console.log(`[fetchRetry] attempt ${i + 1}/${retries + 1} failed for ${url}:`, String(err).substring(0, 100))
+        if (i === retries) throw err
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)))
+      }
+    }
+    throw new Error('unreachable')
+  }
+
+  // Helper: fetch HTML via BrowserWindow fallback
+  async function fetchHtmlViaBrowser(url: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const win = new BrowserWindow({
+        show: false, width: 800, height: 600,
+        webPreferences: { nodeIntegration: false, contextIsolation: true, session: scrapeSession },
+      })
+      const timeout = setTimeout(() => { console.log('[sukebei-bw] TIMEOUT', url); win.destroy(); resolve(null) }, 15000)
+      win.webContents.on('did-finish-load', async () => {
+        try {
+          const html = await win.webContents.executeJavaScript('document.documentElement.outerHTML')
+          clearTimeout(timeout); win.destroy(); resolve(html)
+        } catch { clearTimeout(timeout); win.destroy(); resolve(null) }
+      })
+      win.webContents.on('did-fail-load', () => { clearTimeout(timeout); win.destroy(); resolve(null) })
+      win.loadURL(url)
+    })
+  }
+
+  // Sukebei scraping: search → detail page → viewer page → actual image
+  async function scrapeSukebei(productNumber: string, saveFolder: string): Promise<{ ok: boolean; error?: string; savePath?: string }> {
+    const debugLog: string[] = []
+    const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    const fetchOpts = { headers: { 'User-Agent': ua }, session: scrapeSession }
+    try {
+      // Step 1: Search sukebei
+      const searchUrl = `https://sukebei.nyaa.si/?f=2&c=2_2&q=${encodeURIComponent(productNumber)}`
+      debugLog.push('search=' + searchUrl)
+      console.log('[sukebei] Step 1: search', searchUrl)
+
+      let searchHtml: string | null = null
+      try {
+        const searchRes = await fetchWithRetry(searchUrl, fetchOpts)
+        if (searchRes.ok) searchHtml = await searchRes.text()
+        else debugLog.push('searchHTTP=' + searchRes.status)
+      } catch (err) {
+        debugLog.push('searchFetchErr=' + String(err).substring(0, 80))
+      }
+
+      // BrowserWindow fallback for search
+      if (!searchHtml) {
+        console.log('[sukebei] fetch failed, trying BrowserWindow fallback for search')
+        debugLog.push('searchFallback=BW')
+        searchHtml = await fetchHtmlViaBrowser(searchUrl)
+      }
+
+      if (!searchHtml) {
+        console.log('[sukebei] search failed completely')
+        return { ok: false, error: `sukebei 검색 실패 [DEBUG] ${debugLog.join(' | ')}` }
+      }
+
+      // Extract first result /view/{id} link
+      const viewMatch = searchHtml.match(/href="\/view\/(\d+)"/)
+      if (!viewMatch) {
+        debugLog.push('noResult')
+        console.log('[sukebei] no search results for', productNumber)
+        return { ok: false, error: `sukebei 검색 결과 없음 [DEBUG] ${debugLog.join(' | ')}` }
+      }
+      const viewId = viewMatch[1]
+      debugLog.push('viewId=' + viewId)
+
+      // Step 2: Fetch detail page
+      const detailUrl = `https://sukebei.nyaa.si/view/${viewId}`
+      console.log('[sukebei] Step 2: detail', detailUrl)
+
+      let detailHtml: string | null = null
+      try {
+        const detailRes = await fetchWithRetry(detailUrl, fetchOpts)
+        if (detailRes.ok) detailHtml = await detailRes.text()
+        else debugLog.push('detailHTTP=' + detailRes.status)
+      } catch (err) {
+        debugLog.push('detailFetchErr=' + String(err).substring(0, 80))
+      }
+
+      if (!detailHtml) {
+        console.log('[sukebei] fetch failed, trying BrowserWindow fallback for detail')
+        debugLog.push('detailFallback=BW')
+        detailHtml = await fetchHtmlViaBrowser(detailUrl)
+      }
+
+      if (!detailHtml) {
+        console.log('[sukebei] detail failed completely')
+        return { ok: false, error: `sukebei 상세페이지 실패 [DEBUG] ${debugLog.join(' | ')}` }
+      }
+
+      // Extract description text (markdown-text div)
+      const descMatch = detailHtml.match(/id="torrent-description"[^>]*>([\s\S]*?)<\/div>/)
+      if (!descMatch) {
+        debugLog.push('noDesc')
+        console.log('[sukebei] no description found')
+        return { ok: false, error: `sukebei description 없음 [DEBUG] ${debugLog.join(' | ')}` }
+      }
+      const descText = descMatch[1]
+
+      // Find image URL: http(s)://...{productNumber}.jpg (exclude _s.jpg)
+      const pnEscaped = productNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const imgUrlRe = new RegExp(`https?://[^\\s"'<>]+${pnEscaped}\\.jpg`, 'gi')
+      const allImgUrls = descText.match(imgUrlRe) || []
+      // Filter out _s.jpg (screenshot)
+      const coverUrls = allImgUrls.filter(u => !u.match(/_s\.jpg$/i))
+      console.log('[sukebei] found image URLs:', allImgUrls.length, 'cover candidates:', coverUrls.length)
+
+      if (coverUrls.length === 0) {
+        debugLog.push('noCoverUrl, allUrls=' + allImgUrls.join(','))
+        console.log('[sukebei] no cover URL found in description')
+        return { ok: false, error: `sukebei 커버 URL 없음 [DEBUG] ${debugLog.join(' | ')}` }
+      }
+
+      let viewerUrl = coverUrls[0]
+      debugLog.push('viewerUrl=' + viewerUrl)
+
+      // Ensure /en/ is in the viewer URL path for proper page rendering
+      if (!viewerUrl.includes('/en/')) {
+        viewerUrl = viewerUrl.replace(/(\/upload\/)/, '$1en/')
+      }
+      console.log('[sukebei] Step 3: viewer', viewerUrl)
+
+      // Step 3: Fetch viewer page to get actual image src
+      let viewerHtml: string | null = null
+      try {
+        const viewerRes = await fetchWithRetry(viewerUrl, fetchOpts)
+        if (viewerRes.ok) viewerHtml = await viewerRes.text()
+        else debugLog.push('viewerHTTP=' + viewerRes.status)
+      } catch (err) {
+        debugLog.push('viewerFetchErr=' + String(err).substring(0, 80))
+      }
+
+      if (!viewerHtml) {
+        console.log('[sukebei] fetch failed, trying BrowserWindow fallback for viewer')
+        debugLog.push('viewerFallback=BW')
+        viewerHtml = await fetchHtmlViaBrowser(viewerUrl)
+      }
+
+      if (!viewerHtml) {
+        console.log('[sukebei] viewer failed completely')
+        return { ok: false, error: `뷰어 페이지 실패 [DEBUG] ${debugLog.join(' | ')}` }
+      }
+
+      // Extract actual image from .fileviewer-file img src or any img with Application/storage path
+      let actualImgUrl: string | null = null
+      const storageMatch = viewerHtml.match(/src="(https?:\/\/[^"]*Application\/storage[^"]*\.jpg)"/i)
+      if (storageMatch) {
+        actualImgUrl = storageMatch[1]
+      } else {
+        // Fallback: og:image meta tag
+        const ogMatch = viewerHtml.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)
+        if (ogMatch) actualImgUrl = ogMatch[1]
+      }
+
+      if (!actualImgUrl) {
+        debugLog.push('noActualImg')
+        console.log('[sukebei] no actual image URL found in viewer page')
+        return { ok: false, error: `실제 이미지 URL 없음 [DEBUG] ${debugLog.join(' | ')}` }
+      }
+      debugLog.push('actualImg=' + actualImgUrl)
+      console.log('[sukebei] Step 4: download image', actualImgUrl)
+
+      // Step 4: Download image (with retry)
+      const imgRes = await fetchWithRetry(actualImgUrl, {
+        headers: { 'User-Agent': ua, 'Referer': viewerUrl },
+        session: scrapeSession,
+      })
+      if (!imgRes.ok) {
+        debugLog.push('imgHTTP=' + imgRes.status)
+        console.log('[sukebei] image download failed HTTP', imgRes.status)
+        return { ok: false, error: `이미지 다운로드 실패 HTTP ${imgRes.status} [DEBUG] ${debugLog.join(' | ')}` }
+      }
+      const buffer = Buffer.from(await imgRes.arrayBuffer())
+      if (buffer.length < 1000) {
+        debugLog.push('imgTooSmall=' + buffer.length)
+        console.log('[sukebei] image too small:', buffer.length, 'bytes')
+        return { ok: false, error: `이미지 크기 너무 작음 (${buffer.length}B) [DEBUG] ${debugLog.join(' | ')}` }
+      }
+      const savePath = path.join(saveFolder, productNumber + '.jpg')
+      await fs.promises.writeFile(savePath, buffer)
+      console.log('[sukebei] saved:', savePath, buffer.length, 'bytes')
+
+      return { ok: true, savePath }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+      debugLog.push('ERR=' + errMsg)
+      console.error('[sukebei] error:', errMsg)
+      return { ok: false, error: `sukebei 오류: ${errMsg} [DEBUG] ${debugLog.join(' | ')}` }
+    }
+  }
+
+  // Cover source favicon management
+  const COVER_SOURCES = [
+    { key: 'sukebei', domain: 'sukebei.nyaa.si' },
+    { key: 'javbus', domain: 'www.javbus.com' },
+  ]
+
+  async function ensureCoverFavicons(): Promise<void> {
+    const faviconDir = path.join(app.getPath('userData'), 'images', 'favicons')
+    fs.mkdirSync(faviconDir, { recursive: true })
+    for (const src of COVER_SOURCES) {
+      const destPath = path.join(faviconDir, `cover-${src.key}.png`)
+      if (fs.existsSync(destPath)) continue
+      try {
+        const faviconUrl = `https://www.google.com/s2/favicons?domain=${src.domain}&sz=64`
+        const resp = await net.fetch(faviconUrl)
+        if (!resp.ok) continue
+        const buffer = Buffer.from(await resp.arrayBuffer())
+        if (buffer.length < 200) continue
+        fs.writeFileSync(destPath, buffer)
+        console.log('[coverFavicon] saved:', destPath)
+      } catch (err) {
+        console.log('[coverFavicon] failed for', src.key, err)
+      }
+    }
+  }
+
+  // Fetch favicons on startup (non-blocking)
+  ensureCoverFavicons()
+
+  ipcMain.handle('cover:getSources', async () => {
+    const faviconDir = path.join(app.getPath('userData'), 'images', 'favicons')
+    const exts = ['.png', '.ico', '.jpg', '.jpeg']
+    const sources = COVER_SOURCES.map(src => {
+      let faviconPath: string | null = null
+      for (const ext of exts) {
+        const p = path.join(faviconDir, `cover-${src.key}${ext}`)
+        if (fs.existsSync(p)) { faviconPath = p; break }
+      }
+      return { key: src.key, domain: src.domain, faviconPath }
+    })
+    return sources
+  })
+
+  ipcMain.handle('temp:fetchCover', async (_e, rawProductNumber: string, saveFolder: string, source?: 'sukebei' | 'javbus', autoPlace?: boolean) => {
     try {
       // Only strip _N suffix if consecutive numbered files exist in folder
       let productNumber = rawProductNumber
@@ -872,6 +1250,14 @@ export function registerFilesHandlers(): void {
       }
 
       // Cover download mode
+      const effectiveSource = source || 'javbus'
+      console.log('[fetchCover] source=' + effectiveSource, 'productNumber=' + productNumber)
+
+      if (effectiveSource === 'sukebei') {
+        return await scrapeSukebei(productNumber, saveFolder)
+      }
+
+      // javbus path
       const scraped = await scrapePage(pageUrl, baseUrl)
 
       if (!scraped.imgUrl) return { ok: false, error: '커버 이미지를 찾을 수 없습니다 [DEBUG] ' + (scraped.debug || 'no-debug') }
