@@ -24,6 +24,7 @@ interface FolderNode {
   matchedActorAliases?: string
   matchedWorkId?: number
   matchedWorkLabel?: string
+  isCoverImagesFolder?: boolean
 }
 
 function countAllFolders(nodes: FolderNode[]): number {
@@ -376,9 +377,9 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
       <div
         className={`flex items-center gap-1 py-1 hover:bg-gray-800/50 rounded group ${dragOver ? 'bg-blue-900/30 ring-1 ring-blue-500' : ''}`}
         style={{ paddingLeft: depth * 20 + 8 }}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragOver={(e) => { if (node.isCoverImagesFolder) return; e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); onDrop?.(node.path, node.matchedActorName ?? node.name, !!node.matchedActorId) }}
+        onDrop={(e) => { if (node.isCoverImagesFolder) return; e.preventDefault(); setDragOver(false); onDrop?.(node.path, node.matchedActorName ?? node.name, !!node.matchedActorId) }}
       >
         <button
           onClick={handleToggle}
@@ -386,8 +387,8 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
         >
           {hasChildren ? (open ? '▼' : '▶') : ' '}
         </button>
-        <span className={`text-sm ${folderExists ? 'text-gray-300' : 'text-red-400'}`}>
-          {folderExists ? '📁' : '📁⚠️'}
+        <span className={`text-sm ${folderExists ? (node.isCoverImagesFolder ? 'text-orange-400' : 'text-gray-300') : 'text-red-400'}`}>
+          {folderExists ? (node.isCoverImagesFolder ? '🖼️' : '📁') : '📁⚠️'}
         </span>
         {renaming ? (
           <input
@@ -406,7 +407,7 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
           </>
         )}
         <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
-          {renaming ? (
+          {node.isCoverImagesFolder ? null : renaming ? (
             <>
               <button onClick={handleRenameFolder} className="text-xs text-white bg-blue-600 hover:bg-blue-500 px-1.5 py-0.5 rounded">변경</button>
               <button onClick={() => setRenaming(false)} className="text-xs text-gray-300 bg-gray-600 hover:bg-gray-500 px-1.5 py-0.5 rounded">취소</button>
@@ -474,14 +475,21 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
           ))}
           {node.files.map(file => {
             const fileExists = existsMap ? (existsMap[file.filePath] ?? true) : true
-            const isEditing = fileRenaming === file.id
+            const isEditing = !node.isCoverImagesFolder && fileRenaming === file.id
             return (
             <div
               key={file.id}
               className="flex items-center gap-1 py-0.5 hover:bg-gray-800/50 rounded group"
               style={{ paddingLeft: (depth + 1) * 20 + 12 }}
             >
-              {isEditing ? (
+              {node.isCoverImagesFolder ? (
+                <>
+                  <span className="text-orange-400 text-sm">🖼️</span>
+                  <span className={`text-sm ${fileExists ? 'text-gray-400' : 'text-red-400'}`}>{file.fileName}</span>
+                  <span className="text-gray-600 text-xs mx-1">→</span>
+                  <span className="text-green-400 text-xs cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); onNavigateToWork(file.workId) }}>{file.workLabel}</span>
+                </>
+              ) : isEditing ? (
                 <input
                   autoFocus
                   value={fileNewName}
@@ -497,7 +505,7 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
                 </>
               )}
               <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition pr-2">
-                {isEditing ? (
+                {node.isCoverImagesFolder ? null : isEditing ? (
                   <>
                     <button onClick={() => handleRenameFile(file)} className="text-xs text-white bg-blue-600 hover:bg-blue-500 px-1.5 py-0.5 rounded">변경</button>
                     <button onClick={() => setFileRenaming(null)} className="text-xs text-gray-300 bg-gray-600 hover:bg-gray-500 px-1.5 py-0.5 rounded">취소</button>

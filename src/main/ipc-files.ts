@@ -25,6 +25,7 @@ interface FolderNode {
   matchedActorAliases?: string
   matchedWorkId?: number
   matchedWorkLabel?: string
+  isCoverImagesFolder?: boolean
 }
 
 function normalizePath(p: string): string {
@@ -34,7 +35,8 @@ function normalizePath(p: string): string {
 function buildTree(
   rows: { id: number; work_id: number; file_path: string; product_number: string | null; title: string | null }[],
   actors: { id: number; name: string; aliases: string | null; birthday: string | null }[],
-  worksMap: Map<string, { id: number; label: string }>
+  worksMap: Map<string, { id: number; label: string }>,
+  coverRows: { id: number; cover_path: string; product_number: string | null; title: string | null }[]
 ): FolderNode[] {
   const allNodes = new Map<string, FolderNode>()
 
@@ -146,6 +148,41 @@ function buildTree(
     }
   }
 
+  // Add cover images nodes from works.cover_path
+  const coverByDir = new Map<string, { id: number; fileName: string; filePath: string; workLabel: string }[]>()
+  for (const row of coverRows) {
+    const coverDir = normalizePath(path.dirname(row.cover_path))
+    if (!coverDir.endsWith('/cover images')) continue
+    if (!coverByDir.has(coverDir)) coverByDir.set(coverDir, [])
+    coverByDir.get(coverDir)!.push({
+      id: row.id,
+      fileName: path.basename(row.cover_path),
+      filePath: row.cover_path,
+      workLabel: row.product_number || row.title || `#${row.id}`,
+    })
+  }
+  for (const [coverDir, files] of coverByDir) {
+    const parentDir = normalizePath(path.dirname(coverDir.replace(/\//g, path.sep)))
+    if (!allNodes.has(parentDir)) continue // parent not in tree
+    const coverNode: FolderNode = {
+      name: 'cover images',
+      path: coverDir.replace(/\//g, path.sep),
+      fileCount: files.length,
+      exists: true,
+      files: files.map(f => ({
+        id: f.id,
+        workId: f.id,
+        fileName: f.fileName,
+        filePath: f.filePath,
+        workLabel: f.workLabel,
+        exists: true,
+      })),
+      children: [],
+      isCoverImagesFolder: true,
+    }
+    allNodes.get(parentDir)!.children.push(coverNode)
+  }
+
   // Build hierarchy
   const rootNodes: FolderNode[] = []
   for (const node of allNodes.values()) {
@@ -192,7 +229,12 @@ export function registerFilesHandlers(): void {
       worksMap.set(w.product_number, { id: w.id, label: w.product_number || w.title || `#${w.id}` })
     }
 
-    return buildTree(rows, actors, worksMap)
+    const coverRows = db().prepare(`
+      SELECT id, cover_path, product_number, title FROM works
+      WHERE cover_path IS NOT NULL AND REPLACE(cover_path, '\\', '/') LIKE '%/cover images/%'
+    `).all() as { id: number; cover_path: string; product_number: string | null; title: string | null }[]
+
+    return buildTree(rows, actors, worksMap, coverRows)
   })
 
   ipcMain.handle('folder:checkExists', (_e, paths: string[]) => {
