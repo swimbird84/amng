@@ -3,6 +3,7 @@ import { tempApi, dialogApi, shellApi, imageApi } from '../api'
 import SearchUrlModal from './SearchUrlModal'
 import QuickSearchButton from './QuickSearchButton'
 import CoverDownloadButton from './CoverDownloadButton'
+import CardTooltip, { type TooltipState } from './CardTooltip'
 
 function copyText(text: string) {
   const ta = document.createElement('textarea')
@@ -31,6 +32,7 @@ interface TempFile {
   thumbPath: string | null
   fileSize: number
   mtime: number
+  registeredWorkId: number | null
 }
 
 type SortBy = 'name' | 'thumb' | 'size' | 'date'
@@ -80,6 +82,8 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
   const [thumbCache, setThumbCache] = useState<Map<string, string>>(new Map())
   const [previewImage, setPreviewImage] = useState<{ path: string; fileName: string } | null>(null)
   const [previewBase64, setPreviewBase64] = useState<string | null>(null)
+  const [workTooltip, setWorkTooltip] = useState<TooltipState | null>(null)
+  const workTooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!previewImage) { setPreviewBase64(null); return }
@@ -492,7 +496,15 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>}
                     </div>
                   </div>
-                  <span className="text-xs text-gray-300 text-center truncate w-full" title={file.baseName}>{file.baseName}</span>
+                  <span
+                    className={`text-xs text-center truncate w-full ${file.registeredWorkId ? 'text-green-400 font-bold' : 'text-gray-300'}`}
+                    title={file.baseName}
+                    onMouseEnter={e => {
+                      if (!file.registeredWorkId) return
+                      workTooltipTimer.current = setTimeout(() => setWorkTooltip({ type: 'work', id: file.registeredWorkId!, x: e.clientX, y: e.clientY, showCover: true }), 400)
+                    }}
+                    onMouseLeave={() => { if (workTooltipTimer.current) { clearTimeout(workTooltipTimer.current); workTooltipTimer.current = null }; setWorkTooltip(null) }}
+                  >{file.baseName}</span>
                 </div>
               )})}
             </div>
@@ -519,7 +531,15 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
                       onDragStart={e => handleDragStart(e, file)}
                     >
                       <span className="w-6 text-center shrink-0">{file.videoPath && file.thumbPath ? <span className="text-green-400 text-xs">●</span> : !file.videoPath ? <span className="text-orange-400 text-xs">●</span> : <span className="text-gray-600 text-xs">○</span>}</span>
-                      <span className="text-sm text-gray-300 truncate flex-1 min-w-0" title={file.baseName}>{file.baseName}</span>
+                      <span
+                        className={`text-sm truncate flex-1 min-w-0 ${file.registeredWorkId ? 'text-green-400 font-bold' : 'text-gray-300'}`}
+                        title={file.baseName}
+                        onMouseEnter={e => {
+                          if (!file.registeredWorkId) return
+                          workTooltipTimer.current = setTimeout(() => setWorkTooltip({ type: 'work', id: file.registeredWorkId!, x: e.clientX, y: e.clientY, showCover: true }), 400)
+                        }}
+                        onMouseLeave={() => { if (workTooltipTimer.current) { clearTimeout(workTooltipTimer.current); workTooltipTimer.current = null }; setWorkTooltip(null) }}
+                      >{file.baseName}</span>
                       <span className="text-xs text-gray-500 w-16 text-right shrink-0">{formatFileSize(file.fileSize)}</span>
                       <span className="w-24 flex items-center justify-center gap-1.5 shrink-0">
                         <button onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
@@ -662,6 +682,8 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
       )}
 
       {/* Toast */}
+      {workTooltip && <CardTooltip tooltip={workTooltip} />}
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-700 text-white text-sm px-4 py-2 rounded shadow-lg z-50 pointer-events-none animate-fade-in">
           {toast}

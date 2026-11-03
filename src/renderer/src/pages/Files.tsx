@@ -487,7 +487,16 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
                   <span className="text-orange-400 text-sm">🖼️</span>
                   <span className={`text-sm ${fileExists ? 'text-gray-400' : 'text-red-400'}`}>{file.fileName}</span>
                   <span className="text-gray-600 text-xs mx-1">→</span>
-                  <span className="text-green-400 text-xs cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); onNavigateToWork(file.workId) }}>{file.workLabel}</span>
+                  <span
+                    className="text-green-400 text-xs cursor-pointer hover:underline"
+                    onClick={(e) => { e.stopPropagation(); onNavigateToWork(file.workId) }}
+                    onMouseEnter={(e) => {
+                      hoverTimer.current = setTimeout(() => {
+                        setTooltip({ type: 'work', id: file.workId, x: e.clientX, y: e.clientY, showCover: true })
+                      }, 400)
+                    }}
+                    onMouseLeave={handleMouseLeave}
+                  >작품: {file.workLabel}</span>
                 </>
               ) : isEditing ? (
                 <input

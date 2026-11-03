@@ -379,7 +379,13 @@ export function registerFilesHandlers(): void {
         }
       }
 
-      const result: { fileName: string; baseName: string; videoPath: string | null; thumbPath: string | null; fileSize: number; mtime: number }[] = []
+      // Pre-load registered product numbers for lookup
+      const registeredWorks = new Map<string, number>(
+        (db().prepare('SELECT id, product_number FROM works WHERE product_number IS NOT NULL').all() as { id: number; product_number: string }[])
+          .map(r => [r.product_number.toUpperCase(), r.id])
+      )
+
+      const result: { fileName: string; baseName: string; videoPath: string | null; thumbPath: string | null; fileSize: number; mtime: number; registeredWorkId: number | null }[] = []
       const matchedImageBases = new Set<string>()
       for (const name of fileNames) {
         const ext = path.extname(name).toLowerCase()
@@ -398,7 +404,8 @@ export function registerFilesHandlers(): void {
         let fileSize = 0
         let mtime = 0
         try { const st = await fs.promises.stat(path.join(folderPath, name)); fileSize = st.size; mtime = st.mtimeMs } catch { /* skip */ }
-        result.push({ fileName: name, baseName: base, videoPath: path.join(folderPath, name), thumbPath: thumb, fileSize, mtime })
+        const pn = getProductNumber(base).toUpperCase()
+        result.push({ fileName: name, baseName: base, videoPath: path.join(folderPath, name), thumbPath: thumb, fileSize, mtime, registeredWorkId: registeredWorks.get(pn) ?? null })
       }
       // Add image-only entries (no matching video)
       for (const [baseLower, imgPath] of imageMap) {
@@ -409,7 +416,8 @@ export function registerFilesHandlers(): void {
         let fileSize = 0
         let mtime = 0
         try { const st = await fs.promises.stat(imgPath); fileSize = st.size; mtime = st.mtimeMs } catch { /* skip */ }
-        result.push({ fileName: imgName, baseName: base, videoPath: null, thumbPath: imgPath, fileSize, mtime })
+        const pn = getProductNumber(base).toUpperCase()
+        result.push({ fileName: imgName, baseName: base, videoPath: null, thumbPath: imgPath, fileSize, mtime, registeredWorkId: registeredWorks.get(pn) ?? null })
       }
       result.sort((a, b) => a.fileName.localeCompare(b.fileName))
       return { ok: true, files: result }
