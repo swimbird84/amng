@@ -73,7 +73,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
 
   const fetchWorks = useCallback(async (offset: number, replace: boolean, limit = BATCH_SIZE) => {
     const params: Record<string, unknown> = {}
-    if (search.keyword) params.keyword = search.keyword
+    if (search.keyword) { params.keyword = search.keyword; params.keywordField = search.keywordField }
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
     if (search.actorId) params.actorId = Number(search.actorId)
     if (search.studioId) params.studioId = Number(search.studioId)

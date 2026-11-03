@@ -832,7 +832,7 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
 
       {/* Right: Temp Folder */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TempFolder onDragFiles={setDragFiles} refreshRef={tempRefreshRef} onTreeRefresh={loadTree} />
+        <TempFolder onDragFiles={setDragFiles} refreshRef={tempRefreshRef} onTreeRefresh={loadTree} onViewWork={onNavigateToWork} />
       </div>
 
     </div>

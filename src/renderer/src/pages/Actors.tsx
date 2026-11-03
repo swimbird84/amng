@@ -96,7 +96,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
 
   const loadActors = useCallback(async () => {
     const params: Record<string, unknown> = {}
-    if (search.keyword) params.keyword = search.keyword
+    if (search.keyword) { params.keyword = search.keyword; params.keywordField = search.keywordField }
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
     if (search.ageFrom !== '') params.ageFrom = Number(search.ageFrom)
     if (search.ageTo !== '') params.ageTo = Number(search.ageTo)

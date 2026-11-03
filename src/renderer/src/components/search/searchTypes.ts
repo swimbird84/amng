@@ -1,7 +1,10 @@
 export type TagMode = 'and' | 'or'
 
+export type KeywordField = 'all' | 'productNumber' | 'actorName' | 'title' | 'comment'
+
 export interface WorkSearchParams {
   keyword: string
+  keywordField: KeywordField
   tagIds: number[]
   tagMode: TagMode
   actorId: number | ''
@@ -29,6 +32,7 @@ export interface WorkSearchParams {
 
 export interface ActorSearchParams {
   keyword: string
+  keywordField: KeywordField
   tagIds: number[]
   tagMode: TagMode
   ageFrom: number | ''
@@ -75,7 +79,7 @@ export interface ActorSearchParams {
 }
 
 export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
-  keyword: '', tagIds: [], tagMode: 'and', actorId: '', studioId: '',
+  keyword: '', keywordField: 'all', tagIds: [], tagMode: 'and', actorId: '', studioId: '',
   releaseDateFrom: '', releaseDateTo: '', releaseDateNull: false, ratingFrom: '', ratingTo: '',
   titleSearch: '', titleNull: false, commentSearch: '', commentNull: false,
   actorCountFrom: '', actorCountTo: '', actorCountNull: false,
@@ -89,7 +93,7 @@ export const DEFAULT_WORK_SEARCH: WorkSearchParams = {
 }
 
 export const DEFAULT_ACTOR_SEARCH: ActorSearchParams = {
-  keyword: '', tagIds: [], tagMode: 'and',
+  keyword: '', keywordField: 'all', tagIds: [], tagMode: 'and',
   ageFrom: '', ageTo: '', ageNull: false, debutDateFrom: '', debutDateTo: '', debutDateNull: false,
   workCountFrom: '', workCountTo: '', workCountNull: false, avgRatingFrom: '', avgRatingTo: '',
   faceFrom: '', faceTo: '', bustScoreFrom: '', bustScoreTo: '',

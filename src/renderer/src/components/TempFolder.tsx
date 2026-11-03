@@ -49,11 +49,12 @@ interface Props {
   onDragFiles: (files: TempFile[]) => void
   refreshRef?: React.MutableRefObject<(() => void) | null>
   onTreeRefresh?: () => void
+  onViewWork?: (workId: number) => void
 }
 
 const TEMP_FOLDER_KEY = 'files:tempFolder'
 
-export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: Props) {
+export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onViewWork }: Props) {
   const [folderPath, setFolderPath] = useState(() => localStorage.getItem(TEMP_FOLDER_KEY) || '')
   const [files, setFiles] = useState<TempFile[]>([])
   const [loading, setLoading] = useState(false)
@@ -567,30 +568,42 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh }: P
 
       {/* Context menu */}
       {contextMenu && (
-        <div
-          className="fixed bg-gray-800 border border-gray-600 rounded shadow-lg py-1 z-50 w-48"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={e => e.stopPropagation()}
-        >
-          <button
-            onClick={() => {
-              const names = files.filter(f => selected.has(f.fileName)).map(f => f.baseName).join('\n')
-              copyText(names)
-              setContextMenu(null)
-            }}
-            className="w-full text-left text-sm text-gray-300 hover:bg-gray-700 px-4 py-1.5"
-          >복사 ({selected.size}개)</button>
-          {selected.size === 1 && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
+          <div
+            className="fixed bg-gray-800 border border-gray-600 rounded shadow-lg py-1 z-50 w-48"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={e => e.stopPropagation()}
+          >
             <button
-              onClick={() => { setRenaming(contextMenu.fileName); setNewName(contextMenu.fileName.replace(/\.[^.]+$/, '')); setContextMenu(null) }}
+              onClick={() => {
+                const names = files.filter(f => selected.has(f.fileName)).map(f => f.baseName).join('\n')
+                copyText(names)
+                setContextMenu(null)
+              }}
               className="w-full text-left text-sm text-gray-300 hover:bg-gray-700 px-4 py-1.5"
-            >수정</button>
-          )}
-          <button
-            onClick={() => { handleDelete(); setContextMenu(null) }}
-            className="w-full text-left text-sm text-red-400 hover:bg-gray-700 px-4 py-1.5"
-          >삭제 ({selected.size}개)</button>
-        </div>
+            >복사 ({selected.size}개)</button>
+            {selected.size === 1 && (
+              <button
+                onClick={() => { setRenaming(contextMenu.fileName); setNewName(contextMenu.fileName.replace(/\.[^.]+$/, '')); setContextMenu(null) }}
+                className="w-full text-left text-sm text-gray-300 hover:bg-gray-700 px-4 py-1.5"
+              >수정</button>
+            )}
+            {selected.size === 1 && (() => {
+              const file = files.find(f => f.fileName === contextMenu.fileName)
+              return file?.registeredWorkId ? (
+                <button
+                  onClick={() => { onViewWork?.(file.registeredWorkId!); setContextMenu(null) }}
+                  className="w-full text-left text-sm text-green-400 hover:bg-gray-700 px-4 py-1.5"
+                >상세보기</button>
+              ) : null
+            })()}
+            <button
+              onClick={() => { handleDelete(); setContextMenu(null) }}
+              className="w-full text-left text-sm text-red-400 hover:bg-gray-700 px-4 py-1.5"
+            >삭제 ({selected.size}개)</button>
+          </div>
+        </>
       )}
 
       {/* Rename modal */}

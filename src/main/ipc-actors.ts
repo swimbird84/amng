@@ -8,6 +8,7 @@ export function registerActorsHandlers(): void {
 
   ipcMain.handle('actors:list', (_e, params?: {
     keyword?: string
+    keywordField?: 'all' | 'productNumber' | 'actorName' | 'title' | 'comment'
     tagIds?: number[]
     tagMode?: 'and' | 'or'
     ageFrom?: number
@@ -110,8 +111,23 @@ export function registerActorsHandlers(): void {
     }
 
     if (params?.keyword) {
-      conditions.push('(a.name LIKE ? OR a.aliases LIKE ? OR a.real_name LIKE ? OR a.comment LIKE ? OR EXISTS (SELECT 1 FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id WHERE wa2.actor_id = a.id AND (w2.product_number LIKE ? OR w2.title LIKE ?)))')
-      bindings.push(`%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`, `%${params.keyword}%`)
+      const kw = `%${params.keyword}%`
+      const field = params.keywordField || 'all'
+      if (field === 'all') {
+        conditions.push('(a.name LIKE ? OR a.aliases LIKE ? OR a.real_name LIKE ? OR a.comment LIKE ? OR EXISTS (SELECT 1 FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id WHERE wa2.actor_id = a.id AND (w2.product_number LIKE ? OR w2.title LIKE ?)))')
+        bindings.push(kw, kw, kw, kw, kw, kw)
+      } else if (field === 'actorName') {
+        conditions.push('(a.name LIKE ? OR a.aliases LIKE ? OR a.real_name LIKE ?)')
+        bindings.push(kw, kw, kw)
+      } else if (field === 'productNumber') {
+        conditions.push('EXISTS (SELECT 1 FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id WHERE wa2.actor_id = a.id AND w2.product_number LIKE ?)')
+        bindings.push(kw)
+      } else if (field === 'title') {
+        conditions.push('EXISTS (SELECT 1 FROM work_actors wa2 JOIN works w2 ON w2.id = wa2.work_id WHERE wa2.actor_id = a.id AND w2.title LIKE ?)')
+        bindings.push(kw)
+      } else if (field === 'comment') {
+        conditions.push('a.comment LIKE ?'); bindings.push(kw)
+      }
     }
     if (params?.ageFrom !== undefined) {
       conditions.push("(julianday('now') - julianday(a.birthday)) / 365.25 >= ?")

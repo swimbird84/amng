@@ -392,6 +392,19 @@ export default function SearchBar(props: Props) {
   return (
     <div ref={wrapperRef} className="flex items-center gap-1 flex-1 min-w-0">
       {/* keyword */}
+      <select
+        value={params.keywordField}
+        onChange={e => onChange({ ...params, keywordField: e.target.value } as never)}
+        className="bg-gray-700 text-gray-300 text-xs px-1.5 py-1.5 rounded focus:outline-none cursor-pointer shrink-0"
+      >
+        <option value="all">전체</option>
+        {type === 'works'
+          ? <><option value="productNumber">품번</option><option value="actorName">배우명</option></>
+          : <><option value="actorName">배우명</option><option value="productNumber">품번</option></>
+        }
+        <option value="title">타이틀</option>
+        <option value="comment">코멘트</option>
+      </select>
       <input
         type="text"
         value={params.keyword}
@@ -411,8 +424,8 @@ export default function SearchBar(props: Props) {
           <button
             type="button"
             onClick={() => onChange({ ...wParams, fileStatus: next } as never)}
-            className={`${colorMap[wParams.fileStatus]} text-white text-sm px-2.5 py-1.5 rounded shrink-0 hover:brightness-110 transition-colors flex items-center gap-1`}
-          ><svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>{labelMap[wParams.fileStatus]}</button>
+            className={`${colorMap[wParams.fileStatus]} text-white text-sm px-2.5 py-1.5 rounded shrink-0 hover:brightness-110 transition-colors`}
+          >{labelMap[wParams.fileStatus]}</button>
         )
       })()}
 

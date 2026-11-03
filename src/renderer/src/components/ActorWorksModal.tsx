@@ -58,7 +58,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
 
   const fetchWorks = useCallback(async (offset: number, replace: boolean, limit = BATCH_SIZE) => {
     const params: Record<string, unknown> = { actorId }
-    if (search.keyword) params.keyword = search.keyword
+    if (search.keyword) { params.keyword = search.keyword; params.keywordField = search.keywordField }
     if (search.tagIds.length) { params.tagIds = search.tagIds; params.tagMode = search.tagMode }
     if (search.studioId) params.studioId = Number(search.studioId)
     if (search.releaseDateFrom) params.releaseDateFrom = search.releaseDateFrom
