@@ -5,7 +5,19 @@ import { initDatabase } from './db'
 import { registerIpcHandlers } from './ipc'
 import { migrateCoverPaths } from './ipc-system'
 
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+}
+
 let mainWindow: BrowserWindow | null = null
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+})
 
 function getWindowStatePath(): string {
   return path.join(app.getPath('userData'), 'window-state.json')

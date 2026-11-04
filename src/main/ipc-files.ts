@@ -527,49 +527,42 @@ export function registerFilesHandlers(): void {
         const targetDir = path.dirname(existingFile.file_path)
 
         // Delete existing video in target folder
-        if (isVideo || srcThumbPath) {
-          if (isVideo) {
-            try { if (fs.existsSync(existingFile.file_path)) await shell.trashItem(existingFile.file_path) } catch { /* skip */ }
+        // Helper: find existing image in target folder
+        const findExistingImage = async (dir: string): Promise<string | null> => {
+          const entries = await fs.promises.readdir(dir).catch(() => [] as string[])
+          for (const entry of entries as string[]) {
+            if (IMAGE_EXTS.has(path.extname(entry).toLowerCase())) return path.join(dir, entry)
           }
-          // Delete existing images in target folder
-          if (srcThumbPath || isImage) {
-            const targetEntries = await fs.promises.readdir(targetDir).catch(() => [] as string[])
-            for (const entry of targetEntries as string[]) {
-              const ext = path.extname(entry).toLowerCase()
-              if (IMAGE_EXTS.has(ext)) {
-                try { await shell.trashItem(path.join(targetDir, entry)) } catch { /* skip */ }
-              }
-            }
-          }
-        }
-        if (isImage && !isVideo) {
-          // Image only — delete existing images in target
-          const targetEntries = await fs.promises.readdir(targetDir).catch(() => [] as string[])
-          for (const entry of targetEntries as string[]) {
-            const ext = path.extname(entry).toLowerCase()
-            if (IMAGE_EXTS.has(ext)) {
-              try { await shell.trashItem(path.join(targetDir, entry)) } catch { /* skip */ }
-            }
-          }
+          return null
         }
 
-        // Move new files
+        // Replace video
         if (isVideo) {
+          try { if (fs.existsSync(existingFile.file_path)) await shell.trashItem(existingFile.file_path) } catch { /* skip */ }
           const destPath = path.join(targetDir, fileName)
           await fs.promises.rename(srcPath, destPath)
           db().prepare('UPDATE work_files SET file_path = ? WHERE id = ?').run(destPath, existingFile.id)
           db().prepare('UPDATE works SET file_path = ? WHERE id = ?').run(destPath, workId)
         }
-        if (srcThumbPath) {
-          const thumbName = path.basename(srcThumbPath)
-          const thumbDest = path.join(targetDir, thumbName)
-          await fs.promises.rename(srcThumbPath, thumbDest)
-          db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(thumbDest, workId)
-        }
-        if (isImage && !isVideo) {
-          const destPath = path.join(targetDir, fileName)
-          await fs.promises.rename(srcPath, destPath)
-          db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(destPath, workId)
+
+        // Replace image (keep larger)
+        const newImgPath = srcThumbPath || (isImage && !isVideo ? srcPath : null)
+        if (newImgPath) {
+          const existingImg = await findExistingImage(targetDir)
+          const newSize = (await fs.promises.stat(newImgPath).catch(() => ({ size: 0 }))).size
+          const existingSize = existingImg ? (await fs.promises.stat(existingImg).catch(() => ({ size: 0 }))).size : 0
+
+          if (newSize >= existingSize) {
+            // New is larger — replace
+            if (existingImg) { try { await shell.trashItem(existingImg) } catch { /* skip */ } }
+            const imgName = path.basename(newImgPath)
+            const imgDest = path.join(targetDir, imgName)
+            await fs.promises.rename(newImgPath, imgDest)
+            db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(imgDest, workId)
+          } else {
+            // Existing is larger — discard new, keep existing
+            try { await shell.trashItem(newImgPath) } catch { /* skip */ }
+          }
         }
 
         return { ok: true, mode: 'replaced' }
@@ -594,29 +587,39 @@ export function registerFilesHandlers(): void {
           // Move video
           const destPath = path.join(workFolderPath, fileName)
           await fs.promises.rename(srcPath, destPath)
+          // Delete existing url record and add local
+          db().prepare("DELETE FROM work_files WHERE work_id = ? AND type = 'url'").run(workId)
           db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, ?)').run(workId, destPath, 'local', 0)
           db().prepare('UPDATE works SET file_path = ? WHERE id = ?').run(destPath, workId)
 
           if (srcThumbPath) {
-            // Move thumb + delete cover images old
-            const thumbName = path.basename(srcThumbPath)
-            const thumbDest = path.join(workFolderPath, thumbName)
-            await fs.promises.rename(srcThumbPath, thumbDest)
-            if (work.cover_path && fs.existsSync(work.cover_path)) {
-              try { await shell.trashItem(work.cover_path) } catch { /* skip */ }
+            // Compare sizes — keep larger
+            const newSize = (await fs.promises.stat(srcThumbPath).catch(() => ({ size: 0 }))).size
+            const existingSize = work.cover_path && fs.existsSync(work.cover_path) ? (await fs.promises.stat(work.cover_path).catch(() => ({ size: 0 }))).size : 0
+            if (newSize >= existingSize) {
+              const thumbName = path.basename(srcThumbPath)
+              const thumbDest = path.join(workFolderPath, thumbName)
+              await fs.promises.rename(srcThumbPath, thumbDest)
+              if (work.cover_path && fs.existsSync(work.cover_path)) { try { await shell.trashItem(work.cover_path) } catch { /* skip */ } }
+              db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(thumbDest, workId)
+            } else {
+              try { await shell.trashItem(srcThumbPath) } catch { /* skip */ }
             }
-            db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(thumbDest, workId)
           }
         } else if (isImage) {
-          // Image only — replace cover images
-          if (work.cover_path && fs.existsSync(work.cover_path)) {
-            try { await shell.trashItem(work.cover_path) } catch { /* skip */ }
+          // Image only — compare sizes, keep larger
+          const newSize = (await fs.promises.stat(srcPath).catch(() => ({ size: 0 }))).size
+          const existingSize = work.cover_path && fs.existsSync(work.cover_path) ? (await fs.promises.stat(work.cover_path).catch(() => ({ size: 0 }))).size : 0
+          if (newSize >= existingSize) {
+            if (work.cover_path && fs.existsSync(work.cover_path)) { try { await shell.trashItem(work.cover_path) } catch { /* skip */ } }
+            const coverExt = path.extname(fileName)
+            const newCoverName = `${releaseDate} ${productNumber}${coverExt}`
+            const destPath = path.join(coverImagesDir, newCoverName)
+            await fs.promises.rename(srcPath, destPath)
+            db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(destPath, workId)
+          } else {
+            try { await shell.trashItem(srcPath) } catch { /* skip */ }
           }
-          const coverExt = path.extname(fileName)
-          const newCoverName = `${releaseDate} ${productNumber}${coverExt}`
-          const destPath = path.join(coverImagesDir, newCoverName)
-          await fs.promises.rename(srcPath, destPath)
-          db().prepare('UPDATE works SET cover_path = ? WHERE id = ?').run(destPath, workId)
         }
 
         return { ok: true, mode: 'added' }

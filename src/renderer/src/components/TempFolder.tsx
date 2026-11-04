@@ -449,7 +449,14 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
                   draggable
                   onDragStart={e => handleDragStart(e, file)}
                 >
-                  <div className="w-full aspect-[4/3] rounded overflow-hidden bg-gray-800 flex items-center justify-center mb-1 relative group/thumb">
+                  <div
+                    className="w-full aspect-[4/3] rounded overflow-hidden bg-gray-800 flex items-center justify-center mb-1 relative group/thumb"
+                    onMouseEnter={e => {
+                      if (!file.registeredWorkId) return
+                      workTooltipTimer.current = setTimeout(() => setWorkTooltip({ type: 'work', id: file.registeredWorkId!, x: e.clientX, y: e.clientY, showCover: true }), 400)
+                    }}
+                    onMouseLeave={() => { if (workTooltipTimer.current) { clearTimeout(workTooltipTimer.current); workTooltipTimer.current = null }; setWorkTooltip(null) }}
+                  >
                     {thumbCache.has(file.fileName) ? (
                       <img src={thumbCache.get(file.fileName)} className="w-full h-full object-cover" />
                     ) : (
@@ -471,10 +478,17 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
                         className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                       <QuickSearchButton productNumber={getProductNumber(file.baseName, files.map(f => f.baseName))} className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer" />
-                      {!file.thumbPath ? <CoverDownloadButton
-                        onSelect={async (source) => { showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, source); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', source, file.baseName, res.error); showToast('다운로드 실패') } }}
-                        className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
-                      />
+                      {!file.thumbPath ? <>
+                        <CoverDownloadButton
+                          onSelect={async (source) => { showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, source); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', source, file.baseName, res.error); showToast('다운로드 실패') } }}
+                          className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
+                        />
+                        {file.registeredWorkId && <button
+                          onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 이동 중...`); const res = await tempApi.moveToExisting(folderPath, file.fileName, file.registeredWorkId!); if (res.ok) { showToast(`${file.baseName} 이동 완료`); loadFiles(); onTreeRefresh?.() } else { showToast(res.reason || '이동 실패') } }}
+                          onDoubleClick={e => e.stopPropagation()}
+                          className="bg-black/40 hover:bg-green-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
+                        ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>}
+                      </>
                       : (file.videoPath && !file.registeredWorkId) ? <button
                         onClick={async e => { e.stopPropagation(); showToast(`${file.baseName} 배치 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, undefined, true); if (res.ok && res.autoPlaced) { showToast(`"${file.baseName}" → ${res.actorName} 폴더로 이동`); loadFiles(); onTreeRefresh?.() } else { if (res.debug) console.log('[autoPlace]', file.baseName, res.debug); showToast('배치 대상이 없습니다') } }}
                         onDoubleClick={e => e.stopPropagation()}
