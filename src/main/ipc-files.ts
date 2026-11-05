@@ -1360,6 +1360,57 @@ export function registerFilesHandlers(): void {
     return sources
   })
 
+  ipcMain.handle('temp:fetchReleaseDate', async (_e, folderPath: string, fileName: string) => {
+    try {
+      const ext = path.extname(fileName)
+      const baseName = path.basename(fileName, ext)
+      // Extract product number (strip _N suffix if consecutive)
+      let productNumber = baseName
+      const suffixMatch = baseName.match(/^(.+?)_(\d+)$/)
+      if (suffixMatch) {
+        try {
+          const entries = await fs.promises.readdir(folderPath)
+          const prefix = suffixMatch[1]
+          const count = entries.filter(e => {
+            const base = path.basename(e, path.extname(e))
+            const m = base.match(/^(.+?)_\d+$/)
+            return m && m[1] === prefix
+          }).length
+          if (count >= 2) productNumber = prefix
+        } catch { /* use raw */ }
+      }
+
+      // Check cache first
+      const cached = scrapeCache.get(productNumber.toUpperCase())
+      let releaseDate: string | null = null
+      if (cached?.releaseDate) {
+        releaseDate = cached.releaseDate
+      } else {
+        const baseUrl = 'https://www.javbus.com'
+        const pageUrl = baseUrl + '/' + productNumber
+        const scraped = await scrapePage(pageUrl, baseUrl)
+        releaseDate = scraped.releaseDate
+        if (scraped.releaseDate || scraped.actorNames.length > 0) {
+          scrapeCache.set(productNumber.toUpperCase(), { releaseDate: scraped.releaseDate, actorNames: scraped.actorNames })
+        }
+      }
+
+      if (!releaseDate) return { ok: false, error: '발매일을 찾을 수 없습니다' }
+
+      // Rename image file to "YYYY-MM-DD productNumber.ext"
+      const newName = `${releaseDate} ${productNumber}${ext}`
+      const oldPath = path.join(folderPath, fileName)
+      const newPath = path.join(folderPath, newName)
+      if (oldPath !== newPath) {
+        await fs.promises.rename(oldPath, newPath)
+      }
+
+      return { ok: true, releaseDate, newFileName: newName }
+    } catch (err: unknown) {
+      return { ok: false, error: (err instanceof Error ? err.message : String(err)) }
+    }
+  })
+
   ipcMain.handle('temp:fetchCover', async (_e, rawProductNumber: string, saveFolder: string, source?: 'sukebei' | 'javbus', autoPlace?: boolean) => {
     try {
       // Only strip _N suffix if consecutive numbered files exist in folder

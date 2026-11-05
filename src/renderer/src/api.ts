@@ -155,6 +155,7 @@ export const tempApi = {
   moveToTreeAsLink: (srcFolder: string, imageFileName: string, targetActorFolder: string, releaseDate: string, url: string) => api.invoke('temp:moveToTreeAsLink', srcFolder, imageFileName, targetActorFolder, releaseDate, url) as Promise<{ ok: boolean; workId?: number }>,
   moveToTreeAsLinkNewActor: (srcFolder: string, imageFileName: string, parentFolder: string, actorName: string, actorBirthday: string, releaseDate: string, url: string) => api.invoke('temp:moveToTreeAsLinkNewActor', srcFolder, imageFileName, parentFolder, actorName, actorBirthday, releaseDate, url) as Promise<{ ok: boolean; workId?: number; actorId?: number }>,
   moveToExisting: (srcFolder: string, fileName: string, workId: number) => api.invoke('temp:moveToExisting', srcFolder, fileName, workId) as Promise<{ ok: boolean; reason?: string; mode?: string }>,
+  fetchReleaseDate: (folderPath: string, fileName: string) => api.invoke('temp:fetchReleaseDate', folderPath, fileName) as Promise<{ ok: boolean; error?: string; releaseDate?: string; newFileName?: string }>,
 }
 
 export const coverApi = {
@@ -163,7 +164,7 @@ export const coverApi = {
 
 export const workFilesApi = {
   listByWorkIds: (workIds: number[]) => api.invoke('work-files:listByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string }[]>,
-  firstByWorkIds: (workIds: number[]) => api.invoke('work-files:firstByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string }[]>,
+  firstByWorkIds: (workIds: number[]) => api.invoke('work-files:firstByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string; types: string[] }[]>,
   add: (workId: number, filePath: string) => api.invoke('work-files:add', workId, filePath),
   delete: (fileId: number) => api.invoke('work-files:delete', fileId),
   replaceUrl: (oldStr: string, newStr: string) => api.invoke('work-files:replaceUrl', oldStr, newStr) as Promise<{ count: number }>,

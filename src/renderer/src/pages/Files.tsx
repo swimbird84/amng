@@ -59,8 +59,13 @@ function formatDateInput(value: string): string {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`
 }
 
+function extractDateFromBaseName(baseName: string): string | null {
+  const m = baseName.match(/^(\d{4}-\d{2}-\d{2})\s/)
+  return m ? m[1] : null
+}
+
 function DropInlineRow({ file, depth, onConfirm, onCancel }: { file: TempFileRef; depth: number; onConfirm: (fileName: string, date: string) => void; onCancel: (fileName: string) => void }) {
-  const [dateValue, setDateValue] = useState(() => localStorage.getItem('files:lastReleaseDate') || '')
+  const [dateValue, setDateValue] = useState(() => extractDateFromBaseName(file.baseName) || localStorage.getItem('files:lastReleaseDate') || '')
   const pickerRef = useRef<HTMLInputElement>(null)
 
   return (
@@ -96,7 +101,7 @@ function DropInlineRow({ file, depth, onConfirm, onCancel }: { file: TempFileRef
 }
 
 function LinkDropInlineRow({ file, depth, onConfirm, onCancel }: { file: TempFileRef; depth: number; onConfirm: (fileName: string, date: string, url: string) => void; onCancel: (fileName: string) => void }) {
-  const [dateValue, setDateValue] = useState(() => localStorage.getItem('files:lastReleaseDate') || '')
+  const [dateValue, setDateValue] = useState(() => extractDateFromBaseName(file.baseName) || localStorage.getItem('files:lastReleaseDate') || '')
   const [urlValue, setUrlValue] = useState('')
   const pickerRef = useRef<HTMLInputElement>(null)
 
@@ -145,7 +150,7 @@ function DropInline({ files, depth, onConfirmOne, onCancelOne, onLinkConfirmOne 
 function NewActorDropInlineRow({ file, depth, onConfirm, onCancel }: { file: TempFileRef; depth: number; onConfirm: (fileName: string, actorName: string, actorBirthday: string, releaseDate: string) => void; onCancel: (fileName: string) => void }) {
   const [actorName, setActorName] = useState('')
   const [birthday, setBirthday] = useState('')
-  const [releaseDate, setReleaseDate] = useState(() => localStorage.getItem('files:lastReleaseDate') || '')
+  const [releaseDate, setReleaseDate] = useState(() => extractDateFromBaseName(file.baseName) || localStorage.getItem('files:lastReleaseDate') || '')
   const bdPickerRef = useRef<HTMLInputElement>(null)
   const rdPickerRef = useRef<HTMLInputElement>(null)
 
@@ -196,7 +201,7 @@ function NewActorDropInlineRow({ file, depth, onConfirm, onCancel }: { file: Tem
 function LinkNewActorDropInlineRow({ file, depth, onConfirm, onCancel }: { file: TempFileRef; depth: number; onConfirm: (fileName: string, actorName: string, actorBirthday: string, releaseDate: string, url: string) => void; onCancel: (fileName: string) => void }) {
   const [actorName, setActorName] = useState('')
   const [birthday, setBirthday] = useState('')
-  const [releaseDate, setReleaseDate] = useState(() => localStorage.getItem('files:lastReleaseDate') || '')
+  const [releaseDate, setReleaseDate] = useState(() => extractDateFromBaseName(file.baseName) || localStorage.getItem('files:lastReleaseDate') || '')
   const [urlValue, setUrlValue] = useState('')
   const bdPickerRef = useRef<HTMLInputElement>(null)
   const rdPickerRef = useRef<HTMLInputElement>(null)

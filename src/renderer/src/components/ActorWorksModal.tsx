@@ -42,7 +42,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
   const worksCountRef = useRef(0)
 
   // file play status
-  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string }>>({})
+  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string; types: string[] }>>({})
   const [playable, setPlayable] = useState<Record<number, boolean>>({})
   const checkedRef = useRef(new Set<number>())
 
@@ -128,10 +128,10 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
     if (newIds.length === 0) return
     newIds.forEach(id => checkedRef.current.add(id))
     workFilesApi.firstByWorkIds(newIds).then(async (files) => {
-      const newPF: Record<number, { file_path: string; type: string }> = {}
+      const newPF: Record<number, { file_path: string; type: string; types: string[] }> = {}
       const newP: Record<number, boolean> = {}
       for (const f of files) {
-        newPF[f.work_id] = { file_path: f.file_path, type: f.type }
+        newPF[f.work_id] = { file_path: f.file_path, type: f.type, types: f.types }
         if (f.type === 'url') newP[f.work_id] = true
       }
       for (const id of newIds) { if (!(id in newPF)) newP[id] = false }
@@ -234,6 +234,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
                 selected={selected?.id === w.id}
                 filePlayable={playable[w.id]}
                 fileType={playFiles[w.id]?.type}
+                fileTypes={playFiles[w.id]?.types}
                 masterPoints={masterPointsMap.get(w.id)}
                 onClick={() => handleSelect(w.id)}
                 onTooltipMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}

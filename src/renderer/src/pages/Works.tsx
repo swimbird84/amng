@@ -67,7 +67,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const worksCountRef = useRef(0)
 
   // play button file status
-  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string }>>({})
+  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string; types: string[] }>>({})
   const [playable, setPlayable] = useState<Record<number, boolean>>({})
   const playCheckedRef = useRef(new Set<number>())
 
@@ -164,10 +164,10 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     if (newIds.length === 0) return
     newIds.forEach(id => playCheckedRef.current.add(id))
     workFilesApi.firstByWorkIds(newIds).then(async (files) => {
-      const newPF: Record<number, { file_path: string; type: string }> = {}
+      const newPF: Record<number, { file_path: string; type: string; types: string[] }> = {}
       const newP: Record<number, boolean> = {}
       for (const f of files) {
-        newPF[f.work_id] = { file_path: f.file_path, type: f.type }
+        newPF[f.work_id] = { file_path: f.file_path, type: f.type, types: f.types }
         if (f.type === 'url') newP[f.work_id] = true
       }
       for (const id of newIds) { if (!(id in newPF)) newP[id] = false }
@@ -555,6 +555,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 deleteSelected={selectedDeleteIds.has(w.id)}
                 filePlayable={playable[w.id]}
                 fileType={playFiles[w.id]?.type}
+                fileTypes={playFiles[w.id]?.types}
                 masterPoints={masterPointsMap.get(w.id)}
                 tierInfo={tierMap.get(w.id)}
                 onMouseDown={(e) => {

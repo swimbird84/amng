@@ -15,6 +15,7 @@ interface WorkCardProps {
   deleteSelected?: boolean
   filePlayable?: boolean
   fileType?: string
+  fileTypes?: string[]
   masterPoints?: { rank: number; total_points: number; master_run_count: number }
   tierInfo?: { tier_name: string; tier_color: string; tier_rank: number }
   onClick?: () => void
@@ -30,7 +31,7 @@ interface WorkCardProps {
 
 export default function WorkCard({
   work: w, refreshKey, selected, deleteMode, deleteSelected,
-  filePlayable, fileType, masterPoints: mp, tierInfo,
+  filePlayable, fileType, fileTypes, masterPoints: mp, tierInfo,
   onClick, onMouseDown, onMouseEnter,
   onTooltipMove, onTooltipLeave, onToggleFavorite, onPlay, onTierClick, onCommentSave,
 }: WorkCardProps) {
@@ -87,16 +88,34 @@ export default function WorkCard({
         </button>
         {/* Play button */}
         {filePlayable !== undefined && (
-          <button
-            onClick={(e) => { e.stopPropagation(); if (filePlayable && onPlay) onPlay(e) }}
-            className={`absolute inset-0 m-auto w-10 h-10 rounded-full flex items-center justify-center transition-opacity ${
-              filePlayable ? (fileType === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') + ' cursor-pointer opacity-70 hover:opacity-100' : 'bg-gray-600 cursor-default opacity-50'
-            }`}
-          >
-            {fileType === 'url'
-              ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-              : <span className="text-white text-lg ml-0.5">{'\u25B6'}</span>}
-          </button>
+          fileTypes && fileTypes.length > 1 ? (
+            <div className="absolute inset-0 m-auto flex items-center justify-center gap-1.5" style={{ width: 'fit-content', height: 'fit-content' }}>
+              {fileTypes.map(t => (
+                <button
+                  key={t}
+                  onClick={(e) => { e.stopPropagation(); if (filePlayable && onPlay) onPlay(e) }}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-opacity ${
+                    filePlayable ? (t === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') + ' cursor-pointer opacity-70 hover:opacity-100' : 'bg-gray-600 cursor-default opacity-50'
+                  }`}
+                >
+                  {t === 'url'
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                    : <span className="text-white text-base ml-0.5">{'\u25B6'}</span>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); if (filePlayable && onPlay) onPlay(e) }}
+              className={`absolute inset-0 m-auto w-10 h-10 rounded-full flex items-center justify-center transition-opacity ${
+                filePlayable ? (fileType === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') + ' cursor-pointer opacity-70 hover:opacity-100' : 'bg-gray-600 cursor-default opacity-50'
+              }`}
+            >
+              {fileType === 'url'
+                ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                : <span className="text-white text-lg ml-0.5">{'\u25B6'}</span>}
+            </button>
+          )
         )}
       </div>
       <div className="p-2 bg-gray-800 flex-1">
