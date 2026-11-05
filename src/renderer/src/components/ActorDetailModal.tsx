@@ -164,9 +164,10 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
             </div>
 
             {/* 신체 정보 */}
-            {(actor.height || actor.bust || actor.waist || actor.hip || actor.cup) && (
-              <div className="mb-2">
-                <div className="flex items-center justify-between">
+            <div className="mb-2">
+              <p className="text-xs text-gray-500 mb-1">피지컬</p>
+              {(actor.height || actor.bust || actor.waist || actor.hip || actor.cup) ? (
+                <div className="flex items-center justify-between bg-gray-700/50 rounded px-2 py-1.5">
                   <p className="text-sm text-gray-300">
                     {(() => {
                       const ar = new Set((actor.phys_arbitrary ?? '').split('|').filter(Boolean))
@@ -186,21 +187,21 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                     <p className="text-sm text-blue-400 shrink-0 ml-2">{(physScore ?? actor.ratio_score!).toFixed(2)}점</p>
                   )}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="bg-gray-700/50 rounded px-2 py-1.5 min-h-[30px]" />
+              )}
+            </div>
 
             {/* 레이더 차트 */}
-            <div className="flex justify-center">
+            <div className="flex justify-center bg-gray-700/50 rounded px-2 py-1.5">
               <RadarChart scores={actor.scores ?? defaultScores} size={264} />
             </div>
 
             {/* 코멘트 */}
-            {actor.comment && (
-              <div className="mt-2">
-                <p className="text-xs text-gray-500 mb-1">코멘트</p>
-                <p className="text-sm text-gray-300 whitespace-pre-wrap text-left">{actor.comment}</p>
-              </div>
-            )}
+            <div className="mt-2">
+              <p className="text-xs text-gray-500 mb-1">코멘트</p>
+              <p className="text-sm text-gray-300 whitespace-pre-wrap text-left bg-gray-700/50 rounded px-2 py-1.5 min-h-[30px]">{actor.comment || ''}</p>
+            </div>
 
           </div>
 
@@ -208,16 +209,18 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
           <div className="w-[500px] border-l border-gray-700 flex flex-col">
             <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-6 space-y-3">
 
-              {actor.real_name && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">본명</p>
-                  <div className="flex flex-wrap gap-1">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">본명</p>
+                {actor.real_name ? (
+                  <div className="flex flex-wrap gap-1 bg-gray-700/50 rounded px-2 py-1.5">
                     {actor.real_name.split(',').map((a) => a.trim()).filter(Boolean).map((rn) => (
                       <span key={rn} className="text-xs px-2 py-0.5 rounded bg-blue-800 text-blue-200">{rn}</span>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="bg-gray-700/50 rounded px-2 py-1.5 min-h-[30px]" />
+                )}
+              </div>
 
               {actor.aliases && (
                 <div>
@@ -230,7 +233,13 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                 </div>
               )}
 
-              {actor.tags && actor.tags.length > 0 && (() => {
+              {(() => {
+                if (!actor.tags || actor.tags.length === 0) return (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">태그</p>
+                    <div className="bg-gray-700/50 rounded px-2 py-1.5 min-h-[30px]" />
+                  </div>
+                )
                 type Group = { catId: number | null; catName: string | null; sortOrder: number; tags: typeof actor.tags }
                 const catMap = new Map<number | null, Group>()
                 const groups: Group[] = []
@@ -255,7 +264,7 @@ export default function ActorDetailModal({ actorId, onClose, onViewWork, zIndex 
                 return (
                   <div>
                     <p className="text-xs text-gray-500 mb-1">태그</p>
-                    <div className="grid grid-cols-[auto_1fr] gap-y-1 gap-x-2 items-start">
+                    <div className="grid grid-cols-[auto_1fr] gap-y-1 gap-x-2 items-start bg-gray-700/50 rounded px-2 py-1.5">
                       {groups.map((g) => (
                         <React.Fragment key={g.catId ?? 'none'}>
                           <span className="text-xs text-gray-600 leading-5 text-right">{g.catName ?? '미분류'}</span>

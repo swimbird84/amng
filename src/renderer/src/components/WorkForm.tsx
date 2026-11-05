@@ -521,9 +521,9 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
               </button>
             </div>
             {coverPath && (
-              <div className="flex items-center gap-1.5 mt-1">
-                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+              <div className="flex items-center gap-2 mt-1 bg-gray-700/50 rounded px-2 py-1.5">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0 text-orange-400" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
                 </svg>
                 <button
                   type="button"
@@ -532,6 +532,14 @@ export default function WorkForm({ work, onSave, onCancel }: Props) {
                   className="text-xs text-gray-300 hover:underline truncate text-left cursor-pointer flex-1"
                 >
                   {coverPath.replace(/\\/g, '/').split('/').slice(3).join('/')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCoverPath('')}
+                  className="text-gray-400 hover:text-red-400 flex-shrink-0"
+                  title="커버 경로 삭제"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
             )}
