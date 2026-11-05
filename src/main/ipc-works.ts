@@ -614,16 +614,20 @@ export function registerWorksHandlers(): void {
     if (workIds.length === 0) return []
     const ph = workIds.map(() => '?').join(',')
     const all = db().prepare(`SELECT work_id, file_path, type FROM work_files WHERE work_id IN (${ph}) ORDER BY work_id, sort_order`).all(...workIds) as { work_id: number; file_path: string; type: string }[]
-    // Collect distinct types per work (preserving sort_order)
+    // Collect distinct types and first file per type per work (preserving sort_order)
     const typesMap = new Map<number, string[]>()
+    const firstByType = new Map<number, Record<string, string>>()
     for (const f of all) {
       if (!typesMap.has(f.work_id)) typesMap.set(f.work_id, [])
       const arr = typesMap.get(f.work_id)!
       if (!arr.includes(f.type)) arr.push(f.type)
+      if (!firstByType.has(f.work_id)) firstByType.set(f.work_id, {})
+      const byType = firstByType.get(f.work_id)!
+      if (!byType[f.type]) byType[f.type] = f.file_path
     }
     const seen = new Set<number>()
     return all.filter(f => { if (seen.has(f.work_id)) return false; seen.add(f.work_id); return true })
-      .map(f => ({ ...f, types: typesMap.get(f.work_id) || [f.type] }))
+      .map(f => ({ ...f, types: typesMap.get(f.work_id) || [f.type], fileByType: firstByType.get(f.work_id) || { [f.type]: f.file_path } }))
   })
 
   ipcMain.handle('work-files:add', (_e, workId: number, filePath: string, type: 'local' | 'url' = 'local') => {

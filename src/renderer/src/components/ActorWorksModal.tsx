@@ -42,7 +42,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
   const worksCountRef = useRef(0)
 
   // file play status
-  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string; types: string[] }>>({})
+  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string; types: string[]; fileByType: Record<string, string> }>>({})
   const [playable, setPlayable] = useState<Record<number, boolean>>({})
   const checkedRef = useRef(new Set<number>())
 
@@ -128,10 +128,10 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
     if (newIds.length === 0) return
     newIds.forEach(id => checkedRef.current.add(id))
     workFilesApi.firstByWorkIds(newIds).then(async (files) => {
-      const newPF: Record<number, { file_path: string; type: string; types: string[] }> = {}
+      const newPF: Record<number, { file_path: string; type: string; types: string[]; fileByType: Record<string, string> }> = {}
       const newP: Record<number, boolean> = {}
       for (const f of files) {
-        newPF[f.work_id] = { file_path: f.file_path, type: f.type, types: f.types }
+        newPF[f.work_id] = { file_path: f.file_path, type: f.type, types: f.types, fileByType: f.fileByType }
         if (f.type === 'url') newP[f.work_id] = true
       }
       for (const id of newIds) { if (!(id in newPF)) newP[id] = false }
@@ -171,11 +171,13 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
     setWorks(prev => prev.map(w => w.id === id ? { ...w, is_favorite: next } : w))
   }
 
-  const handlePlay = (workId: number) => {
+  const handlePlay = (workId: number, playType?: string) => {
     const f = playFiles[workId]
     if (!f) return
-    if (f.type === 'url') shellApi.openExternal(f.file_path)
-    else shellApi.openPath(f.file_path)
+    const targetType = playType || f.type
+    const targetPath = f.fileByType?.[targetType] || f.file_path
+    if (targetType === 'url') shellApi.openExternal(targetPath)
+    else shellApi.openPath(targetPath)
   }
 
   const refreshWorks = useCallback(() => {
@@ -240,7 +242,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
                 onTooltipMove={(e) => setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
                 onTooltipLeave={() => setTooltip(null)}
                 onToggleFavorite={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
-                onPlay={() => handlePlay(w.id)}
+                onPlay={(_, playType) => handlePlay(w.id, playType)}
               />
             ))}
           </div>

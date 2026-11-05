@@ -24,7 +24,7 @@ interface WorkCardProps {
   onTooltipMove?: (e: React.MouseEvent) => void
   onTooltipLeave?: () => void
   onToggleFavorite?: (e: React.MouseEvent) => void
-  onPlay?: (e: React.MouseEvent) => void
+  onPlay?: (e: React.MouseEvent, playType?: string) => void
   onTierClick?: (e: React.MouseEvent) => void
   onCommentSave?: () => void
 }
@@ -93,7 +93,7 @@ export default function WorkCard({
               {fileTypes.map(t => (
                 <button
                   key={t}
-                  onClick={(e) => { e.stopPropagation(); if (filePlayable && onPlay) onPlay(e) }}
+                  onClick={(e) => { e.stopPropagation(); if (filePlayable && onPlay) onPlay(e, t) }}
                   className={`w-9 h-9 rounded-full flex items-center justify-center transition-opacity ${
                     filePlayable ? (t === 'url' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-red-600 hover:bg-red-500') + ' cursor-pointer opacity-70 hover:opacity-100' : 'bg-gray-600 cursor-default opacity-50'
                   }`}

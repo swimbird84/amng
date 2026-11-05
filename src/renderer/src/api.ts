@@ -164,7 +164,7 @@ export const coverApi = {
 
 export const workFilesApi = {
   listByWorkIds: (workIds: number[]) => api.invoke('work-files:listByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string }[]>,
-  firstByWorkIds: (workIds: number[]) => api.invoke('work-files:firstByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string; types: string[] }[]>,
+  firstByWorkIds: (workIds: number[]) => api.invoke('work-files:firstByWorkIds', workIds) as Promise<{ work_id: number; file_path: string; type: string; types: string[]; fileByType: Record<string, string> }[]>,
   add: (workId: number, filePath: string) => api.invoke('work-files:add', workId, filePath),
   delete: (fileId: number) => api.invoke('work-files:delete', fileId),
   replaceUrl: (oldStr: string, newStr: string) => api.invoke('work-files:replaceUrl', oldStr, newStr) as Promise<{ count: number }>,

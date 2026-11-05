@@ -479,7 +479,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
                     )}
                     <div className="absolute bottom-1 left-1 flex gap-1">
                       <button
-                        onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }}
+                        onClick={e => { e.stopPropagation(); const pn = getProductNumber(file.baseName, files.map(f => f.baseName)); copyText(pn); showToast(`${pn} 복사됨`) }}
                         onDoubleClick={e => e.stopPropagation()}
                         className="bg-black/40 hover:bg-blue-600 text-white px-1 py-0.5 rounded transition cursor-pointer"
                       ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
@@ -566,7 +566,7 @@ export default function TempFolder({ onDragFiles, refreshRef, onTreeRefresh, onV
                       >{file.baseName}</span>
                       <span className="text-xs text-gray-500 w-16 text-right shrink-0">{formatFileSize(file.fileSize)}</span>
                       <span className="w-24 flex items-center justify-center gap-1.5 shrink-0">
-                        <button onClick={e => { e.stopPropagation(); copyText(file.baseName); showToast(`${file.baseName} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                        <button onClick={e => { e.stopPropagation(); const pn = getProductNumber(file.baseName, files.map(f => f.baseName)); copyText(pn); showToast(`${pn} 복사됨`) }} className="text-gray-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                         <QuickSearchButton productNumber={getProductNumber(file.baseName, files.map(f => f.baseName))} className="text-gray-400 hover:text-white" />
                         <CoverDownloadButton onSelect={async (source) => { showToast(`${file.baseName} 다운로드 중...`); const res = await tempApi.fetchCover(file.baseName, folderPath, source); if (res.ok) { showToast(`${file.baseName} 커버 다운로드 완료`); loadFiles() } else { console.error('[fetchCover]', source, file.baseName, res.error); showToast('다운로드 실패') } }} className="text-gray-400 hover:text-white" />
                         {file.registeredWorkId

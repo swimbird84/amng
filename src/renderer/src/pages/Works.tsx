@@ -67,7 +67,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
   const worksCountRef = useRef(0)
 
   // play button file status
-  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string; types: string[] }>>({})
+  const [playFiles, setPlayFiles] = useState<Record<number, { file_path: string; type: string; types: string[]; fileByType: Record<string, string> }>>({})
   const [playable, setPlayable] = useState<Record<number, boolean>>({})
   const playCheckedRef = useRef(new Set<number>())
 
@@ -164,10 +164,10 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     if (newIds.length === 0) return
     newIds.forEach(id => playCheckedRef.current.add(id))
     workFilesApi.firstByWorkIds(newIds).then(async (files) => {
-      const newPF: Record<number, { file_path: string; type: string; types: string[] }> = {}
+      const newPF: Record<number, { file_path: string; type: string; types: string[]; fileByType: Record<string, string> }> = {}
       const newP: Record<number, boolean> = {}
       for (const f of files) {
-        newPF[f.work_id] = { file_path: f.file_path, type: f.type, types: f.types }
+        newPF[f.work_id] = { file_path: f.file_path, type: f.type, types: f.types, fileByType: f.fileByType }
         if (f.type === 'url') newP[f.work_id] = true
       }
       for (const id of newIds) { if (!(id in newPF)) newP[id] = false }
@@ -415,11 +415,13 @@ export default function Works({ onNavigateToActor }: WorksProps) {
     loadMasterPoints()
   }
 
-  const handlePlay = (workId: number) => {
+  const handlePlay = (workId: number, playType?: string) => {
     const f = playFiles[workId]
     if (!f) return
-    if (f.type === 'url') shellApi.openExternal(f.file_path)
-    else shellApi.openPath(f.file_path)
+    const targetType = playType || f.type
+    const targetPath = f.fileByType?.[targetType] || f.file_path
+    if (targetType === 'url') shellApi.openExternal(targetPath)
+    else shellApi.openPath(targetPath)
   }
 
   const handleToggleFavorite = async (id: number, current: number, e?: React.MouseEvent) => {
@@ -582,7 +584,7 @@ export default function Works({ onNavigateToActor }: WorksProps) {
                 onTooltipMove={(e) => !deleteMode && setTooltip({ type: 'work', id: w.id, x: e.clientX, y: e.clientY })}
                 onTooltipLeave={() => setTooltip(null)}
                 onToggleFavorite={(e) => handleToggleFavorite(w.id, w.is_favorite, e)}
-                onPlay={() => handlePlay(w.id)}
+                onPlay={(_, playType) => handlePlay(w.id, playType)}
                 onTierClick={() => { setTierEditorWorkId(w.id) }}
                 onCommentSave={() => refreshWorks()}
               />
