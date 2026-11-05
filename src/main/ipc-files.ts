@@ -259,6 +259,23 @@ export function registerFilesHandlers(): void {
     return { ok: true }
   })
 
+  ipcMain.handle('folder:move', (_e, srcPath: string, destParentPath: string) => {
+    const folderName = path.basename(srcPath)
+    const newPath = path.join(destParentPath, folderName)
+    if (fs.existsSync(newPath)) return { ok: false, error: `"${folderName}" 폴더가 이미 존재합니다` }
+    try {
+      fs.renameSync(srcPath, newPath)
+    } catch (err: unknown) {
+      return { ok: false, error: (err as Error).message }
+    }
+    const oldPrefix = srcPath.replace(/\\/g, '/')
+    const newPrefix = newPath.replace(/\\/g, '/')
+    db().prepare(`UPDATE work_files SET file_path = REPLACE(REPLACE(file_path, '\\', '/'), ?, ?) WHERE REPLACE(file_path, '\\', '/') LIKE ? || '%'`).run(oldPrefix, newPrefix, oldPrefix)
+    db().prepare(`UPDATE works SET file_path = REPLACE(REPLACE(file_path, '\\', '/'), ?, ?) WHERE REPLACE(file_path, '\\', '/') LIKE ? || '%'`).run(oldPrefix, newPrefix, oldPrefix)
+    db().prepare(`UPDATE works SET cover_path = REPLACE(REPLACE(cover_path, '\\', '/'), ?, ?) WHERE cover_path IS NOT NULL AND REPLACE(cover_path, '\\', '/') LIKE ? || '%'`).run(oldPrefix, newPrefix, oldPrefix)
+    return { ok: true, newPath }
+  })
+
   ipcMain.handle('file:rename', (_e, oldPath: string, newPath: string) => {
     try {
       fs.renameSync(oldPath, newPath)

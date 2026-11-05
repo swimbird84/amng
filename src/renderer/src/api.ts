@@ -141,6 +141,7 @@ export const folderApi = {
   renameFolder: (oldPath: string, newPath: string) => api.invoke('folder:rename', oldPath, newPath),
   renameFile: (oldPath: string, newPath: string) => api.invoke('file:rename', oldPath, newPath),
   deleteFolder: (folderPath: string, mode: 'dbOnly' | 'folderOnly' | 'archive' | 'full' = 'full') => api.invoke('folder:delete', folderPath, mode) as Promise<{ ok: boolean; error?: string; blocked?: boolean; deletedWorks?: number }>,
+  moveFolder: (srcPath: string, destParentPath: string) => api.invoke('folder:move', srcPath, destParentPath) as Promise<{ ok: boolean; error?: string; newPath?: string }>,
 }
 
 export const tempApi = {

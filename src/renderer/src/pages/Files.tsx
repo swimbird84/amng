@@ -271,7 +271,7 @@ interface TempFileRef {
   thumbPath: string | null
 }
 
-function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWork, onDrop, dropTarget, dragFiles: dragFilesProp, onMoveConfirmOne, onMoveCancelOne, onNewActorConfirmOne, onLinkConfirmOne, onLinkNewActorConfirmOne }: {
+function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWork, onDrop, dropTarget, dragFiles: dragFilesProp, onMoveConfirmOne, onMoveCancelOne, onNewActorConfirmOne, onLinkConfirmOne, onLinkNewActorConfirmOne, onFolderMove }: {
   node: FolderNode; depth: number; onRefresh: () => void
   onNavigateToActor: (id: number) => void; onNavigateToWork: (id: number) => void
   onDrop?: (folderPath: string, folderLabel: string, isActorFolder: boolean) => void
@@ -282,9 +282,11 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
   onNewActorConfirmOne?: (fileName: string, actorName: string, actorBirthday: string, releaseDate: string) => void
   onLinkConfirmOne?: (fileName: string, date: string, url: string) => void
   onLinkNewActorConfirmOne?: (fileName: string, actorName: string, actorBirthday: string, releaseDate: string, url: string) => void
+  onFolderMove?: (srcPath: string, destParentPath: string) => void
 }) {
   const [open, setOpen] = useState(() => getOpenFolders().has(node.path))
   const [dragOver, setDragOver] = useState(false)
+  const [folderMoveConfirm, setFolderMoveConfirm] = useState<{ srcPath: string; srcName: string } | null>(null)
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState(node.name)
   const [fileRenaming, setFileRenaming] = useState<number | null>(null)
@@ -377,9 +379,39 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
       <div
         className={`flex items-center gap-1 py-1 hover:bg-gray-800/50 rounded group ${dragOver ? 'bg-blue-900/30 ring-1 ring-blue-500' : ''}`}
         style={{ paddingLeft: depth * 20 + 8 }}
-        onDragOver={(e) => { if (node.isCoverImagesFolder) return; e.preventDefault(); setDragOver(true) }}
+        draggable={!node.isCoverImagesFolder && depth > 0 && !renaming && !dropTarget}
+        onDragStart={(e) => {
+          if (node.isCoverImagesFolder || depth === 0 || renaming || dropTarget) { e.preventDefault(); return }
+          e.dataTransfer.setData('application/folder-path', node.path)
+          e.dataTransfer.effectAllowed = 'move'
+          e.stopPropagation()
+        }}
+        onDragOver={(e) => {
+          if (node.isCoverImagesFolder) return
+          e.preventDefault()
+          e.stopPropagation()
+          setDragOver(true)
+        }}
         onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { if (node.isCoverImagesFolder) return; e.preventDefault(); setDragOver(false); onDrop?.(node.path, node.matchedActorName ?? node.name, !!node.matchedActorId) }}
+        onDrop={(e) => {
+          if (node.isCoverImagesFolder) return
+          e.preventDefault()
+          e.stopPropagation()
+          setDragOver(false)
+          const folderPath = e.dataTransfer.getData('application/folder-path')
+          if (folderPath) {
+            // Folder move — validate
+            const normalizedSrc = folderPath.replace(/\\/g, '/')
+            const normalizedDest = node.path.replace(/\\/g, '/')
+            if (normalizedSrc === normalizedDest) return
+            if (normalizedDest.startsWith(normalizedSrc + '/')) return
+            if (normalizedSrc.replace(/\/[^/]*$/, '') === normalizedDest) return // already in this folder
+            const srcName = folderPath.replace(/\\/g, '/').split('/').pop() || ''
+            setFolderMoveConfirm({ srcPath: folderPath, srcName })
+          } else {
+            onDrop?.(node.path, node.matchedActorName ?? node.name, !!node.matchedActorId)
+          }
+        }}
       >
         <button
           onClick={handleToggle}
@@ -446,6 +478,19 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
         </div>
       )}
 
+      {/* Folder move confirm modal */}
+      {folderMoveConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setFolderMoveConfirm(null)}>
+          <div className="bg-gray-800 rounded-lg p-4 min-w-[300px]" onClick={e => e.stopPropagation()}>
+            <p className="text-white text-sm mb-3">"{folderMoveConfirm.srcName}"을(를) "{node.name}" 폴더로 이동하시겠습니까?</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setFolderMoveConfirm(null)} className="text-sm text-gray-300 bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded">취소</button>
+              <button onClick={() => { onFolderMove?.(folderMoveConfirm.srcPath, node.path); setFolderMoveConfirm(null) }} className="text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded">이동</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Inline drop UI */}
       {dropTarget && dropTarget.folderPath === node.path && dragFilesProp && dragFilesProp.length > 0 && (
         dropTarget.isActorFolder ? (
@@ -471,7 +516,7 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
       {open && (
         <>
           {node.children.map(child => (
-            <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={onDrop} dropTarget={dropTarget} dragFiles={dragFilesProp} onMoveConfirmOne={onMoveConfirmOne} onMoveCancelOne={onMoveCancelOne} onNewActorConfirmOne={onNewActorConfirmOne} onLinkConfirmOne={onLinkConfirmOne} onLinkNewActorConfirmOne={onLinkNewActorConfirmOne} />
+            <FolderItem key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={onDrop} dropTarget={dropTarget} dragFiles={dragFilesProp} onMoveConfirmOne={onMoveConfirmOne} onMoveCancelOne={onMoveCancelOne} onNewActorConfirmOne={onNewActorConfirmOne} onLinkConfirmOne={onLinkConfirmOne} onLinkNewActorConfirmOne={onLinkNewActorConfirmOne} onFolderMove={onFolderMove} />
           ))}
           {node.files.map(file => {
             const fileExists = existsMap ? (existsMap[file.filePath] ?? true) : true
@@ -760,6 +805,20 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
     if (remaining.length === 0) setDropTarget(null)
   }
 
+  const handleFolderMove = async (srcPath: string, destParentPath: string) => {
+    const res = await folderApi.moveFolder(srcPath, destParentPath)
+    if (res.ok) {
+      // Auto-open destination folder
+      const openSet = getOpenFolders()
+      openSet.add(destParentPath)
+      if (res.newPath) openSet.add(res.newPath)
+      saveOpenFolders(openSet)
+      loadTree()
+    } else {
+      alert(res.error || '폴더 이동 실패')
+    }
+  }
+
   return (
     <div className="h-full flex gap-2 p-4 overflow-hidden cursor-default">
       {/* Left: Folder Tree */}
@@ -821,7 +880,7 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
             <p className="text-gray-500 text-sm">{search.trim() ? '검색 결과가 없습니다' : '등록된 로컬 파일이 없습니다'}</p>
           ) : (
             displayTree.map(node => (
-              <FolderItem key={`${node.path}_${toggleKey}`} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={handleDrop} dropTarget={dropTarget} dragFiles={dragFiles} onMoveConfirmOne={handleMoveConfirmOne} onMoveCancelOne={handleMoveCancelOne} onNewActorConfirmOne={handleNewActorConfirmOne} onLinkConfirmOne={handleLinkConfirmOne} onLinkNewActorConfirmOne={handleLinkNewActorConfirmOne} />
+              <FolderItem key={`${node.path}_${toggleKey}`} node={node} depth={0} onRefresh={loadTree} onNavigateToActor={onNavigateToActor} onNavigateToWork={onNavigateToWork} onDrop={handleDrop} dropTarget={dropTarget} dragFiles={dragFiles} onMoveConfirmOne={handleMoveConfirmOne} onMoveCancelOne={handleMoveCancelOne} onNewActorConfirmOne={handleNewActorConfirmOne} onLinkConfirmOne={handleLinkConfirmOne} onLinkNewActorConfirmOne={handleLinkNewActorConfirmOne} onFolderMove={handleFolderMove} />
             ))
           )}
         </div>
