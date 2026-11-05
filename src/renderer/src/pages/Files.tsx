@@ -596,13 +596,18 @@ const SORT_BY_KEY = 'files:sortBy'
 const SORT_DIR_KEY = 'files:sortDir'
 
 type SortField = 'name' | 'count'
-type SearchField = 'actor' | 'folder'
+type SearchField = 'actor' | 'folder' | 'product'
 const SEARCH_FIELD_KEY = 'files:searchField'
 
 function filterTree(nodes: FolderNode[], query: string, field: SearchField): FolderNode[] {
   const q = query.toLowerCase()
+  const fileMatches = (node: FolderNode): boolean => {
+    if (node.files.some(f => f.workLabel.toLowerCase().includes(q))) return true
+    return node.children.some(c => c.isCoverImagesFolder && c.files.some(f => f.workLabel.toLowerCase().includes(q)))
+  }
   const matches = (node: FolderNode): boolean => {
     if (field === 'actor') return !!node.matchedActorName?.toLowerCase().includes(q) || !!node.matchedActorAliases?.toLowerCase().includes(q)
+    if (field === 'product') return fileMatches(node)
     return node.name.toLowerCase().includes(q)
   }
   const filter = (nodes: FolderNode[]): FolderNode[] => {
@@ -869,6 +874,7 @@ export default function Files({ onNavigateToActor, onNavigateToWork }: { onNavig
             >
               <option value="actor">배우</option>
               <option value="folder">폴더</option>
+              <option value="product">품번</option>
             </select>
             <input
               value={search}
