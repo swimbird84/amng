@@ -331,6 +331,7 @@ export default function Actors({ onNavigateToWork, onNavigateToActor }: ActorsPr
                 className="bg-gray-700 text-white text-sm px-2 py-1.5 rounded w-28"
               >
                 <option value="created_at">등록일</option>
+                <option value="updated_at">수정일</option>
                 <option value="avg_score">평점</option>
                 <option value="ratio_score">피지컬</option>
                 <option value="master_points">월드컵</option>

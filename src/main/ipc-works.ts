@@ -21,7 +21,7 @@ export function registerWorksHandlers(): void {
     ratingTo?: number
     actorId?: number
     studioId?: number
-    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'title' | 'actor' | 'studio' | 'master_points' | 'tier'
+    sortBy?: 'product_number' | 'rating' | 'release_date' | 'created_at' | 'updated_at' | 'title' | 'actor' | 'studio' | 'master_points' | 'tier'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
     titleSearch?: string
@@ -247,7 +247,7 @@ export function registerWorksHandlers(): void {
     } else if (params?.sortBy === 'product_number') {
       sql += ` ORDER BY w.product_number ${invertedDir}`
     } else {
-      const validWorkSortCols = ['rating', 'release_date', 'created_at']
+      const validWorkSortCols = ['rating', 'release_date', 'created_at', 'updated_at']
       const sortCol = validWorkSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
       sql += ` ORDER BY w.${sortCol} ${sortDir}`
     }
@@ -454,6 +454,7 @@ export function registerWorksHandlers(): void {
       }
     }
 
+    fields.push("updated_at = datetime('now')")
     if (fields.length > 0) {
       values.push(id)
       db().prepare(`UPDATE works SET ${fields.join(', ')} WHERE id = ?`).run(...values)

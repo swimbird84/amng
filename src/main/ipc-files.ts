@@ -55,11 +55,17 @@ function buildTree(
     return node
   }
 
-  // Collect all file dirs + ensure ancestors up to common root
+  // Collect all file dirs + cover image parent dirs for common root calculation
   const allDirs = new Set<string>()
   for (const row of rows) {
     const dir = normalizePath(path.dirname(row.file_path))
     allDirs.add(dir)
+  }
+  for (const row of coverRows) {
+    const coverDir = normalizePath(path.dirname(row.cover_path))
+    if (!coverDir.endsWith('/cover images')) continue
+    const parentDir = normalizePath(path.dirname(coverDir.replace(/\//g, path.sep)))
+    allDirs.add(parentDir)
   }
 
   // Find common prefix depth to avoid creating nodes all the way to drive root
@@ -105,13 +111,65 @@ function buildTree(
     }
   }
 
+  // Add cover images nodes from works.cover_path
+  const coverByDir = new Map<string, { id: number; fileName: string; filePath: string; workLabel: string }[]>()
+  for (const row of coverRows) {
+    const coverDir = normalizePath(path.dirname(row.cover_path))
+    if (!coverDir.endsWith('/cover images')) continue
+    if (!coverByDir.has(coverDir)) coverByDir.set(coverDir, [])
+    coverByDir.get(coverDir)!.push({
+      id: row.id,
+      fileName: path.basename(row.cover_path),
+      filePath: row.cover_path,
+      workLabel: row.product_number || row.title || `#${row.id}`,
+    })
+  }
+  // Ensure parent folders of cover images dirs exist in allNodes (even if no local files)
+  for (const coverDir of coverByDir.keys()) {
+    const parentDir = normalizePath(path.dirname(coverDir.replace(/\//g, path.sep)))
+    if (!allNodes.has(parentDir)) {
+      getOrCreateNode(parentDir.replace(/\//g, path.sep))
+      // Create ancestors up to stopAt
+      let current = parentDir
+      let parent = normalizePath(path.dirname(current.replace(/\//g, path.sep)))
+      while (parent !== current && parent !== stopAt) {
+        getOrCreateNode(parent.replace(/\//g, path.sep))
+        current = parent
+        parent = normalizePath(path.dirname(current.replace(/\//g, path.sep)))
+      }
+      if (parent !== current) {
+        getOrCreateNode(parent.replace(/\//g, path.sep))
+      }
+    }
+  }
+  for (const [coverDir, files] of coverByDir) {
+    const parentDir = normalizePath(path.dirname(coverDir.replace(/\//g, path.sep)))
+    const coverNode: FolderNode = {
+      name: 'cover images',
+      path: coverDir.replace(/\//g, path.sep),
+      fileCount: files.length,
+      exists: true,
+      files: files.map(f => ({
+        id: f.id,
+        workId: f.id,
+        fileName: f.fileName,
+        filePath: f.filePath,
+        workLabel: f.workLabel,
+        exists: true,
+      })),
+      children: [],
+      isCoverImagesFolder: true,
+    }
+    allNodes.get(parentDir)!.children.push(coverNode)
+  }
+
   // Existence check is deferred — default to true, check lazily via folder:checkExists
   for (const node of allNodes.values()) {
     node.exists = true
     for (const f of node.files) f.exists = true
   }
 
-  // Match folders to actors/works
+  // Match folders to actors/works (after cover images parents are created)
   const actorPattern = /^(.+)\s+(\d{4}-\d{2}-\d{2})$/
   const workPattern = /^(\d{4}-\d{2}-\d{2})\s+(.+)$/
 
@@ -146,41 +204,6 @@ function buildTree(
         node.matchedWorkLabel = work.label
       }
     }
-  }
-
-  // Add cover images nodes from works.cover_path
-  const coverByDir = new Map<string, { id: number; fileName: string; filePath: string; workLabel: string }[]>()
-  for (const row of coverRows) {
-    const coverDir = normalizePath(path.dirname(row.cover_path))
-    if (!coverDir.endsWith('/cover images')) continue
-    if (!coverByDir.has(coverDir)) coverByDir.set(coverDir, [])
-    coverByDir.get(coverDir)!.push({
-      id: row.id,
-      fileName: path.basename(row.cover_path),
-      filePath: row.cover_path,
-      workLabel: row.product_number || row.title || `#${row.id}`,
-    })
-  }
-  for (const [coverDir, files] of coverByDir) {
-    const parentDir = normalizePath(path.dirname(coverDir.replace(/\//g, path.sep)))
-    if (!allNodes.has(parentDir)) continue // parent not in tree
-    const coverNode: FolderNode = {
-      name: 'cover images',
-      path: coverDir.replace(/\//g, path.sep),
-      fileCount: files.length,
-      exists: true,
-      files: files.map(f => ({
-        id: f.id,
-        workId: f.id,
-        fileName: f.fileName,
-        filePath: f.filePath,
-        workLabel: f.workLabel,
-        exists: true,
-      })),
-      children: [],
-      isCoverImagesFolder: true,
-    }
-    allNodes.get(parentDir)!.children.push(coverNode)
   }
 
   // Build hierarchy

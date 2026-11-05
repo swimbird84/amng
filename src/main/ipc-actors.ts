@@ -15,7 +15,7 @@ export function registerActorsHandlers(): void {
     ageTo?: number
     ratingFrom?: number
     ratingTo?: number
-    sortBy?: 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at'
+    sortBy?: 'name' | 'avg_score' | 'birthday' | 'work_count' | 'created_at' | 'updated_at' | 'debut_date' | 'ratio_score' | 'work_release_date' | 'work_created_at'
     sortDir?: 'asc' | 'desc'
     favoriteOnly?: boolean
     debutDateFrom?: string
@@ -262,7 +262,7 @@ export function registerActorsHandlers(): void {
       const invertedDir = sortDir === 'ASC' ? 'DESC' : 'ASC'
       sql += ` ORDER BY a.name ${invertedDir}`
     } else {
-      const validActorSortCols = ['birthday', 'created_at', 'debut_date']
+      const validActorSortCols = ['birthday', 'created_at', 'updated_at', 'debut_date']
       const sortCol = validActorSortCols.includes(params?.sortBy ?? '') ? params!.sortBy : 'created_at'
       sql += ` ORDER BY a.${sortCol} IS NULL ASC, a.${sortCol} ${sortDir}`
     }
@@ -504,6 +504,7 @@ export function registerActorsHandlers(): void {
     if (data.real_name !== undefined) { fields.push('real_name = ?'); values.push(data.real_name) }
     if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
 
+    fields.push("updated_at = datetime('now')")
     if (fields.length > 0) {
       values.push(id)
       db().prepare(`UPDATE actors SET ${fields.join(', ')} WHERE id = ?`).run(...values)

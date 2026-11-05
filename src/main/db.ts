@@ -645,4 +645,16 @@ export function initDatabase(): void {
     }
   }
 
+  // works.updated_at, actors.updated_at 마이그레이션
+  const worksCols = (db.prepare("PRAGMA table_info(works)").all() as { name: string }[]).map(c => c.name)
+  if (!worksCols.includes('updated_at')) {
+    db.prepare("ALTER TABLE works ADD COLUMN updated_at TEXT").run()
+    db.prepare("UPDATE works SET updated_at = created_at WHERE updated_at IS NULL").run()
+  }
+  const actorsCols = (db.prepare("PRAGMA table_info(actors)").all() as { name: string }[]).map(c => c.name)
+  if (!actorsCols.includes('updated_at')) {
+    db.prepare("ALTER TABLE actors ADD COLUMN updated_at TEXT").run()
+    db.prepare("UPDATE actors SET updated_at = created_at WHERE updated_at IS NULL").run()
+  }
+
 }

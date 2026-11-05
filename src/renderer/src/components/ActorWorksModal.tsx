@@ -198,6 +198,7 @@ export default function ActorWorksModal({ actorId, actorName, onClose, onNavigat
               >
                 <option value="release_date">발매일</option>
                 <option value="created_at">등록일</option>
+                <option value="updated_at">수정일</option>
                 <option value="master_points">월드컵</option>
                 <option value="tier">티어</option>
                 <option value="actor">배우</option>
