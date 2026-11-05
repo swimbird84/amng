@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { folderApi, tempApi } from '../api'
+import { folderApi, tempApi, shellApi } from '../api'
 import CardTooltip, { type TooltipState } from '../components/CardTooltip'
 import TempFolder from '../components/TempFolder'
 
@@ -451,6 +451,10 @@ function FolderItem({ node, depth, onRefresh, onNavigateToActor, onNavigateToWor
             </>
           ) : folderExists ? (
             <>
+              <button
+                onClick={(e) => { e.stopPropagation(); shellApi.showItemInFolder(node.path) }}
+                className="text-xs text-gray-400 hover:text-white px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600"
+              >열기</button>
               <button
                 onClick={(e) => { e.stopPropagation(); setRenaming(true); setNewName(node.name) }}
                 className="text-xs text-gray-400 hover:text-white px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600"

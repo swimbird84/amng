@@ -12,17 +12,23 @@ function copyText(text: string) {
   document.body.removeChild(ta)
 }
 
+function stripDatePrefix(name: string): string {
+  const dm = name.match(/^\d{4}-\d{2}-\d{2}\s+(.+)$/)
+  return dm ? dm[1] : name
+}
+
 function getProductNumber(baseName: string, allBaseNames?: string[]): string {
-  const m = baseName.match(/^(.+?)_(\d+)$/)
-  if (!m) return baseName
+  const stripped = stripDatePrefix(baseName)
+  const m = stripped.match(/^(.+?)_(\d+)$/)
+  if (!m) return stripped
   if (!allBaseNames) return m[1]
   // Only strip suffix if there are consecutive numbered files with same prefix
   const prefix = m[1]
-  const count = allBaseNames.filter(n => {
+  const count = allBaseNames.map(stripDatePrefix).filter(n => {
     const m2 = n.match(/^(.+?)_\d+$/)
     return m2 && m2[1] === prefix
   }).length
-  return count >= 2 ? prefix : baseName
+  return count >= 2 ? prefix : stripped
 }
 
 interface TempFile {

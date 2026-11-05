@@ -674,8 +674,11 @@ export function registerFilesHandlers(): void {
 
   // Extract product number from filename (strip _N suffix)
   function getProductNumber(baseName: string): string {
-    const m = baseName.match(/^(.+?)_\d+$/)
-    return m ? m[1] : baseName
+    // Strip YYYY-MM-DD prefix if present
+    const dm = baseName.match(/^\d{4}-\d{2}-\d{2}\s+(.+)$/)
+    const stripped = dm ? dm[1] : baseName
+    const m = stripped.match(/^(.+?)_\d+$/)
+    return m ? m[1] : stripped
   }
 
   // Move files to actor folder, grouping _N suffixed files under same product number
@@ -1364,21 +1367,7 @@ export function registerFilesHandlers(): void {
     try {
       const ext = path.extname(fileName)
       const baseName = path.basename(fileName, ext)
-      // Extract product number (strip _N suffix if consecutive)
-      let productNumber = baseName
-      const suffixMatch = baseName.match(/^(.+?)_(\d+)$/)
-      if (suffixMatch) {
-        try {
-          const entries = await fs.promises.readdir(folderPath)
-          const prefix = suffixMatch[1]
-          const count = entries.filter(e => {
-            const base = path.basename(e, path.extname(e))
-            const m = base.match(/^(.+?)_\d+$/)
-            return m && m[1] === prefix
-          }).length
-          if (count >= 2) productNumber = prefix
-        } catch { /* use raw */ }
-      }
+      const productNumber = getProductNumber(baseName)
 
       // Check cache first
       const cached = scrapeCache.get(productNumber.toUpperCase())
