@@ -409,32 +409,44 @@ export function registerWorksHandlers(): void {
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
+    // Load current values to detect actual changes
+    const cur = db().prepare('SELECT file_path, cover_path, product_number, title, release_date, rating, is_favorite, comment, studio_id, delete_pending, is_excluded FROM works WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    if (!cur) return false
+    const eq = (a: unknown, b: unknown) => (a ?? null) === (b ?? null)
+
     const fields: string[] = []
     const values: unknown[] = []
+    let changed = false
 
     if (data.file_entries !== undefined && data.file_entries.length > 0) {
-      fields.push('file_path = ?')
-      values.push(data.file_entries[0].path)
-      db().prepare('DELETE FROM work_files WHERE work_id = ?').run(id)
-      const insertFile = db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, ?)')
-      data.file_entries.forEach((e, i) => insertFile.run(id, e.path, e.type, i))
+      const curFiles = db().prepare('SELECT file_path, type FROM work_files WHERE work_id = ? ORDER BY sort_order').all(id) as { file_path: string; type: string }[]
+      const filesChanged = curFiles.length !== data.file_entries.length || curFiles.some((f, i) => f.file_path !== data.file_entries![i].path || f.type !== data.file_entries![i].type)
+      if (filesChanged) {
+        fields.push('file_path = ?')
+        values.push(data.file_entries[0].path)
+        db().prepare('DELETE FROM work_files WHERE work_id = ?').run(id)
+        const insertFile = db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, ?)')
+        data.file_entries.forEach((e, i) => insertFile.run(id, e.path, e.type, i))
+        changed = true
+      }
     } else if (data.file_paths !== undefined && data.file_paths.length > 0) {
       fields.push('file_path = ?')
       values.push(data.file_paths[0])
       db().prepare('DELETE FROM work_files WHERE work_id = ?').run(id)
       const insertFile = db().prepare('INSERT INTO work_files (work_id, file_path, type, sort_order) VALUES (?, ?, ?, ?)')
       data.file_paths.forEach((fp, i) => insertFile.run(id, fp, 'local', i))
-    } else if (data.file_path !== undefined) { fields.push('file_path = ?'); values.push(data.file_path) }
-    if (data.cover_path !== undefined) { fields.push('cover_path = ?'); values.push(data.cover_path) }
-    if (data.product_number !== undefined) { fields.push('product_number = ?'); values.push(data.product_number) }
-    if (data.title !== undefined) { fields.push('title = ?'); values.push(data.title) }
-    if (data.release_date !== undefined) { fields.push('release_date = ?'); values.push(data.release_date) }
-    if (data.rating !== undefined) { fields.push('rating = ?'); values.push(data.rating) }
-    if (data.is_favorite !== undefined) { fields.push('is_favorite = ?'); values.push(data.is_favorite) }
-    if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
-    if (data.studio_id !== undefined) { fields.push('studio_id = ?'); values.push(data.studio_id) }
-    if (data.delete_pending !== undefined) { fields.push('delete_pending = ?'); values.push(data.delete_pending) }
-    if (data.is_excluded !== undefined) {
+      changed = true
+    } else if (data.file_path !== undefined && !eq(data.file_path, cur.file_path)) { fields.push('file_path = ?'); values.push(data.file_path); changed = true }
+    if (data.cover_path !== undefined && !eq(data.cover_path, cur.cover_path)) { fields.push('cover_path = ?'); values.push(data.cover_path); changed = true }
+    if (data.product_number !== undefined && !eq(data.product_number, cur.product_number)) { fields.push('product_number = ?'); values.push(data.product_number); changed = true }
+    if (data.title !== undefined && !eq(data.title, cur.title)) { fields.push('title = ?'); values.push(data.title); changed = true }
+    if (data.release_date !== undefined && !eq(data.release_date, cur.release_date)) { fields.push('release_date = ?'); values.push(data.release_date); changed = true }
+    if (data.rating !== undefined && !eq(data.rating, cur.rating)) { fields.push('rating = ?'); values.push(data.rating); changed = true }
+    if (data.is_favorite !== undefined && !eq(data.is_favorite, cur.is_favorite)) { fields.push('is_favorite = ?'); values.push(data.is_favorite); changed = true }
+    if (data.comment !== undefined && !eq(data.comment, cur.comment)) { fields.push('comment = ?'); values.push(data.comment); changed = true }
+    if (data.studio_id !== undefined && !eq(data.studio_id, cur.studio_id)) { fields.push('studio_id = ?'); values.push(data.studio_id); changed = true }
+    if (data.delete_pending !== undefined && !eq(data.delete_pending, cur.delete_pending)) { fields.push('delete_pending = ?'); values.push(data.delete_pending); changed = true }
+    if (data.is_excluded !== undefined && !eq(data.is_excluded, cur.is_excluded)) {
       if (data.is_excluded === 1) {
         const blocked = db().prepare(`
           SELECT 1 FROM cup_entries e
@@ -445,8 +457,7 @@ export function registerWorksHandlers(): void {
         `).get(id)
         if (blocked) return { blocked: true }
       }
-      fields.push('is_excluded = ?'); values.push(data.is_excluded)
-      // Re-index tier levels where this work is placed
+      fields.push('is_excluded = ?'); values.push(data.is_excluded); changed = true
       const tierPlacements = db().prepare('SELECT set_id, level_id FROM tier_items WHERE item_id = ?').all(id) as { set_id: number; level_id: number }[]
       for (const tp of tierPlacements) {
         const items = db().prepare('SELECT id FROM tier_items WHERE set_id = ? AND level_id = ? ORDER BY sort_order').all(tp.set_id, tp.level_id) as { id: number }[]
@@ -454,9 +465,33 @@ export function registerWorksHandlers(): void {
       }
     }
 
-    const hasFieldChanges = fields.length > 0
-    const hasRelationChanges = data.actor_ids !== undefined || data.rep_actor_ids !== undefined || data.tag_ids !== undefined || data.rep_tag_ids !== undefined
-    if (hasFieldChanges || hasRelationChanges) {
+    // Check relation changes
+    if (data.actor_ids !== undefined) {
+      const curActors = db().prepare('SELECT actor_id, is_rep FROM work_actors WHERE work_id = ? ORDER BY actor_id').all(id) as { actor_id: number; is_rep: number }[]
+      const curIds = curActors.map(a => a.actor_id).sort((a, b) => a - b)
+      const newIds = [...data.actor_ids].sort((a, b) => a - b)
+      const curRepIds = curActors.filter(a => a.is_rep).map(a => a.actor_id).sort((a, b) => a - b)
+      const newRepIds = data.rep_actor_ids ? [...data.rep_actor_ids].sort((a, b) => a - b) : curRepIds
+      if (JSON.stringify(curIds) !== JSON.stringify(newIds) || JSON.stringify(curRepIds) !== JSON.stringify(newRepIds)) changed = true
+    } else if (data.rep_actor_ids !== undefined) {
+      const curRepIds = (db().prepare('SELECT actor_id FROM work_actors WHERE work_id = ? AND is_rep = 1 ORDER BY actor_id').all(id) as { actor_id: number }[]).map(a => a.actor_id).sort((a, b) => a - b)
+      const newRepIds = [...data.rep_actor_ids].sort((a, b) => a - b)
+      if (JSON.stringify(curRepIds) !== JSON.stringify(newRepIds)) changed = true
+    }
+    if (data.tag_ids !== undefined) {
+      const curTags = db().prepare('SELECT tag_id, is_rep FROM work_tags WHERE work_id = ? ORDER BY tag_id').all(id) as { tag_id: number; is_rep: number }[]
+      const curIds = curTags.map(t => t.tag_id).sort((a, b) => a - b)
+      const newIds = [...data.tag_ids].sort((a, b) => a - b)
+      const curRepIds = curTags.filter(t => t.is_rep).map(t => t.tag_id).sort((a, b) => a - b)
+      const newRepIds = data.rep_tag_ids ? [...data.rep_tag_ids].sort((a, b) => a - b) : curRepIds
+      if (JSON.stringify(curIds) !== JSON.stringify(newIds) || JSON.stringify(curRepIds) !== JSON.stringify(newRepIds)) changed = true
+    } else if (data.rep_tag_ids !== undefined) {
+      const curRepIds = (db().prepare('SELECT tag_id FROM work_tags WHERE work_id = ? AND is_rep = 1 ORDER BY tag_id').all(id) as { tag_id: number }[]).map(t => t.tag_id).sort((a, b) => a - b)
+      const newRepIds = [...data.rep_tag_ids].sort((a, b) => a - b)
+      if (JSON.stringify(curRepIds) !== JSON.stringify(newRepIds)) changed = true
+    }
+
+    if (changed) {
       fields.push("updated_at = datetime('now')")
     }
     if (fields.length > 0) {

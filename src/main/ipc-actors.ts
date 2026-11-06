@@ -466,16 +466,22 @@ export function registerActorsHandlers(): void {
     tag_ids?: number[]
     rep_tag_ids?: number[]
   }) => {
+    // Load current values to detect actual changes
+    const cur = db().prepare('SELECT name, photo_path, birthday, debut_date, is_favorite, delete_pending, is_excluded, height, bust, waist, hip, cup, phys_arbitrary, aliases, real_name, comment FROM actors WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    if (!cur) return false
+    const eq = (a: unknown, b: unknown) => (a ?? null) === (b ?? null)
+
     const fields: string[] = []
     const values: unknown[] = []
+    let changed = false
 
-    if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name) }
-    if (data.photo_path !== undefined) { fields.push('photo_path = ?'); values.push(data.photo_path) }
-    if (data.birthday !== undefined) { fields.push('birthday = ?'); values.push(data.birthday) }
-    if (data.debut_date !== undefined) { fields.push('debut_date = ?'); values.push(data.debut_date) }
-    if (data.is_favorite !== undefined) { fields.push('is_favorite = ?'); values.push(data.is_favorite) }
-    if (data.delete_pending !== undefined) { fields.push('delete_pending = ?'); values.push(data.delete_pending) }
-    if (data.is_excluded !== undefined) {
+    if (data.name !== undefined && !eq(data.name, cur.name)) { fields.push('name = ?'); values.push(data.name); changed = true }
+    if (data.photo_path !== undefined && !eq(data.photo_path, cur.photo_path)) { fields.push('photo_path = ?'); values.push(data.photo_path); changed = true }
+    if (data.birthday !== undefined && !eq(data.birthday, cur.birthday)) { fields.push('birthday = ?'); values.push(data.birthday); changed = true }
+    if (data.debut_date !== undefined && !eq(data.debut_date, cur.debut_date)) { fields.push('debut_date = ?'); values.push(data.debut_date); changed = true }
+    if (data.is_favorite !== undefined && !eq(data.is_favorite, cur.is_favorite)) { fields.push('is_favorite = ?'); values.push(data.is_favorite); changed = true }
+    if (data.delete_pending !== undefined && !eq(data.delete_pending, cur.delete_pending)) { fields.push('delete_pending = ?'); values.push(data.delete_pending); changed = true }
+    if (data.is_excluded !== undefined && !eq(data.is_excluded, cur.is_excluded)) {
       if (data.is_excluded === 1) {
         const blocked = db().prepare(`
           SELECT 1 FROM cup_entries e
@@ -486,27 +492,45 @@ export function registerActorsHandlers(): void {
         `).get(id)
         if (blocked) return { blocked: true }
       }
-      fields.push('is_excluded = ?'); values.push(data.is_excluded)
-      // Re-index tier levels where this actor is placed
+      fields.push('is_excluded = ?'); values.push(data.is_excluded); changed = true
       const tierPlacements = db().prepare('SELECT set_id, level_id FROM tier_items WHERE item_id = ?').all(id) as { set_id: number; level_id: number }[]
       for (const tp of tierPlacements) {
         const items = db().prepare('SELECT id FROM tier_items WHERE set_id = ? AND level_id = ? ORDER BY sort_order').all(tp.set_id, tp.level_id) as { id: number }[]
         items.forEach((row, i) => db().prepare('UPDATE tier_items SET sort_order = ? WHERE id = ?').run(i, row.id))
       }
     }
-    if (data.height !== undefined) { fields.push('height = ?'); values.push(data.height) }
-    if (data.bust !== undefined) { fields.push('bust = ?'); values.push(data.bust) }
-    if (data.waist !== undefined) { fields.push('waist = ?'); values.push(data.waist) }
-    if (data.hip !== undefined) { fields.push('hip = ?'); values.push(data.hip) }
-    if (data.cup !== undefined) { fields.push('cup = ?'); values.push(data.cup) }
-    if (data.phys_arbitrary !== undefined) { fields.push('phys_arbitrary = ?'); values.push(data.phys_arbitrary) }
-    if (data.aliases !== undefined) { fields.push('aliases = ?'); values.push(data.aliases) }
-    if (data.real_name !== undefined) { fields.push('real_name = ?'); values.push(data.real_name) }
-    if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
+    if (data.height !== undefined && !eq(data.height, cur.height)) { fields.push('height = ?'); values.push(data.height); changed = true }
+    if (data.bust !== undefined && !eq(data.bust, cur.bust)) { fields.push('bust = ?'); values.push(data.bust); changed = true }
+    if (data.waist !== undefined && !eq(data.waist, cur.waist)) { fields.push('waist = ?'); values.push(data.waist); changed = true }
+    if (data.hip !== undefined && !eq(data.hip, cur.hip)) { fields.push('hip = ?'); values.push(data.hip); changed = true }
+    if (data.cup !== undefined && !eq(data.cup, cur.cup)) { fields.push('cup = ?'); values.push(data.cup); changed = true }
+    if (data.phys_arbitrary !== undefined && !eq(data.phys_arbitrary, cur.phys_arbitrary)) { fields.push('phys_arbitrary = ?'); values.push(data.phys_arbitrary); changed = true }
+    if (data.aliases !== undefined && !eq(data.aliases, cur.aliases)) { fields.push('aliases = ?'); values.push(data.aliases); changed = true }
+    if (data.real_name !== undefined && !eq(data.real_name, cur.real_name)) { fields.push('real_name = ?'); values.push(data.real_name); changed = true }
+    if (data.comment !== undefined && !eq(data.comment, cur.comment)) { fields.push('comment = ?'); values.push(data.comment); changed = true }
 
-    const hasFieldChanges = fields.length > 0
-    const hasRelationChanges = data.scores !== undefined || data.tag_ids !== undefined || data.rep_tag_ids !== undefined
-    if (hasFieldChanges || hasRelationChanges) {
+    // Check relation changes
+    if (data.scores !== undefined) {
+      const curScores = db().prepare('SELECT face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions FROM actor_scores WHERE actor_id = ?').get(id) as Record<string, number> | undefined
+      const s = data.scores
+      if (!curScores || curScores.face !== s.face || curScores.bust !== s.bust || curScores.hip !== s.hip || curScores.physical !== s.physical || curScores.skin !== s.skin || curScores.acting !== s.acting || curScores.sexy !== s.sexy || curScores.charm !== (s.charm ?? 0) || curScores.technique !== (s.technique ?? 0) || curScores.proportions !== (s.proportions ?? 0)) {
+        changed = true
+      }
+    }
+    if (data.tag_ids !== undefined) {
+      const curTags = db().prepare('SELECT tag_id, is_rep FROM actor_tags WHERE actor_id = ? ORDER BY tag_id').all(id) as { tag_id: number; is_rep: number }[]
+      const curIds = curTags.map(t => t.tag_id).sort((a, b) => a - b)
+      const newIds = [...data.tag_ids].sort((a, b) => a - b)
+      const curRepIds = curTags.filter(t => t.is_rep).map(t => t.tag_id).sort((a, b) => a - b)
+      const newRepIds = data.rep_tag_ids ? [...data.rep_tag_ids].sort((a, b) => a - b) : curRepIds
+      if (JSON.stringify(curIds) !== JSON.stringify(newIds) || JSON.stringify(curRepIds) !== JSON.stringify(newRepIds)) changed = true
+    } else if (data.rep_tag_ids !== undefined) {
+      const curRepIds = (db().prepare('SELECT tag_id FROM actor_tags WHERE actor_id = ? AND is_rep = 1 ORDER BY tag_id').all(id) as { tag_id: number }[]).map(t => t.tag_id).sort((a, b) => a - b)
+      const newRepIds = [...data.rep_tag_ids].sort((a, b) => a - b)
+      if (JSON.stringify(curRepIds) !== JSON.stringify(newRepIds)) changed = true
+    }
+
+    if (changed) {
       fields.push("updated_at = datetime('now')")
     }
     if (fields.length > 0) {
@@ -514,7 +538,7 @@ export function registerActorsHandlers(): void {
       db().prepare(`UPDATE actors SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     }
 
-    if (data.scores !== undefined) {
+    if (data.scores !== undefined && changed) {
       const s = data.scores
       db().prepare(`
         INSERT OR REPLACE INTO actor_scores (actor_id, face, bust, hip, physical, skin, acting, sexy, charm, technique, proportions)
@@ -522,13 +546,13 @@ export function registerActorsHandlers(): void {
       `).run(id, s.face, s.bust, s.hip, s.physical, s.skin, s.acting, s.sexy, s.charm ?? 0, s.technique ?? 0, s.proportions ?? 0)
     }
 
-    if (data.tag_ids !== undefined) {
+    if (data.tag_ids !== undefined && changed) {
       db().prepare('DELETE FROM actor_tags WHERE actor_id = ?').run(id)
       const linkTag = db().prepare('INSERT OR IGNORE INTO actor_tags (actor_id, tag_id, is_rep) VALUES (?, ?, ?)')
       for (const tagId of data.tag_ids) {
         linkTag.run(id, tagId, data.rep_tag_ids?.includes(tagId) ? 1 : 0)
       }
-    } else if (data.rep_tag_ids !== undefined) {
+    } else if (data.rep_tag_ids !== undefined && changed) {
       db().prepare('UPDATE actor_tags SET is_rep = 0 WHERE actor_id = ?').run(id)
       if (data.rep_tag_ids.length > 0) {
         const ph = data.rep_tag_ids.map(() => '?').join(',')
