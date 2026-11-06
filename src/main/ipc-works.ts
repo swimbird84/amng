@@ -147,7 +147,7 @@ export function registerWorksHandlers(): void {
     }
     // 파일상태 필터
     if (params?.fileStatus === 'file') {
-      conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'local')")
+      conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'local') AND NOT EXISTS (SELECT 1 FROM work_files wf2 WHERE wf2.work_id = w.id AND wf2.type = 'url')")
     } else if (params?.fileStatus === 'link') {
       conditions.push("EXISTS (SELECT 1 FROM work_files wf WHERE wf.work_id = w.id AND wf.type = 'url') AND NOT EXISTS (SELECT 1 FROM work_files wf2 WHERE wf2.work_id = w.id AND wf2.type = 'local')")
     } else if (params?.fileStatus === 'both') {
@@ -454,7 +454,11 @@ export function registerWorksHandlers(): void {
       }
     }
 
-    fields.push("updated_at = datetime('now')")
+    const hasFieldChanges = fields.length > 0
+    const hasRelationChanges = data.actor_ids !== undefined || data.rep_actor_ids !== undefined || data.tag_ids !== undefined || data.rep_tag_ids !== undefined
+    if (hasFieldChanges || hasRelationChanges) {
+      fields.push("updated_at = datetime('now')")
+    }
     if (fields.length > 0) {
       values.push(id)
       db().prepare(`UPDATE works SET ${fields.join(', ')} WHERE id = ?`).run(...values)

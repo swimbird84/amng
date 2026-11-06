@@ -504,7 +504,11 @@ export function registerActorsHandlers(): void {
     if (data.real_name !== undefined) { fields.push('real_name = ?'); values.push(data.real_name) }
     if (data.comment !== undefined) { fields.push('comment = ?'); values.push(data.comment) }
 
-    fields.push("updated_at = datetime('now')")
+    const hasFieldChanges = fields.length > 0
+    const hasRelationChanges = data.scores !== undefined || data.tag_ids !== undefined || data.rep_tag_ids !== undefined
+    if (hasFieldChanges || hasRelationChanges) {
+      fields.push("updated_at = datetime('now')")
+    }
     if (fields.length > 0) {
       values.push(id)
       db().prepare(`UPDATE actors SET ${fields.join(', ')} WHERE id = ?`).run(...values)
