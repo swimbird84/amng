@@ -382,7 +382,7 @@ function TagPanel({
                         </span>
                         <button
                           onClick={(e) => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setActionPopup({ tagId: tag.id, x: rect.left + rect.width / 2, y: rect.top, btnH: rect.height }) }}
-                          className="leading-none px-0.5 hover:opacity-80"
+                          className="leading-none pl-0.5 hover:opacity-80 flex items-center"
                           title="메뉴"
                         >
                           <span className={`text-[8px] ${aliasTagIds.has(tag.id) ? 'text-yellow-400' : 'text-gray-600'}`}>●</span>
