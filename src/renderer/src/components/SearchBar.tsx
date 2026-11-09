@@ -497,14 +497,6 @@ export default function SearchBar(props: Props) {
         )}
       </div>
 
-      {/* favorite button */}
-      <button
-        onClick={() => onChange({ ...params, favoriteOnly: !params.favoriteOnly } as never)}
-        className={`px-2 py-1.5 rounded text-sm shrink-0 bg-gray-700 hover:bg-gray-600 ${params.favoriteOnly ? 'text-red-400' : 'text-gray-500 hover:text-red-400'}`}
-      >
-        {params.favoriteOnly ? '♥' : '♡'}
-      </button>
-
       {/* result count */}
       {resultCount !== undefined && (
         <div className="w-25 shrink-0 bg-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 whitespace-nowrap">
@@ -761,17 +753,22 @@ export default function SearchBar(props: Props) {
                   >코멘트없음</button>
                   <button
                     type="button"
-                    onClick={() => onChange({ ...wParams, deletePending: !wParams.deletePending } as never)}
-                    className={`text-xs px-2 py-1 rounded ${wParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  >삭제예정</button>
-                  <button
-                    type="button"
                     onClick={() => {
                       const next = wParams.excludeFilter === 'hide' ? 'include' : wParams.excludeFilter === 'include' ? 'only' : 'hide'
                       onChange({ ...wParams, excludeFilter: next } as never)
                     }}
                     className={`text-xs px-2 py-1 rounded ${wParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : wParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
                   >{wParams.excludeFilter === 'hide' ? '제외 숨김' : wParams.excludeFilter === 'include' ? '제외 포함' : '제외 한정'}</button>
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...wParams, favoriteOnly: !wParams.favoriteOnly } as never)}
+                    className={`text-xs px-2 py-1 rounded ${wParams.favoriteOnly ? 'bg-red-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >즐겨찾기</button>
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...wParams, deletePending: !wParams.deletePending } as never)}
+                    className={`text-xs px-2 py-1 rounded ${wParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >삭제예정</button>
                 </div>
               </>
             )}
@@ -893,19 +890,14 @@ export default function SearchBar(props: Props) {
                     <span className="text-xs text-gray-400 w-14 shrink-0">기타</span>
                     <button
                       type="button"
-                      onClick={() => onChange({ ...aParams, commentNull: !aParams.commentNull } as never)}
-                      className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.commentNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >코멘트없음</button>
-                    <button
-                      type="button"
                       onClick={() => onChange({ ...aParams, realNameNull: !aParams.realNameNull } as never)}
                       className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.realNameNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                     >본명 없음</button>
                     <button
                       type="button"
-                      onClick={() => onChange({ ...aParams, deletePending: !aParams.deletePending } as never)}
-                      className={`text-xs px-2 py-1 rounded ${aParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >삭제 예정</button>
+                      onClick={() => onChange({ ...aParams, commentNull: !aParams.commentNull } as never)}
+                      className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.commentNull ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >코멘트없음</button>
                     <button
                       type="button"
                       onClick={() => {
@@ -914,6 +906,16 @@ export default function SearchBar(props: Props) {
                       }}
                       className={`text-xs px-2 py-1 rounded ${aParams.excludeFilter === 'hide' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : aParams.excludeFilter === 'include' ? 'bg-blue-700 text-white' : 'bg-orange-600 text-white'}`}
                     >{aParams.excludeFilter === 'hide' ? '제외 숨김' : aParams.excludeFilter === 'include' ? '제외 포함' : '제외 한정'}</button>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...aParams, favoriteOnly: !aParams.favoriteOnly } as never)}
+                      className={`text-xs px-2 py-1 rounded shrink-0 ${aParams.favoriteOnly ? 'bg-red-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >즐겨찾기</button>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...aParams, deletePending: !aParams.deletePending } as never)}
+                      className={`text-xs px-2 py-1 rounded ${aParams.deletePending ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >삭제 예정</button>
                   </div>
                 </>
               )}
