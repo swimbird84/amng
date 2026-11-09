@@ -729,6 +729,38 @@ export function registerFilesHandlers(): void {
           moved.push(fileName)
         }
 
+        // Check cover images folder for existing image matching this product number
+        const coverImagesDir = path.join(targetActorFolder, 'cover images')
+        if (fs.existsSync(coverImagesDir)) {
+          try {
+            const coverEntries = await fs.promises.readdir(coverImagesDir)
+            for (const entry of coverEntries) {
+              const ext = path.extname(entry).toLowerCase()
+              if (!IMAGE_EXTS.has(ext)) continue
+              const imgBase = path.basename(entry, ext)
+              // cover images naming: "YYYY-MM-DD PRODUCT-NUMBER.ext" or just "PRODUCT-NUMBER.ext"
+              const pnMatch = imgBase.match(/^(?:\d{4}-\d{2}-\d{2}\s+)?(.+)$/)
+              const pn = pnMatch ? pnMatch[1] : imgBase
+              if (pn.toLowerCase() === productNumber.toLowerCase()) {
+                const coverImgPath = path.join(coverImagesDir, entry)
+                const existingSize = (await fs.promises.stat(coverImgPath).catch(() => ({ size: 0 }))).size
+                const tempImgSize = coverPath ? (await fs.promises.stat(coverPath).catch(() => ({ size: 0 }))).size : 0
+                if (existingSize >= tempImgSize || !coverPath) {
+                  // cover images version is larger or no temp image — move to work folder
+                  if (coverPath) { try { await shell.trashItem(coverPath) } catch { /* skip */ } }
+                  const destPath = path.join(workFolderPath, path.basename(coverImgPath))
+                  await fs.promises.rename(coverImgPath, destPath)
+                  coverPath = destPath
+                } else {
+                  // temp image is larger — trash cover images version, keep temp image
+                  try { await shell.trashItem(coverImgPath) } catch { /* skip */ }
+                }
+                break
+              }
+            }
+          } catch { /* skip */ }
+        }
+
         // Lookup studio
         const codeMatch = productNumber.match(/^(.+)-\d/)
         const suffixMatch = !codeMatch ? null : productNumber.match(/^\d[\d-]*-([A-Za-z]+)$/)
@@ -739,12 +771,21 @@ export function registerFilesHandlers(): void {
           studioId = studioRow?.studio_id ?? null
         }
 
-        // Register work
-        const result = db().prepare(`
-          INSERT INTO works (file_path, cover_path, product_number, release_date, rating, comment, studio_id)
-          VALUES (?, ?, ?, ?, 0, NULL, ?)
-        `).run(firstVideoPath, coverPath, productNumber, releaseDate, studioId)
-        const workId = result.lastInsertRowid as number
+        // Check if work already exists (e.g. link-registered with cover in cover images)
+        const existingWork = db().prepare('SELECT id FROM works WHERE UPPER(product_number) = ?').get(productNumber.toUpperCase()) as { id: number } | undefined
+        let workId: number
+
+        if (existingWork) {
+          workId = existingWork.id
+          db().prepare('UPDATE works SET file_path = ?, cover_path = ?, studio_id = COALESCE(studio_id, ?) WHERE id = ?').run(firstVideoPath, coverPath, studioId, workId)
+          db().prepare("DELETE FROM work_files WHERE work_id = ? AND type = 'url'").run(workId)
+        } else {
+          const result = db().prepare(`
+            INSERT INTO works (file_path, cover_path, product_number, release_date, rating, comment, studio_id)
+            VALUES (?, ?, ?, ?, 0, NULL, ?)
+          `).run(firstVideoPath, coverPath, productNumber, releaseDate, studioId)
+          workId = result.lastInsertRowid as number
+        }
 
         // Register work files
         for (let i = 0; i < movedVideoPaths.length; i++) {
