@@ -62,9 +62,15 @@ export default function TagLinkModal({ type, onClose, focusTagId }: Props) {
   }
 
   useEffect(() => {
-    reloadTags()
-    reloadLinks()
-    if (focusTagId != null) setSelectedParentId(focusTagId)
+    Promise.all([reloadTags(), reloadLinks()]).then(() => {
+      if (focusTagId != null) {
+        setSelectedParentId(focusTagId)
+        setTimeout(() => {
+          const el = document.querySelector(`[data-tag-id="${focusTagId}"]`) as HTMLElement | null
+          el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }, 50)
+      }
+    })
   }, [])
 
   useEscHandler(() => onClose(), [onClose])
@@ -226,6 +232,7 @@ export default function TagLinkModal({ type, onClose, focusTagId }: Props) {
                     {g.tags.map(tag => (
                       <button
                         key={tag.id}
+                        data-tag-id={tag.id}
                         onClick={() => setSelectedParentId(tag.id)}
                         className={`px-2 py-0.5 rounded text-xs ${
                           selectedParentId === tag.id

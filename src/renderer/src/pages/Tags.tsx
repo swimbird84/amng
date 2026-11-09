@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type React from 'react'
 import type { Work, Actor } from '../types'
-import { workTagsApi, actorTagsApi, workTagCategoriesApi, actorTagCategoriesApi, worksApi, actorsApi } from '../api'
+import { workTagsApi, actorTagsApi, workTagCategoriesApi, actorTagCategoriesApi, worksApi, actorsApi, workTagLinksApi, actorTagLinksApi, workTagAliasesApi, actorTagAliasesApi } from '../api'
 import ImagePreview from '../components/ImagePreview'
 import Rating from '../components/Rating'
 import WorkDetailModal from '../components/WorkDetailModal'
@@ -107,6 +107,20 @@ function TagPanel({
   const [actionPopupStyle, setActionPopupStyle] = useState<React.CSSProperties>({})
   const [addingCategoryKey, setAddingCategoryKey] = useState<string | null>(null)
   const [inlineName, setInlineName] = useState('')
+  const [linkedTagIds, setLinkedTagIds] = useState<Set<number>>(new Set())
+  const [aliasTagIds, setAliasTagIds] = useState<Set<number>>(new Set())
+
+  const linksApi = type === 'works' ? workTagLinksApi : actorTagLinksApi
+  const aliasesApi = type === 'works' ? workTagAliasesApi : actorTagAliasesApi
+
+  const reloadIndicators = async () => {
+    const links = await linksApi.list() as { parent_tag_id: number; child_tag_id: number }[]
+    setLinkedTagIds(new Set(links.map(l => l.parent_tag_id)))
+    const aliasSet = await aliasesApi.hasAny()
+    setAliasTagIds(aliasSet instanceof Set ? aliasSet : new Set(Object.values(aliasSet)))
+  }
+
+  useEffect(() => { reloadIndicators() }, [tags])
 
   useLayoutEffect(() => {
     if (!actionPopup || !actionPopupRef.current) return
@@ -222,16 +236,16 @@ function TagPanel({
         </div>
         <div className="flex gap-1.5">
           <button
-            onClick={() => setTagLinkFocusId(-1)}
-            className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
-          >
-            태그 연결
-          </button>
-          <button
             onClick={() => setTagAliasFocusId(-1)}
             className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
           >
             태그 별칭
+          </button>
+          <button
+              onClick={() => setTagLinkFocusId(-1)}
+              className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
+          >
+            태그 연결
           </button>
           <button
             onClick={() => setShowCategoryManager(true)}
@@ -368,9 +382,12 @@ function TagPanel({
                         </span>
                         <button
                           onClick={(e) => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setActionPopup({ tagId: tag.id, x: rect.left + rect.width / 2, y: rect.top, btnH: rect.height }) }}
-                          className="text-xs text-gray-400 hover:text-white leading-none px-0.5"
+                          className="leading-none px-0.5 hover:opacity-80"
                           title="메뉴"
-                        >⋯</button>
+                        >
+                          <span className={`text-[8px] ${aliasTagIds.has(tag.id) ? 'text-yellow-400' : 'text-gray-600'}`}>●</span>
+                          <span className={`text-[8px] ${linkedTagIds.has(tag.id) ? 'text-green-400' : 'text-gray-600'}`}>●</span>
+                        </button>
                       </div>
                     )
                   })}
@@ -396,7 +413,7 @@ function TagPanel({
             {/* 별칭 */}
             <button
               onClick={() => { const id = actionPopup.tagId; setActionPopup(null); setActionPopupStyle({}); setTagAliasFocusId(id) }}
-              className="w-7 h-7 rounded-md hover:bg-gray-600 flex items-center justify-center text-gray-300 hover:text-white"
+              className={`w-7 h-7 rounded-md flex items-center justify-center ${aliasTagIds.has(actionPopup.tagId) ? 'bg-yellow-600/30 text-yellow-300 hover:bg-yellow-600/50' : 'hover:bg-gray-600 text-gray-300 hover:text-white'}`}
               title="별칭"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
@@ -404,7 +421,7 @@ function TagPanel({
             {/* 연결 */}
             <button
               onClick={() => { const id = actionPopup.tagId; setActionPopup(null); setActionPopupStyle({}); setTagLinkFocusId(id) }}
-              className="w-7 h-7 rounded-md hover:bg-gray-600 flex items-center justify-center text-gray-300 hover:text-white"
+              className={`w-7 h-7 rounded-md flex items-center justify-center ${linkedTagIds.has(actionPopup.tagId) ? 'bg-green-600/30 text-green-300 hover:bg-green-600/50' : 'hover:bg-gray-600 text-gray-300 hover:text-white'}`}
               title="연결"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007 0l4-4a5 5 0 00-7-7l-2 2"/><path d="M14 11a5 5 0 00-7 0l-4 4a5 5 0 007 7l2-2"/></svg>
@@ -438,14 +455,14 @@ function TagPanel({
       {tagLinkFocusId !== null && (
         <TagLinkModal
           type={type === 'works' ? 'work' : 'actor'}
-          onClose={() => setTagLinkFocusId(null)}
+          onClose={() => { setTagLinkFocusId(null); reloadIndicators() }}
           focusTagId={tagLinkFocusId > 0 ? tagLinkFocusId : undefined}
         />
       )}
       {tagAliasFocusId !== null && (
         <TagAliasModal
           type={type === 'works' ? 'work' : 'actor'}
-          onClose={() => setTagAliasFocusId(null)}
+          onClose={() => { setTagAliasFocusId(null); reloadIndicators() }}
           focusTagId={tagAliasFocusId > 0 ? tagAliasFocusId : undefined}
         />
       )}

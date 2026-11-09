@@ -58,9 +58,15 @@ export default function TagAliasModal({ type, onClose, focusTagId }: Props) {
   }
 
   useEffect(() => {
-    reloadTags()
-    reloadHasAny()
-    if (focusTagId != null) setSelectedTagId(focusTagId)
+    Promise.all([reloadTags(), reloadHasAny()]).then(() => {
+      if (focusTagId != null) {
+        setSelectedTagId(focusTagId)
+        setTimeout(() => {
+          const el = document.querySelector(`[data-alias-tag-id="${focusTagId}"]`) as HTMLElement | null
+          el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }, 50)
+      }
+    })
   }, [])
 
   useEffect(() => {
@@ -125,6 +131,7 @@ export default function TagAliasModal({ type, onClose, focusTagId }: Props) {
                     {g.tags.map(tag => (
                       <button
                         key={tag.id}
+                        data-alias-tag-id={tag.id}
                         onClick={() => setSelectedTagId(tag.id)}
                         className={`px-2 py-0.5 rounded text-xs ${
                           selectedTagId === tag.id
