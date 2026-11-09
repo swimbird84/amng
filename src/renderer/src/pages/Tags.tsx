@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import { pushEscHandler, popEscHandler } from '../escManager'
 import type React from 'react'
 import type { Work, Actor } from '../types'
@@ -100,10 +100,30 @@ function TagPanel({
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [showCategoryManager, setShowCategoryManager] = useState(false)
-  const [showTagLinkModal, setShowTagLinkModal] = useState(false)
-  const [showTagAliasModal, setShowTagAliasModal] = useState(false)
+  const [tagLinkFocusId, setTagLinkFocusId] = useState<number | null>(null)
+  const [tagAliasFocusId, setTagAliasFocusId] = useState<number | null>(null)
+  const [actionPopup, setActionPopup] = useState<{ tagId: number; x: number; y: number; btnH: number } | null>(null)
+  const actionPopupRef = useRef<HTMLDivElement>(null)
+  const [actionPopupStyle, setActionPopupStyle] = useState<React.CSSProperties>({})
   const [addingCategoryKey, setAddingCategoryKey] = useState<string | null>(null)
   const [inlineName, setInlineName] = useState('')
+
+  useLayoutEffect(() => {
+    if (!actionPopup || !actionPopupRef.current) return
+    const el = actionPopupRef.current
+    const rect = el.getBoundingClientRect()
+    const pad = 4
+    let x = actionPopup.x
+    let y = actionPopup.y - 4
+    let translateY = '-100%'
+    if (y - rect.height < pad) {
+      y = actionPopup.y + actionPopup.btnH + 4
+      translateY = '0%'
+    }
+    if (x - rect.width / 2 < pad) x = pad + rect.width / 2
+    if (x + rect.width / 2 > window.innerWidth - pad) x = window.innerWidth - pad - rect.width / 2
+    setActionPopupStyle({ left: x, top: y, transform: `translate(-50%, ${translateY})` })
+  }, [actionPopup])
 
   const handleSearchChange = (v: string) => { setSearch(v); localStorage.setItem(`tags:${title}:search`, v) }
   const handleSortByChange = (s: SortBy) => { setSortBy(s); localStorage.setItem(`tags:${title}:sortBy`, s) }
@@ -202,13 +222,13 @@ function TagPanel({
         </div>
         <div className="flex gap-1.5">
           <button
-            onClick={() => setShowTagLinkModal(true)}
+            onClick={() => setTagLinkFocusId(-1)}
             className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
           >
             태그 연결
           </button>
           <button
-            onClick={() => setShowTagAliasModal(true)}
+            onClick={() => setTagAliasFocusId(-1)}
             className={`text-xs px-2.5 py-1 rounded ${accentBtn}`}
           >
             태그 별칭
@@ -347,15 +367,10 @@ function TagPanel({
                           <span className="text-gray-500">{tag.total_count}</span>
                         </span>
                         <button
-                          onClick={() => { setEditingId(tag.id); setEditValue(tag.name); setDeletingId(null) }}
-                          className="text-xs text-gray-400 hover:text-white leading-none"
-                          title="수정"
-                        >m</button>
-                        <button
-                          onClick={() => { setDeletingId(tag.id); setEditingId(null) }}
-                          className="text-xs text-gray-400 hover:text-red-400 leading-none"
-                          title="삭제"
-                        >✕</button>
+                          onClick={(e) => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setActionPopup({ tagId: tag.id, x: rect.left + rect.width / 2, y: rect.top, btnH: rect.height }) }}
+                          className="text-xs text-gray-400 hover:text-white leading-none px-0.5"
+                          title="메뉴"
+                        >⋯</button>
                       </div>
                     )
                   })}
@@ -369,22 +384,69 @@ function TagPanel({
         })}
       </div>
 
+      {/* 액션 팝업 */}
+      {actionPopup && (
+        <div className="fixed inset-0 z-[100]" onClick={() => { setActionPopup(null); setActionPopupStyle({}) }}>
+          <div
+            ref={actionPopupRef}
+            className="absolute flex gap-1 bg-gray-800 border border-gray-600 rounded-lg p-1.5 shadow-xl"
+            style={actionPopupStyle.left ? actionPopupStyle : { left: actionPopup.x, top: actionPopup.y, transform: 'translate(-50%, -100%) translateY(-4px)', visibility: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 별칭 */}
+            <button
+              onClick={() => { const id = actionPopup.tagId; setActionPopup(null); setActionPopupStyle({}); setTagAliasFocusId(id) }}
+              className="w-7 h-7 rounded-md hover:bg-gray-600 flex items-center justify-center text-gray-300 hover:text-white"
+              title="별칭"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            </button>
+            {/* 연결 */}
+            <button
+              onClick={() => { const id = actionPopup.tagId; setActionPopup(null); setActionPopupStyle({}); setTagLinkFocusId(id) }}
+              className="w-7 h-7 rounded-md hover:bg-gray-600 flex items-center justify-center text-gray-300 hover:text-white"
+              title="연결"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007 0l4-4a5 5 0 00-7-7l-2 2"/><path d="M14 11a5 5 0 00-7 0l-4 4a5 5 0 007 7l2-2"/></svg>
+            </button>
+            {/* 수정 */}
+            <button
+              onClick={() => { const id = actionPopup.tagId; const tag = tags.find(t => t.id === id); setActionPopup(null); setActionPopupStyle({}); if (tag) { setEditingId(id); setEditValue(tag.name); setDeletingId(null) } }}
+              className="w-7 h-7 rounded-md hover:bg-gray-600 flex items-center justify-center text-gray-300 hover:text-white"
+              title="수정"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </button>
+            {/* 삭제 */}
+            <button
+              onClick={() => { const id = actionPopup.tagId; setActionPopup(null); setActionPopupStyle({}); setDeletingId(id); setEditingId(null) }}
+              className="w-7 h-7 rounded-md hover:bg-gray-600 flex items-center justify-center text-red-400 hover:text-red-300"
+              title="삭제"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {showCategoryManager && (
         <TagCategoryManager
           type={type}
           onClose={() => { setShowCategoryManager(false); onRefresh() }}
         />
       )}
-      {showTagLinkModal && (
+      {tagLinkFocusId !== null && (
         <TagLinkModal
           type={type === 'works' ? 'work' : 'actor'}
-          onClose={() => setShowTagLinkModal(false)}
+          onClose={() => setTagLinkFocusId(null)}
+          focusTagId={tagLinkFocusId > 0 ? tagLinkFocusId : undefined}
         />
       )}
-      {showTagAliasModal && (
+      {tagAliasFocusId !== null && (
         <TagAliasModal
           type={type === 'works' ? 'work' : 'actor'}
-          onClose={() => setShowTagAliasModal(false)}
+          onClose={() => setTagAliasFocusId(null)}
+          focusTagId={tagAliasFocusId > 0 ? tagAliasFocusId : undefined}
         />
       )}
     </div>

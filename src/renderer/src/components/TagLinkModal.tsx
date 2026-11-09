@@ -10,6 +10,7 @@ import {
 interface Props {
   type: 'work' | 'actor'
   onClose: () => void
+  focusTagId?: number
 }
 
 type TagLink = { parent_tag_id: number; child_tag_id: number }
@@ -31,7 +32,7 @@ function groupTags(tagList: Tag[]): Group[] {
   return groups
 }
 
-export default function TagLinkModal({ type, onClose }: Props) {
+export default function TagLinkModal({ type, onClose, focusTagId }: Props) {
   const [tags, setTags] = useState<Tag[]>([])
   const [links, setLinks] = useState<TagLink[]>([])
   const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
@@ -63,6 +64,7 @@ export default function TagLinkModal({ type, onClose }: Props) {
   useEffect(() => {
     reloadTags()
     reloadLinks()
+    if (focusTagId != null) setSelectedParentId(focusTagId)
   }, [])
 
   useEscHandler(() => onClose(), [onClose])

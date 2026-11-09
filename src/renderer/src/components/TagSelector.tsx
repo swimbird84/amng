@@ -48,7 +48,9 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
     if (!name) return
     const tagId = await onCreateTag(name)
     if (tagId && !selectedIds.includes(tagId)) {
-      onChange([...selectedIds, tagId])
+      const childIds = tagLinks ? tagLinks.filter(l => l.parent_tag_id === tagId).map(l => l.child_tag_id) : []
+      const toAdd = [tagId, ...childIds].filter(id => !selectedIds.includes(id))
+      onChange([...selectedIds, ...toAdd])
     }
     setNewTag('')
   }
@@ -58,7 +60,9 @@ export default function TagSelector({ allTags, selectedIds, onChange, onCreateTa
     if (!name || !onCreateTagInCategory) return
     const tagId = await onCreateTagInCategory(name, catId)
     if (tagId && !selectedIds.includes(tagId)) {
-      onChange([...selectedIds, tagId])
+      const childIds = tagLinks ? tagLinks.filter(l => l.parent_tag_id === tagId).map(l => l.child_tag_id) : []
+      const toAdd = [tagId, ...childIds].filter(id => !selectedIds.includes(id))
+      onChange([...selectedIds, ...toAdd])
     }
     setInlineCatName('')
   }

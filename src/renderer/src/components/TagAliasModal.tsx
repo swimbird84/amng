@@ -9,6 +9,7 @@ import {
 interface Props {
   type: 'work' | 'actor'
   onClose: () => void
+  focusTagId?: number
 }
 
 type Alias = { id: number; tag_id: number; alias: string }
@@ -30,7 +31,7 @@ function groupTags(tagList: Tag[]): Group[] {
   return groups
 }
 
-export default function TagAliasModal({ type, onClose }: Props) {
+export default function TagAliasModal({ type, onClose, focusTagId }: Props) {
   const [tags, setTags] = useState<Tag[]>([])
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null)
   const [aliases, setAliases] = useState<Alias[]>([])
@@ -59,6 +60,7 @@ export default function TagAliasModal({ type, onClose }: Props) {
   useEffect(() => {
     reloadTags()
     reloadHasAny()
+    if (focusTagId != null) setSelectedTagId(focusTagId)
   }, [])
 
   useEffect(() => {
